@@ -1,0 +1,1 @@
+DROP DATABASE product_trace_db;
