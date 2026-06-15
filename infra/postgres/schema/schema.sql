@@ -126,7 +126,8 @@ CREATE TABLE "product_items" (
   "variant_id" uuid NOT NULL,
   "batch_id" uuid,
   "current_shop_point_id" uuid,
-  "item_code" varchar UNIQUE NOT NULL,
+  "item_code" varchar(20) UNIQUE NOT NULL,
+  "verification_token" varchar(32) UNIQUE NOT NULL,
   "serial_number" varchar UNIQUE,
   "status" varchar DEFAULT 'IN_STOCK',
   "produced_at" timestamp,
@@ -469,6 +470,20 @@ ON product_items(batch_id); -- Tối ưu lấy item theo batch/lô hàng.
 
 CREATE INDEX IF NOT EXISTS idx_product_items_current_shop_point_id
 ON product_items(current_shop_point_id); -- Tối ưu tìm item đang ở shop/kho nào.
+
+ALTER TABLE product_items
+ADD CONSTRAINT chk_product_items_item_code_format
+CHECK (item_code ~ '^PTA-[0-9]{4}-[A-Z0-9]{8}$');
+-- Format: PTA-YYMM-XXXXXXXX. Mã định danh sản phẩm vật lý, là thành phần chính trong QR code.
+
+ALTER TABLE product_items
+ADD CONSTRAINT chk_product_items_verification_token_format
+CHECK (verification_token ~ '^[a-f0-9]{32}$');
+-- Token bảo mật HMAC-SHA256 truncated 128 bits, dùng xác thực sản phẩm khi quét QR.
+
+CREATE INDEX IF NOT EXISTS idx_product_items_code_token
+ON product_items(item_code, verification_token);
+-- Composite index tối ưu QR scan lookup: verify item_code + token cùng lúc.
 
 
 -- =========================================================
