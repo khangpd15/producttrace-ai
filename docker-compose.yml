@@ -1,29 +1,75 @@
 services:
   postgres:
     image: postgis/postgis:16-3.4
-    container_name: product-trace-ai
+    container_name: product-trace-db
+
     environment:
       POSTGRES_DB: product_trace_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
+
     ports:
       - "5433:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d product_trace_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+    networks:
+      - app-networks
+
   redis:
     image: redis:8-alpine
-    container_name: product_trace_redis
+    container_name: product-trace-redis
+
     ports:
       - "6379:6379"
 
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+    networks:
+      - app-networks
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: product-trace-rabbitmq
+
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - app-networks
+
   migrate:
     image: migrate/migrate
+    container_name: product-trace-migrate
+
     volumes:
-      - ./migrations:/migrations
+      - ./migrations:/migrations:ro
+
     command:
       [
         "-path",
@@ -32,6 +78,90 @@ services:
         "postgres://postgres:123456@postgres:5432/product_trace_db?sslmode=disable",
         "up"
       ]
+
+    restart: on-failure
+
     depends_on:
       postgres:
         condition: service_healthy
+
+    networks:
+      - app-networks
+
+  go-core-service:
+    build:
+      context: ./apps/go-core-service
+      dockerfile: Dockerfile
+
+    container_name: go-core-service
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: product_trace_db
+      DB_USER: postgres
+      DB_PASSWORD: 123456
+
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+      redis:
+        condition: service_healthy
+
+      rabbitmq:
+        condition: service_healthy
+
+    networks:
+      - app-networks
+
+  nest-ai-service:
+    build:
+      context: ./apps/nest-ai-service
+      dockerfile: Dockerfile
+
+    container_name: nest-ai-service
+
+    environment:
+      PORT: 3000
+
+      GO_CORE_URL: http://go-core-service:8080
+
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      RABBITMQ_QUEUE: ai.events
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      go-core-service:
+        condition: service_started
+
+      redis:
+        condition: service_healthy
+
+      rabbitmq:
+        condition: service_healthy
+
+    networks:
+      - app-networks
+
+networks:
+  app-networks:
+    name: app-networks
+    driver: bridge
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
