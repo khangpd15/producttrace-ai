@@ -22,5 +22,6 @@ func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) 
 	{
 		batches.GET("/", batchHandler.GetBatchList)
 		batches.GET("/:batch_code", batchHandler.GetBatchDetail)
+		batches.POST("/", batchHandler.CreateBatch)
 	}
 }
