@@ -4,13 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"time"
-	"github.com/google/uuid"
 
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/app"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/config"
 )
 
 type HealthResponse struct {
@@ -30,58 +26,71 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	rabbitURL := os.Getenv("RABBITMQ_URL")
 
-	conn, ch, err := rabbitmq.Connect(rabbitURL)
+	database, err := config.ConnectPostgres()
+
 	if err != nil {
-		log.Fatalf("rabbitmq connect failed: %v", err)
+		log.Fatalf("database connect failed: %v", err)
 	}
 
-	defer conn.Close()
-	defer ch.Close()
+	// rabbitURL := os.Getenv("RABBITMQ_URL")
 
-	if err := rabbitmq.SetupTopology(ch); err != nil {
-		log.Fatalf("rabbitmq topology failed: %v", err)
+	// conn, ch, err := rabbitmq.Connect(rabbitURL)
+	// if err != nil {
+	// 	log.Fatalf("rabbitmq connect failed: %v", err)
+	// }
+
+	// defer conn.Close()
+	// defer ch.Close()
+
+	// if err := rabbitmq.SetupTopology(ch); err != nil {
+	// 	log.Fatalf("rabbitmq topology failed: %v", err)
+	// }
+
+	// log.Println("RabbitMQ connected")
+	// log.Println("RabbitMQ topology initialized")
+	// pub := publisher.New(ch, rabbitmq.EventExchange)
+
+	// port := os.Getenv("PORT")
+	// if port == "" {
+	// 	port = "8080"
+	// }
+
+	appli := app.NewApp(database)
+
+	if err := appli.Router.Run(":8080"); err != nil {
+		log.Fatalf("failed to start server: %v \n", err)
 	}
 
-	log.Println("RabbitMQ connected")
-	log.Println("RabbitMQ topology initialized")
-	pub := publisher.New(ch, rabbitmq.EventExchange)
+	// mux := http.NewServeMux()
+	// mux.HandleFunc("/health", healthHandler)
+	// mux.HandleFunc("/test-event", func(w http.ResponseWriter, r *http.Request) {
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	// 	event := types.Event{
+	// 		EventID:       uuid.NewString(),
+	// 		EventType:     rabbitmq.ProductCreatedRK,
+	// 		EventVersion:  "1.0",
+	// 		Timestamp:     time.Now().UTC(),
+	// 		Producer:      "go-core-service",
+	// 		CorrelationID: uuid.NewString(),
+	// 		Payload: map[string]any{
+	// 			"productId": "p-001",
+	// 			"name":      "Coffee Bean",
+	// 		},
+	// 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/test-event", func(w http.ResponseWriter, r *http.Request) {
+	// 	if err := pub.Publish(event); err != nil {
+	// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 		return
+	// 	}
 
-	event := types.Event{
-		EventID:       uuid.NewString(),
-		EventType:     rabbitmq.ProductCreatedRK,
-		EventVersion:  "1.0",
-		Timestamp:     time.Now().UTC(),
-		Producer:      "go-core-service",
-		CorrelationID: uuid.NewString(),
-		Payload: map[string]any{
-			"productId": "p-001",
-			"name":      "Coffee Bean",
-		},
-	}
+	// 	w.WriteHeader(http.StatusOK)
+	// 	_, _ = w.Write([]byte("event published"))
+	// })
 
-	if err := pub.Publish(event); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	// log.Printf("Go service is running on port %s\n", port)
 
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("event published"))
-})
-
-	log.Printf("Go service is running on port %s\n", port)
-
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal(err)
-	}
+	// if err := http.ListenAndServe(":"+port, mux); err != nil {
+	// 	log.Fatal(err)
+	// }
 }
