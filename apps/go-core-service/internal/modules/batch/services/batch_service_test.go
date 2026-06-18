@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,7 @@ import (
 type mockBatchRepository struct {
 	findAllFn    func(ctx context.Context) ([]*response.BatchListResponse, error)
 	findByCodeFn func(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
+	createFn     func(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
 }
 
 func (m *mockBatchRepository) FindAll(ctx context.Context) ([]*response.BatchListResponse, error) {
@@ -30,6 +32,10 @@ func (m *mockBatchRepository) FindAll(ctx context.Context) ([]*response.BatchLis
 
 func (m *mockBatchRepository) FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
 	return m.findByCodeFn(ctx, batchCode)
+}
+
+func (m *mockBatchRepository) Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+	return m.createFn(ctx, req)
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +258,225 @@ func TestGetBatchDetail_InternalError(t *testing.T) {
 
 	svc := newService(mock)
 	got, err := svc.GetBatchDetail(context.Background(), "LOT-ANY")
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeInternal, appErr.Code)
+}
+
+// ---------------------------------------------------------------------------
+// CreateBatch
+// ---------------------------------------------------------------------------
+
+func buildCreateRequest() *request.CreateBatchRequest {
+	now := time.Now()
+	variantID := uuid.New()
+	return &request.CreateBatchRequest{
+		VariantID:        variantID,
+		Prefix:           "APL",
+		ManufactureDate:  ptr(now.Add(-30 * 24 * time.Hour)),
+		ExpiryDate:       ptr(now.Add(365 * 24 * time.Hour)),
+		ImportedAt:       ptr(now),
+		ManufacturerName: ptr("Nhà máy ABC"),
+		SupplierName:     ptr("Nhà cung cấp XYZ"),
+		OriginCountry:    ptr("Vietnam"),
+		ProductionPlace:  ptr("Hà Nội"),
+		Quantity:         5000,
+	}
+}
+
+func TestCreateBatch_Success(t *testing.T) {
+	req := buildCreateRequest()
+
+	want := &response.BatchCreateResponse{
+		ID:        uuid.New(),
+		BatchCode: "APL-2026-0001", // batch code do repo sinh ra
+		VariantID: req.VariantID,
+		Quantity:  req.Quantity,
+		Status:    "ACTIVE",
+		CreatedAt: time.Now(),
+	}
+
+	var capturedReq *request.CreateBatchRequest
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			capturedReq = r
+			return want, nil
+		},
+	}
+
+	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	// Prefix phải đã được normalize (uppercase) trước khi forward xuống repo
+	assert.Equal(t, "APL", capturedReq.Prefix)
+	assert.Equal(t, req.VariantID, capturedReq.VariantID)
+	assert.Equal(t, req.Quantity, capturedReq.Quantity)
+
+	assert.Equal(t, want.BatchCode, got.BatchCode)
+	assert.Equal(t, want.VariantID, got.VariantID)
+	assert.Equal(t, want.Quantity, got.Quantity)
+	assert.Equal(t, "ACTIVE", got.Status)
+	assert.NotEqual(t, uuid.Nil, got.ID)
+}
+
+func TestCreateBatch_PrefixNormalization_LowerCase(t *testing.T) {
+	// "apl" → service normalize → "APL" trước khi gọi repo
+	req := buildCreateRequest()
+	req.Prefix = "apl"
+
+	var capturedPrefix string
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			capturedPrefix = r.Prefix
+			return &response.BatchCreateResponse{ID: uuid.New(), BatchCode: "APL-2026-0001", Status: "ACTIVE"}, nil
+		},
+	}
+
+	svc := newService(mock)
+	_, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "APL", capturedPrefix, "prefix phải được chuyển thành uppercase")
+}
+
+func TestCreateBatch_PrefixNormalization_MixedCaseWithSpaces(t *testing.T) {
+	// " Sam " → service normalize → "SAM"
+	req := buildCreateRequest()
+	req.Prefix = " Sam "
+
+	var capturedPrefix string
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			capturedPrefix = r.Prefix
+			return &response.BatchCreateResponse{ID: uuid.New(), BatchCode: "SAM-2026-0001", Status: "ACTIVE"}, nil
+		},
+	}
+
+	svc := newService(mock)
+	_, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, "SAM", capturedPrefix, "prefix phải được trim và chuyển uppercase")
+}
+
+func TestCreateBatch_ExpiryBeforeManufacture_ValidationError(t *testing.T) {
+	now := time.Now()
+	req := buildCreateRequest()
+	// Đặt expiry_date trước manufacture_date — vi phạm business rule
+	req.ManufactureDate = ptr(now.Add(10 * 24 * time.Hour))
+	req.ExpiryDate = ptr(now.Add(5 * 24 * time.Hour))
+
+	mock := &mockBatchRepository{
+		// createFn KHÔNG được gọi trong trường hợp này
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			t.Fatal("repo.Create không nên được gọi khi validation thất bại")
+			return nil, nil
+		},
+	}
+
+	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeValidation, appErr.Code)
+}
+
+func TestCreateBatch_OnlyExpiryDate_NoValidationError(t *testing.T) {
+	// Nếu chỉ có expiry_date mà không có manufacture_date → không lỗi validation
+	req := buildCreateRequest()
+	req.ManufactureDate = nil
+	req.ExpiryDate = ptr(time.Now().Add(365 * 24 * time.Hour))
+
+	want := &response.BatchCreateResponse{
+		ID: uuid.New(), BatchCode: "APL-2026-0001", Status: "ACTIVE",
+	}
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			return want, nil
+		},
+	}
+
+	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.NotNil(t, got)
+}
+
+func TestCreateBatch_DifferentPrefixes_IndependentSequences(t *testing.T) {
+	// SAM và XMI là 2 prefix khác nhau → lock key khác nhau → chạy song song
+	// Test đảm bảo service forward đúng prefix xuống repo
+	prefixes := []string{"SAM", "XMI", "APL"}
+
+	for _, prefix := range prefixes {
+		prefix := prefix // capture loop var
+		t.Run("prefix_"+prefix, func(t *testing.T) {
+			req := buildCreateRequest()
+			req.Prefix = prefix
+
+			var capturedPrefix string
+			mock := &mockBatchRepository{
+				createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+					capturedPrefix = r.Prefix
+					return &response.BatchCreateResponse{
+						ID: uuid.New(), BatchCode: prefix + "-2026-0001", Status: "ACTIVE",
+					}, nil
+				},
+			}
+
+			svc := newService(mock)
+			_, err := svc.CreateBatch(context.Background(), req)
+
+			require.NoError(t, err)
+			assert.Equal(t, prefix, capturedPrefix)
+		})
+	}
+}
+
+func TestCreateBatch_ConflictError(t *testing.T) {
+	req := buildCreateRequest()
+	conflictErr := apperror.NewConflict("batch already exists")
+
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			return nil, conflictErr
+		},
+	}
+
+	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeConflict, appErr.Code)
+}
+
+func TestCreateBatch_RepoError(t *testing.T) {
+	req := buildCreateRequest()
+	dbErr := apperror.NewInternal("database error")
+
+	mock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			return nil, dbErr
+		},
+	}
+
+	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
 
 	require.Error(t, err)
 	assert.Nil(t, got)

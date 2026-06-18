@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
@@ -42,4 +43,20 @@ func (hb *BatchHandler) GetBatchDetail(c *gin.Context) {
 	}
 
 	c.JSON(200, response.ResponseSuccess("get batch detail successfully", detail))
+}
+
+func (hb *BatchHandler) CreateBatch(c *gin.Context) {
+	var req request.CreateBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	result, err := hb.service.CreateBatch(c.Request.Context(), &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(201, response.ResponseSuccess("batch created successfully", result))
 }
