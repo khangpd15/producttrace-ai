@@ -2,21 +2,22 @@ package rabbitmq
 
 import (
 	"fmt"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func Connect(url string) (*amqp.Connection, *amqp.Channel, error) {
-	conn, err := amqp.Dial(url)
-	if err != nil {
-		return nil, nil, fmt.Errorf("rabbitmq dial: %w", err)
+// Connect establishes a connection to RabbitMQ with a default heartbeat configuration and timeout.
+func Connect(url string) (*amqp.Connection, error) {
+	cfg := amqp.Config{
+		Heartbeat: 10 * time.Second,
+		Dial:      amqp.DefaultDial(5 * time.Second),
 	}
 
-	ch, err := conn.Channel()
+	conn, err := amqp.DialConfig(url, cfg)
 	if err != nil {
-		conn.Close()
-		return nil, nil, fmt.Errorf("rabbitmq channel: %w", err)
+		return nil, fmt.Errorf("rabbitmq dial: %w", err)
 	}
 
-	return conn, ch, nil
+	return conn, nil
 }

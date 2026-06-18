@@ -32,21 +32,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 
-	conn, ch, err := rabbitmq.Connect(rabbitURL)
+	mgr, err := rabbitmq.NewManager(rabbitURL)
 	if err != nil {
-		log.Fatalf("rabbitmq connect failed: %v", err)
+		log.Fatalf("rabbitmq manager initialization failed: %v", err)
 	}
+	defer mgr.Close()
 
-	defer conn.Close()
-	defer ch.Close()
-
-	if err := rabbitmq.SetupTopology(ch); err != nil {
-		log.Fatalf("rabbitmq topology failed: %v", err)
-	}
-
-	log.Println("RabbitMQ connected")
-	log.Println("RabbitMQ topology initialized")
-	pub := publisher.New(ch, rabbitmq.EventExchange)
+	log.Println("RabbitMQ connected and manager initialized")
+	pub := publisher.New(mgr)
 
 	port := os.Getenv("PORT")
 	if port == "" {
