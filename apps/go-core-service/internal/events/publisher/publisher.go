@@ -4,38 +4,32 @@ import (
 	"context"
 	"encoding/json"
 
-	amqp "github.com/rabbitmq/amqp091-go"
-
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 )
 
-type Publisher struct {
-	channel  *amqp.Channel
-	exchange string
+// RabbitMQPublisher defines the interface required to publish messages.
+type RabbitMQPublisher interface {
+	Publish(ctx context.Context, routingKey string, body []byte) error
 }
 
-func New(ch *amqp.Channel, exchange string) *Publisher {
+type Publisher struct {
+	mgr RabbitMQPublisher
+}
+
+// New creates a new Publisher using a RabbitMQ manager.
+func New(mgr RabbitMQPublisher) *Publisher {
 	return &Publisher{
-		channel:  ch,
-		exchange: exchange,
+		mgr: mgr,
 	}
 }
 
+// Publish serializes and publishes an event to RabbitMQ via the manager.
 func (p *Publisher) Publish(event types.Event) error {
 	body, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
 
-	return p.channel.PublishWithContext(
-		context.Background(),
-		p.exchange,
-		event.EventType,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-		},
-	)
+	// Publish via manager which handles retries, thread safety and confirmations.
+	return p.mgr.Publish(context.Background(), event.EventType, body)
 }
