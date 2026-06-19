@@ -272,7 +272,8 @@ ADD CONSTRAINT chk_users_status
 CHECK (status IN (
   'ACTIVE',     -- Tài khoản đang hoạt động bình thường.
   'BANNED',     -- Tài khoản bị cấm vĩnh viễn hoặc dài hạn.
-  'SUSPENDED'   -- Tài khoản bị tạm khóa, có thể mở lại sau.
+  'SUSPENDED',  -- Tài khoản bị tạm khóa, có thể mở lại sau.
+  'PENDING'     -- Tài khoản chờ xác thực OTP.
 ));
 
 ALTER TABLE users

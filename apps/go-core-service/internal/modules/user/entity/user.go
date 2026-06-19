@@ -1,49 +1,55 @@
-package user
+package entity
 
 import (
 	"time"
 
 	"github.com/google/uuid"
 )
+
 type Role string
 type Status string
+
 const (
-	RoleAdmin Role = "admin"
-	RoleCustomer Role = "customer"
-	RoleStaff Role = "staff"
-	RoleDealer Role = "dealer"
+	RoleAdmin    Role = "ADMIN"
+	RoleCustomer Role = "CUSTOMER"
+	RoleStaff    Role = "STAFF"
+	RoleDealer   Role = "DEALER"
 )
 
 const (
-	StatusActive Status = "active"
-	StatusBanned Status = "banned"
-	StatusSuspended Status = "suspended"
+	StatusActive    Status = "ACTIVE"
+	StatusBanned    Status = "BANNED"
+	StatusSuspended Status = "SUSPENDED"
+	StatusPending   Status = "PENDING"
 )
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	Phone        string    `json:"phone"`
+	ID           uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	Email        string    `json:"email" gorm:"unique;not null"`
+	Phone        string    `json:"phone" gorm:"unique"`
 	FullName     string    `json:"full_name"`
-	PasswordHash string    `json:"-"`
-	Role         Role      `json:"role"`
-	Status       Status    `json:"status"`
+	PasswordHash string    `json:"-" gorm:"column:password_hash"`
+	Role         Role      `json:"role" gorm:"default:CUSTOMER"`
+	Status       Status    `json:"status" gorm:"default:ACTIVE"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-	IsDeleted    bool      `json:"is_deleted"`
+	IsDeleted    bool      `json:"is_deleted" gorm:"default:false"`
 }
 
-func NewUser(email, phone, full_name, password_hash, role string) *User {
+func NewUser(email, phone, fullName, passwordHash, role string) *User {
+	if role == "" {
+		role = string(RoleCustomer)
+	}
 	return &User{
-		ID: uuid.New(),
-		Email: email,
-		Phone: phone,
-		FullName: full_name,
-		PasswordHash: password_hash,
-		Role: Role(role),
-		Status: StatusActive,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		IsDeleted: false,
+		ID:           uuid.New(),
+		Email:        email,
+		Phone:        phone,
+		FullName:     fullName,
+		PasswordHash: passwordHash,
+		Role:         Role(role),
+		Status:       StatusActive,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+		IsDeleted:    false,
 	}
 }
