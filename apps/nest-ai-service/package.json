@@ -4,17 +4,18 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
-    "start": "node dist/main",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('tsconfig.build.tsbuildinfo',{force:true});\"",
+    "build": "npm run clean && nest build",
+    "start": "npm run build && node dist/main",
     "start:dev": "nest start --watch"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/microservices": "^11.1.27",
     "@nestjs/platform-express": "^11.0.0",
-    "amqp-connection-manager": "^5.0.0",
-    "amqplib": "^2.0.1",
+    "kafkajs": "^2.2.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

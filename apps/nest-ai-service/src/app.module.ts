@@ -1,8 +1,15 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 
-import { ProductCreatedConsumer } from './messaging/consumers/product-created.consumer';
+import { EmbeddingModule } from './modules/embedding/embedding.module';
 
 @Module({
-  controllers: [ProductCreatedConsumer],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    EmbeddingModule,
+  ],
+  controllers: [],
 })
 export class AppModule {}
