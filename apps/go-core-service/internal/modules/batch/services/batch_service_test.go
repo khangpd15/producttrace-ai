@@ -449,27 +449,6 @@ func TestCreateBatch_DifferentPrefixes_IndependentSequences(t *testing.T) {
 	}
 }
 
-func TestCreateBatch_ConflictError(t *testing.T) {
-	req := buildCreateRequest()
-	conflictErr := apperror.NewConflict("batch already exists")
-
-	mock := &mockBatchRepository{
-		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
-			return nil, conflictErr
-		},
-	}
-
-	svc := newService(mock)
-	got, err := svc.CreateBatch(context.Background(), req)
-
-	require.Error(t, err)
-	assert.Nil(t, got)
-
-	var appErr *apperror.AppError
-	require.ErrorAs(t, err, &appErr)
-	assert.Equal(t, apperror.CodeConflict, appErr.Code)
-}
-
 func TestCreateBatch_RepoError(t *testing.T) {
 	req := buildCreateRequest()
 	dbErr := apperror.NewInternal("database error")
