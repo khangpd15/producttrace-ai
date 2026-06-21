@@ -33,6 +33,11 @@ func main() {
 		log.Fatalf("database connect failed: %v", err)
 	}
 
+	dbGORM, err := config.ConnectGORM()
+	if err != nil {
+		panic("failed to connect database")
+	}
+
 	// rabbitURL := os.Getenv("RABBITMQ_URL")
 
 	// conn, ch, err := rabbitmq.Connect(rabbitURL)
@@ -56,7 +61,7 @@ func main() {
 	// 	port = "8080"
 	// }
 
-	appli := app.NewApp(database)
+	appli := app.NewApp(database, dbGORM)
 
 	if err := appli.Router.Run(":8080"); err != nil {
 		log.Fatalf("failed to start server: %v \n", err)

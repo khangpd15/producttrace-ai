@@ -7,6 +7,8 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func ConnectPostgres() (*sql.DB, error) {
@@ -34,4 +36,36 @@ func ConnectPostgres() (*sql.DB, error) {
 	)
 
 	return sql.Open("pgx", dsn)
+}
+
+func ConnectGORM() (*gorm.DB, error) {
+	err := godotenv.Load()
+
+	if err != nil {
+		fmt.Println(".env file not found")
+	}
+
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	sslmode := os.Getenv("DB_SSLMODE")
+
+	dsn := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		user,
+		password,
+		host,
+		port,
+		dbName,
+		sslmode,
+	)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }

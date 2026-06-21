@@ -18,10 +18,12 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 }
 
 func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) {
-	batches := api.Group("batches/")
+	batches := api.Group("/batches")
 	{
-		batches.GET("/", batchHandler.GetBatchList)
+		batches.GET("", batchHandler.GetBatchList)
 		batches.GET("/:batch_code", batchHandler.GetBatchDetail)
-		batches.POST("/", batchHandler.CreateBatch)
+		batches.GET("/export-qr/:batch_id", batchHandler.ExportQR)
+		batches.POST("", batchHandler.CreateBatch)
+
 	}
 }
