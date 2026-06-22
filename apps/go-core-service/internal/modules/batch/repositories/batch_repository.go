@@ -195,7 +195,7 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 	// tự động release khi transaction kết thúc (commit hoặc rollback).
 	tx, err := rb.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch")
+		return nil, apperror.WrapDBError(err, "batch") 
 	}
 	defer tx.Rollback() //nolint:errcheck
 

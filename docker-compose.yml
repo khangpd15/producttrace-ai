@@ -1,21 +1,22 @@
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
     container_name: product-trace-db
 
     environment:
-      POSTGRES_DB: product_trace_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     ports:
-      - "5433:5432"
+      - "${POSTGRES_EXTERNAL_PORT}:5432"
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d product_trace_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +29,7 @@ services:
     container_name: product-trace-redis
 
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
 
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -44,18 +45,18 @@ services:
     container_name: product-trace-rabbitmq
 
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
 
     ports:
-      - "5672:5672"
+      - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
 
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,7 +76,7 @@ services:
         "-path",
         "/migrations",
         "-database",
-        "postgres://postgres:123456@postgres:5432/product_trace_db?sslmode=disable",
+        "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable",
         "up"
       ]
 
@@ -98,17 +99,18 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
-      DB_NAME: product_trace_db
-      DB_USER: postgres
-      DB_PASSWORD: 123456
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
 
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
 
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
 
     ports:
-      - "8080:8080"
+      - "${GO_CORE_PORT}:8080"
 
     depends_on:
       migrate:
@@ -131,18 +133,18 @@ services:
     container_name: nest-ai-service
 
     environment:
-      PORT: 3000
+      PORT: ${NEST_PORT}
 
-      GO_CORE_URL: http://go-core-service:8080
+      GO_CORE_URL: ${GO_CORE_URL}
 
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
 
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
-      RABBITMQ_QUEUE: ai.events
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
 
     ports:
-      - "3000:3000"
+      - "${NEST_PORT}:3000"
 
     depends_on:
       go-core-service:
@@ -165,3 +167,4 @@ networks:
 volumes:
   postgres-data:
   rabbitmq-data:
+
