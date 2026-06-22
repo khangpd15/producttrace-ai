@@ -14,6 +14,7 @@ type LocationRepository interface {
 	GetByCode(ctx context.Context, code string) (*domain.Location, error)
 	Update(ctx context.Context, loc *domain.Location) error
 	Delete(ctx context.Context, id string) error
+	HardDelete(ctx context.Context, id string) error
 	FindNearby(ctx context.Context, lat, lng float64, radiusMeters float64, limit int) ([]*domain.LocationWithDistance, error)
 }
 

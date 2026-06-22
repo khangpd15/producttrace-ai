@@ -10,9 +10,6 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
 )
 
-
-
-
 type locationService struct {
 	repo repository.LocationRepository
 }
@@ -22,7 +19,7 @@ func NewLocationService(repo repository.LocationRepository) LocationService {
 	return &locationService{repo: repo}
 }
 
-// ─── Helpers: mapping 
+// ─── Helpers: mapping
 
 // toResponse chuyển đổi domain.Location → dto.LocationResponse.
 func toResponse(loc *domain.Location) *dto.LocationResponse {
@@ -48,9 +45,6 @@ func toResponse(loc *domain.Location) *dto.LocationResponse {
 	}
 }
 
-// ─── Implementation ────────────────────────────────────────────────────────────
-
-// CreateLocation validate và tạo mới một Location.
 func (s *locationService) CreateLocation(ctx context.Context, req *dto.CreateLocationReq) (*dto.LocationResponse, error) {
 	// Kiểm tra trùng code
 	existing, _ := s.repo.GetByCode(ctx, req.Code)
@@ -125,7 +119,6 @@ func (s *locationService) UpdateLocation(ctx context.Context, id string, req *dt
 		return nil, fmt.Errorf("locationService.UpdateLocation: %w", err)
 	}
 
-	
 	existing.Name = req.Name
 	existing.Type = req.Type
 	existing.Phone = req.Phone
@@ -162,6 +155,19 @@ func (s *locationService) DeleteLocation(ctx context.Context, id string) error {
 
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("locationService.DeleteLocation: %w", err)
+	}
+
+	return nil
+}
+
+// HardDeleteLocation xóa vĩnh viễn một Location khỏi database theo ID.
+func (s *locationService) HardDeleteLocation(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("locationService.HardDeleteLocation: id is required")
+	}
+
+	if err := s.repo.HardDelete(ctx, id); err != nil {
+		return fmt.Errorf("locationService.HardDeleteLocation: %w", err)
 	}
 
 	return nil

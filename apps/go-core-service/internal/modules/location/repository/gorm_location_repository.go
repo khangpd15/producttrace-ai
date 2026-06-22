@@ -19,7 +19,6 @@ func NewLocationRepository(db *gorm.DB) LocationRepository {
 	return &locationRepository{db: db}
 }
 
-// Create thêm một Location mới vào DB.
 func (r *locationRepository) Create(ctx context.Context, loc *domain.Location) error {
 	result := r.db.WithContext(ctx).Create(loc)
 	if result.Error != nil {
@@ -89,6 +88,19 @@ func (r *locationRepository) Delete(ctx context.Context, id string) error {
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("locationRepository.Delete: record not found or already deleted for id=%s", id)
+	}
+	return nil
+}
+
+// HardDelete xóa vĩnh viễn một Location khỏi database bằng lệnh SQL DELETE.
+func (r *locationRepository) HardDelete(ctx context.Context, id string) error {
+	result := r.db.WithContext(ctx).
+		Exec("DELETE FROM locations WHERE id = ?", id)
+	if result.Error != nil {
+		return fmt.Errorf("locationRepository.HardDelete: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("locationRepository.HardDelete: record not found for id=%s", id)
 	}
 	return nil
 }
