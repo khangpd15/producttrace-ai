@@ -2,39 +2,41 @@ package database
 
 import (
 	"fmt"
-	"os"
+	"log"
 
-	"github.com/joho/godotenv"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/config"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// ConnectPostgres connects to PostgreSQL using GORM and returns a *gorm.DB instance.
-func ConnectPostgres() (*gorm.DB, error) {
-	_ = godotenv.Load() // Ignore error if .env doesn't exist locally
+func ConnectPostgres() *gorm.DB {
+	cfg := config.NewDBConfig()
 
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	sslmode := os.Getenv("DB_SSLMODE")
-	if sslmode == "" {
-		sslmode = "disable"
-	}
-
-	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Ho_Chi_Minh",
-		host,
-		user,
-		password,
-		dbName,
-		port,
-		sslmode,
+	log.Printf(
+		"Connecting PostgreSQL: host=%s port=%s db=%s user=%s",
+		cfg.Host,
+		cfg.Port,
+		cfg.DBName,
+		cfg.User,
 	)
 
-	return gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
+	dsn := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Ho_Chi_Minh",
+		cfg.Host,
+		cfg.Port,
+		cfg.User,
+		cfg.Password,
+		cfg.DBName,
+		cfg.SSLMode,
+	)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Connect database error: %v", err)
+	}
+
+	log.Println("PostgreSQL connected successfully")
+
+	return db
 }
