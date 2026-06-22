@@ -1,13 +1,10 @@
 package app
 
 import (
-	"database/sql"
 	"log"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/gorm"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 

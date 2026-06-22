@@ -15,12 +15,12 @@ import (
 func ConnectPostgres() (*gorm.DB, error) {
 	_ = godotenv.Load() // Ignore error if .env doesn't exist locally
 
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	sslmode := os.Getenv("DB_SSLMODE")
+	host := os.Getenv("POSTGRES_HOST")
+	port := os.Getenv("POSTGRES_PORT")
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	dbName := os.Getenv("POSTGRES_DB_NAME")
+	sslmode := os.Getenv("POSTGRES_SSLMODE")
 	if sslmode == "" {
 		sslmode = "disable"
 	}
@@ -46,13 +46,12 @@ func ConnectPostgresSQL() (*sql.DB, error) {
 	if err != nil {
 		fmt.Println(".env file not found")
 	}
-
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	sslmode := os.Getenv("DB_SSLMODE")
+	host := os.Getenv("POSTGRES_HOST")
+	port := os.Getenv("POSTGRES_PORT")
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	dbName := os.Getenv("POSTGRES_DB_NAME")
+	sslmode := os.Getenv("POSTGRES_SSLMODE")
 
 	dsn := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
