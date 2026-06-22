@@ -22,19 +22,19 @@ type BatchDetailProductResponse struct {
 
 // BatchDetailResponse là DTO trả về đầy đủ thông tin chi tiết của một lô hàng
 type BatchDetailResponse struct {
-	ID               uuid.UUID                   `json:"id"`
-	BatchCode        string                      `json:"batch_code"`
-	ManufactureDate  *time.Time                  `json:"manufacture_date"`
-	ExpiryDate       *time.Time                  `json:"expiry_date"`
-	ImportedAt       *time.Time                  `json:"imported_at"`
-	ManufacturerName *string                      `json:"manufacturer_name"`
-	SupplierName     *string                      `json:"supplier_name"`
-	OriginCountry    *string                      `json:"origin_country"`
-	ProductionPlace  *string                      `json:"production_place"`
-	Quantity         int                         `json:"quantity"`
-	Status           string                      `json:"status"`
-	CreatedAt        time.Time                   `json:"created_at"`
-	UpdatedAt        time.Time                   `json:"updated_at"`
-	Variant          BatchDetailVariantResponse  `json:"variant"`
-	Product          BatchDetailProductResponse  `json:"product"`
+	ID               uuid.UUID                  `json:"id"`
+	BatchCode        string                     `json:"batch_code"`
+	ManufactureDate  *time.Time                 `json:"manufacture_date"`
+	ExpiryDate       *time.Time                 `json:"expiry_date"`
+	ImportedAt       *time.Time                 `json:"imported_at"`
+	ManufacturerName *string                    `json:"manufacturer_name"`
+	SupplierName     *string                    `json:"supplier_name"`
+	OriginCountry    *string                    `json:"origin_country"`
+	ProductionPlace  *string                    `json:"production_place"`
+	Quantity         int                        `json:"quantity"`
+	Status           string                     `json:"status"`
+	CreatedAt        time.Time                  `json:"created_at"`
+	UpdatedAt        time.Time                  `json:"updated_at"`
+	Variant          BatchDetailVariantResponse `json:"variant"`
+	Product          BatchDetailProductResponse `json:"product"`
 }

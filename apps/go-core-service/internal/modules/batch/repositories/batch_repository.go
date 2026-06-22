@@ -18,6 +18,7 @@ import (
 type BatchRepository interface {
 	FindAll(ctx context.Context) ([]*response.BatchListResponse, error)
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
+	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
 	Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
 }
 
@@ -117,6 +118,67 @@ func (rb *batchRepository) FindByCode(ctx context.Context, batchCode string) (*r
 	return &detail, nil
 }
 
+func (rb *batchRepository) FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error) {
+	sqlQuery := `
+		SELECT
+			b.id,
+			b.batch_code,
+			b.manufacture_date,
+			b.expiry_date,
+			b.imported_at,
+			b.manufacturer_name,
+			b.supplier_name,
+			b.origin_country,
+			b.production_place,
+			b.quantity,
+			b.status,
+			b.created_at,
+			b.updated_at,
+			pv.id     AS variant_id,
+			pv.sku    AS variant_sku,
+			pv.name   AS variant_name,
+			pv.barcode AS variant_barcode,
+			p.id      AS product_id,
+			p.name    AS product_name
+		FROM batches b
+			JOIN product_variants pv ON pv.id = b.variant_id
+			JOIN products p ON p.id = pv.product_id
+		WHERE b.id = $1
+		  AND b.is_deleted = FALSE
+		LIMIT 1`
+
+	row := rb.db.QueryRowContext(ctx, sqlQuery, batchID)
+
+	var detail response.BatchDetailResponse
+	err := row.Scan(
+		&detail.ID,
+		&detail.BatchCode,
+		&detail.ManufactureDate,
+		&detail.ExpiryDate,
+		&detail.ImportedAt,
+		&detail.ManufacturerName,
+		&detail.SupplierName,
+		&detail.OriginCountry,
+		&detail.ProductionPlace,
+		&detail.Quantity,
+		&detail.Status,
+		&detail.CreatedAt,
+		&detail.UpdatedAt,
+		&detail.Variant.VariantID,
+		&detail.Variant.SKU,
+		&detail.Variant.Name,
+		&detail.Variant.Barcode,
+		&detail.Product.ProductID,
+		&detail.Product.ProductName,
+	)
+	if err != nil {
+		log.Println(err)
+		return nil, apperror.WrapDBError(err, "batch")
+	}
+
+	return &detail, nil
+}
+
 // Create sinh batch code tự động theo format [PREFIX]-[YEAR]-[SEQUENCE]
 // và dùng PostgreSQL Advisory Lock (transaction-scoped) để đảm bảo
 // sequence tăng tuần tự, không bị race condition.
@@ -133,7 +195,7 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 	// tự động release khi transaction kết thúc (commit hoặc rollback).
 	tx, err := rb.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch")
+		return nil, apperror.WrapDBError(err, "batch") 
 	}
 	defer tx.Rollback() //nolint:errcheck
 

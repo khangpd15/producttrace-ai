@@ -21,9 +21,10 @@ import (
 // mockBatchRepository implement repositories.BatchRepository để dùng trong test.
 // Dùng func field để từng test case tự quyết định hành vi trả về.
 type mockBatchRepository struct {
-	findAllFn    func(ctx context.Context) ([]*response.BatchListResponse, error)
-	findByCodeFn func(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
-	createFn     func(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	findAllFn       func(ctx context.Context) ([]*response.BatchListResponse, error)
+	findByCodeFn    func(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
+	createFn        func(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	findByBatchIDFn func(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
 }
 
 func (m *mockBatchRepository) FindAll(ctx context.Context) ([]*response.BatchListResponse, error) {
@@ -32,6 +33,10 @@ func (m *mockBatchRepository) FindAll(ctx context.Context) ([]*response.BatchLis
 
 func (m *mockBatchRepository) FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
 	return m.findByCodeFn(ctx, batchCode)
+}
+
+func (m *mockBatchRepository) FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error) {
+	return m.findByBatchIDFn(ctx, batchID)
 }
 
 func (m *mockBatchRepository) Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
@@ -45,7 +50,7 @@ func (m *mockBatchRepository) Create(ctx context.Context, req *request.CreateBat
 func ptr[T any](v T) *T { return &v }
 
 func newService(repo *mockBatchRepository) BatchService {
-	return NewbatchService(repo)
+	return NewbatchService(repo, nil, nil)
 }
 
 // ---------------------------------------------------------------------------

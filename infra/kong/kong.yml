@@ -8,7 +8,7 @@ services:
       - name: go-core-route
         paths:
           - /api
-        strip_path: true
+        strip_path: false
 
   - name: nest-ai-service
     url: http://nest-ai-service:3000
@@ -17,4 +17,4 @@ services:
       - name: nest-ai-route
         paths:
           - /ai
-        strip_path: true
+        strip_path: false

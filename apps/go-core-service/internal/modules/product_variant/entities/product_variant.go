@@ -1,9 +1,10 @@
 package entities
 
 import (
-    "time"
-    "github.com/google/uuid"
-    "gorm.io/datatypes"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 type ProductVariant struct {
@@ -22,5 +23,5 @@ type ProductVariant struct {
 }
 
 func (ProductVariant) TableName() string {
-    return "product_variants"
+	return "product_variants"
 }

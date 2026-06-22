@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
@@ -59,4 +63,43 @@ func (hb *BatchHandler) CreateBatch(c *gin.Context) {
 	}
 
 	c.JSON(201, response.ResponseSuccess("batch created successfully", result))
+}
+
+func (h *BatchHandler) ExportQR(c *gin.Context) {
+	fmt.Println("FULL PATH:", c.FullPath())
+	fmt.Println("batch_id:", c.Param("batch_id"))
+
+	batchIDStr := c.Param("batch_id")
+
+	if batchIDStr == "" {
+		apperror.HandleError(c, apperror.NewBadRequest("missing batchID"))
+		return
+	}
+
+	batchID, err := uuid.Parse(batchIDStr)
+
+	if err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	pdfBytes, err := h.service.ExportBatchQR(
+		c.Request.Context(),
+		batchID,
+	)
+
+	if err != nil {
+		return
+	}
+
+	c.Header(
+		"Content-Disposition",
+		`attachment; filename="batch_qr.pdf"`,
+	)
+
+	c.Data(
+		http.StatusOK,
+		"application/pdf",
+		pdfBytes,
+	)
 }
