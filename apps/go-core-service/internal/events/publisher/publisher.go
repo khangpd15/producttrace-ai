@@ -30,6 +30,5 @@ func (p *Publisher) Publish(event types.Event) error {
 		return err
 	}
 
-	// Publish via manager which handles retries, thread safety and confirmations.
 	return p.mgr.Publish(context.Background(), event.EventType, body)
 }

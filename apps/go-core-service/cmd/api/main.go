@@ -17,6 +17,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
 	}
+	log.Println("PostgreSQLGORM connected successfully")
+
+	databasePostgresSQL, err := database.ConnectPostgresSQL()
+	if err != nil {
+		log.Fatalf("database connection failed: %v", err)
+	}
 	log.Println("PostgreSQL connected successfully")
 
 	// 2. Connect to Redis client
@@ -43,16 +49,9 @@ func main() {
 	pub := publisher.New(mgr)
 
 	// 5. Bootstrap application
-	appli := app.NewApp(databasePostgres, redisClient, pub)
+	appli := app.NewApp(databasePostgres, redisClient, pub, databasePostgresSQL)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	log.Printf("Go Core Service is running on port %s", port)
-
-	if err := appli.Router.Run(":" + port); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+	if err := appli.Router.Run(":8080"); err != nil {
+		log.Fatalf("failed to start server: %v \n", err)
 	}
 }
