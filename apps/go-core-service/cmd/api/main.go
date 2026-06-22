@@ -13,10 +13,8 @@ import (
 
 func main() {
 	// 1. Connect to PostgreSQL (GORM client)
-	databasePostgres, err := database.ConnectPostgres()
-	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
-	}
+	databasePostgres := database.ConnectPostgres()
+
 	log.Println("PostgreSQLGORM connected successfully")
 
 	databasePostgresSQL, err := database.ConnectPostgresSQL()
