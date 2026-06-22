@@ -14,6 +14,8 @@ import (
 
 	// User Module
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
+	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
 	// Cache pkg
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
@@ -46,6 +48,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
+	// 2. Initialize User Module
+	uRepo := userRepo.NewUserRepository(database)
+	uService := userService.NewUserService(uRepo)
+	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
 
@@ -63,6 +69,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler: batchHandler,
 		AuthHandler:  aHandler,
+		UserHandler:  uHandler,
 	})
 
 	return &App{
