@@ -9,5 +9,5 @@ type Event struct {
 	Timestamp     time.Time   `json:"timestamp"`
 	Producer      string      `json:"producer"`
 	CorrelationID string      `json:"correlationId"`
-	Payload        interface{} `json:"payload"`
+	Payload       interface{} `json:"payload"`
 }
