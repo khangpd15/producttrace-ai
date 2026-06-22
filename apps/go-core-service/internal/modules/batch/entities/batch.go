@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	entities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
+	entities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 )
 
 type Batch struct {

@@ -1,5 +1,4 @@
-// dto/list_product.dto.go
-package dto
+package request
 
 type ListProductRequest struct {
     Page       int     `form:"page,default=1" binding:"min=1"`

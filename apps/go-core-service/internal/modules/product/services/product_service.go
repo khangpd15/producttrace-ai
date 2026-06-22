@@ -5,31 +5,33 @@ import (
     "errors"
 
     "github.com/google/uuid"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
+    variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
+    variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
     "gorm.io/gorm"
 )
 
 type ProductService interface {
-    CreateProduct(ctx context.Context, req dto.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error)
-    UpdateProduct(ctx context.Context, id uuid.UUID, req dto.UpdateProductRequest) (*entities.Product, error)
+    CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error)
+    UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error)
     GetProductByID(ctx context.Context, id uuid.UUID) (*entities.Product, error)
-    GetAllProducts(ctx context.Context, filter dto.ListProductRequest) ([]entities.Product, int64, error)
+    GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error)
     DeleteProduct(ctx context.Context, id uuid.UUID) error
 }
 
 type productService struct {
     db          *gorm.DB
     productRepo repositories.ProductRepository
-    variantRepo repositories.ProductVariantRepository
+    variantRepo variantRepos.ProductVariantRepository
 }
 
 func NewProductService(
     db *gorm.DB,
     productRepo repositories.ProductRepository,
-    variantRepo repositories.ProductVariantRepository,
+    variantRepo variantRepos.ProductVariantRepository,
 ) ProductService {
     return &productService{
         db:          db,
@@ -38,7 +40,7 @@ func NewProductService(
     }
 }
 
-func (s *productService) CreateProduct(ctx context.Context, req dto.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error) {
+func (s *productService) CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error) {
     for _, v := range req.Variants {
         exists, err := s.variantRepo.ExistsBySKU(ctx, v.SKU)
         if err != nil {
@@ -70,13 +72,13 @@ func (s *productService) CreateProduct(ctx context.Context, req dto.CreateProduc
             Status:       &req.Status,
             CreatedBy:    &createdBy,
         }
-        txCtx := repositories.InjectTx(ctx, tx)
+        txCtx := variantRepos.InjectTx(ctx, tx)
         if err := s.productRepo.Create(txCtx, &product); err != nil {
             return apperror.Wrap(err, apperror.NewInternal("Failed to create product"))
         }
 
         for _, v := range req.Variants {
-            variant := entities.ProductVariant{
+            variant := variantEntities.ProductVariant{
                 ID:        uuid.New(),
                 ProductID: product.ID,
                 SKU:       v.SKU,
@@ -99,7 +101,7 @@ func (s *productService) CreateProduct(ctx context.Context, req dto.CreateProduc
     return &product, nil
 }
 
-func (s *productService) UpdateProduct(ctx context.Context, id uuid.UUID, req dto.UpdateProductRequest) (*entities.Product, error) {
+func (s *productService) UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error) {
     product, err := s.productRepo.FindByID(ctx, id)
     if err != nil {
         if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -142,7 +144,7 @@ func (s *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*ent
     return product, nil
 }
 
-func (s *productService) GetAllProducts(ctx context.Context, filter dto.ListProductRequest) ([]entities.Product, int64, error) {
+func (s *productService) GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error) {
     var categoryID *uuid.UUID
     if filter.CategoryID != nil {
         id, err := uuid.Parse(*filter.CategoryID)

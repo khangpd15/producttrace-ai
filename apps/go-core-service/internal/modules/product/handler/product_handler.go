@@ -6,7 +6,8 @@ import (
 
     "github.com/gin-gonic/gin"
     "github.com/google/uuid"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/mapper"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
@@ -30,7 +31,7 @@ func handleError(c *gin.Context, err error) {
 }
 
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
-    var req dto.CreateProductRequest
+    var req request.CreateProductRequest
     if err := c.ShouldBindJSON(&req); err != nil {
         c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
         return
@@ -45,7 +46,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
         return
     }
 
-    c.JSON(http.StatusCreated, response.ResponseSuccess("Product created successfully", product))
+    c.JSON(http.StatusCreated, response.ResponseSuccess("Product created successfully", mapper.ToProductResponse(product)))
 }
 
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
@@ -56,7 +57,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
         return
     }
 
-    var req dto.UpdateProductRequest
+    var req request.UpdateProductRequest
     if err := c.ShouldBindJSON(&req); err != nil {
         c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
         return
@@ -68,7 +69,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
         return
     }
 
-    c.JSON(http.StatusOK, response.ResponseSuccess("Product updated successfully", product))
+    c.JSON(http.StatusOK, response.ResponseSuccess("Product updated successfully", mapper.ToProductResponse(product)))
 }
 
 func (h *ProductHandler) GetProductByID(c *gin.Context) {
@@ -85,11 +86,11 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
         return
     }
 
-    c.JSON(http.StatusOK, response.ResponseSuccess("OK", product))
+    c.JSON(http.StatusOK, response.ResponseSuccess("OK", mapper.ToProductResponse(product)))
 }
 
 func (h *ProductHandler) GetAllProducts(c *gin.Context) {
-    var filter dto.ListProductRequest
+    var filter request.ListProductRequest
     if err := c.ShouldBindQuery(&filter); err != nil {
         c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
         return
@@ -108,18 +109,7 @@ func (h *ProductHandler) GetAllProducts(c *gin.Context) {
         return
     }
 
-    totalPages := int(total) / filter.Limit
-    if int(total)%filter.Limit != 0 {
-        totalPages++
-    }
-
-    c.JSON(http.StatusOK, response.ResponseSuccess("OK", gin.H{
-        "data":        products,
-        "total":       total,
-        "page":        filter.Page,
-        "limit":       filter.Limit,
-        "total_pages": totalPages,
-    }))
+    c.JSON(http.StatusOK, response.ResponseSuccess("OK", mapper.ToListProductResponse(products, total, filter.Page, filter.Limit)))
 }
 
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {

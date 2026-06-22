@@ -14,6 +14,7 @@ import (
     productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
     productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
     productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
+    variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 )
 
@@ -22,12 +23,12 @@ type App struct {
 }
 
 func NewApp(database *sql.DB) *App {
-    // Batch module (giữ nguyên)
+    // Batch module
     batchR := batchRepo.NewBatchRepository(database)
     batchS := batchService.NewbatchService(batchR)
     batchH := batchHandler.NewBatchHandler(batchS)
 
-    // Wrap *sql.DB thành GORM cho product module
+    // Wrap *sql.DB thành GORM
     gormDB, err := gorm.Open(postgres.New(postgres.Config{
         Conn: database,
     }), &gorm.Config{})
@@ -37,7 +38,7 @@ func NewApp(database *sql.DB) *App {
 
     // Product module
     pRepo := productRepo.NewProductRepository(gormDB)
-    pVariantRepo := productRepo.NewProductVariantRepository(gormDB)
+    pVariantRepo := variantRepo.NewProductVariantRepository(gormDB)
     pService := productService.NewProductService(gormDB, pRepo, pVariantRepo)
     pHandler := productHandler.NewProductHandler(pService)
 

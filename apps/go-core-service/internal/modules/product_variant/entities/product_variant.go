@@ -19,11 +19,6 @@ type ProductVariant struct {
     CreatedAt  time.Time
     UpdatedAt  time.Time
     IsDeleted  bool           `gorm:"default:false"`
-
-    // Relations
-    Product         Product          `gorm:"foreignKey:ProductID"`
-    AttributeValues []AttributeValue `gorm:"foreignKey:ProductVariantID"`
-    Items           []ProductItem    `gorm:"foreignKey:VariantID"`
 }
 
 func (ProductVariant) TableName() string {
