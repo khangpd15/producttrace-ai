@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	"gorm.io/datatypes"
 )
 
@@ -27,7 +28,7 @@ type ProductItem struct {
 	IsDeleted         bool `gorm:"default:false"`
 
 	// Relations
-	Variant ProductVariant `gorm:"foreignKey:VariantID"`
+	Variant entities.ProductVariant `gorm:"foreignKey:VariantID"`
 }
 
 func (ProductItem) TableName() string {
