@@ -55,7 +55,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
-	uService := userService.NewUserService(uRepo)
+	uService := userService.NewUserService(uRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
