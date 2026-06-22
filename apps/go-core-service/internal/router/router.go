@@ -1,21 +1,25 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
-	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
+    "github.com/gin-gonic/gin"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+    productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+    authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
+    userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
+    batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 )
+
+
 
 type RouterDependency struct {
 	BatchHandler *batchHandler.BatchHandler
 	AuthHandler  *authHandler.AuthenHandler
 	UserHandler  *userHandler.UserHandler
+    ProductHandler *productHandler.ProductHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
-	r := gin.Default()
+    r := gin.Default()
 
 	api := r.Group("api")
 
@@ -57,4 +61,16 @@ func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) 
 		batches.POST("", batchHandler.CreateBatch)
 
 	}
+}
+func SetupProductRouter(api *gin.RouterGroup, productHandler *productHandler.ProductHandler) {
+    products := api.Group("/products")
+    // Product routes
+    {
+        products.POST("/", productHandler.CreateProduct)
+        products.GET("/", productHandler.GetAllProducts)
+        products.GET("/:id", productHandler.GetProductByID)
+        products.PUT("/:id", productHandler.UpdateProduct)
+        products.DELETE("/:id", productHandler.DeleteProduct)
+    }
+
 }

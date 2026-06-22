@@ -1,9 +1,21 @@
 package app
 
 import (
+	"database/sql"
 	"log"
 
 	"github.com/gin-gonic/gin"
+
+	"gorm.io/gorm"
+
+	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
+	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
+	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
+	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
+
 	"github.com/redis/go-redis/v9"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -13,25 +25,18 @@ import (
 	authService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/service"
 
 	// User Module
-	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
+	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
 	// Cache pkg
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 
-	// Batch Module
-	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
-
-	"database/sql"
 	"os"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
-	"gorm.io/gorm"
 )
 
 type App struct {
@@ -48,7 +53,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
-	// 2. Initialize User Module
+	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
 	uService := userService.NewUserService(uRepo)
 	uHandler := userHandler.NewUserHandler(uService)
@@ -59,17 +64,22 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo)
 	batchHandler := batchHandler.NewBatchHandler(batchService)
 
-	uRepo := userRepo.NewUserRepository(database)
-	// 3. Initialize Auth Module
+	// Initialize Auth Module
 	redisCache := cache.NewRedisCache(redisClient)
 	aService := authService.NewAuthenService(uRepo, redisCache, pub)
 	aHandler := authHandler.NewAuthenHandler(aService)
 
-	// 4. Setup Router
+	// Product module
+	pRepo := productRepo.NewProductRepository(database)
+	pVariantRepo := variantRepo.NewProductVariantRepository(database)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo)
+	pHandler := productHandler.NewProductHandler(pService)
+
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler: batchHandler,
-		AuthHandler:  aHandler,
-		UserHandler:  uHandler,
+		BatchHandler:   batchHandler,
+		ProductHandler: pHandler,
+		UserHandler:    uHandler,
+		AuthHandler:    aHandler,
 	})
 
 	return &App{
