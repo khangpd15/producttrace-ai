@@ -23,6 +23,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
 	}
+
 	log.Println("PostgreSQL connected successfully")
 
 	// 2. Connect to Redis client
