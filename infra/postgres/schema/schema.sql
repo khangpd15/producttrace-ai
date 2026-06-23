@@ -98,7 +98,7 @@ CREATE TABLE "batches" (
   "is_deleted" boolean DEFAULT false
 );
 
-CREATE TABLE "shops" (
+CREATE TABLE "locations" (
   "id" uuid PRIMARY KEY,
   "owner_user_id" uuid,
   "code" varchar UNIQUE,
@@ -125,7 +125,7 @@ CREATE TABLE "product_items" (
   "id" uuid PRIMARY KEY,
   "variant_id" uuid NOT NULL,
   "batch_id" uuid,
-  "current_shop_point_id" uuid,
+  "current_location_id" uuid,
   "item_code" varchar(20) UNIQUE NOT NULL,
   "verification_token" varchar(32) UNIQUE NOT NULL,
   "serial_number" varchar UNIQUE,
@@ -150,7 +150,7 @@ CREATE TABLE "ownerships" (
   "owned_at" timestamp,
   "ended_at" timestamp,
   "purchase_date" timestamp,
-  "purchase_shop_point_id" uuid,
+  "purchase_location_id" uuid,
   "invoice_number" varchar,
   "invoice_url" text,
   "purchase_info_json" jsonb,
@@ -182,7 +182,7 @@ CREATE TABLE "events" (
   "product_item_id" uuid,
   "batch_id" uuid,
   "actor_id" uuid,
-  "shop_point_id" uuid,
+  "location_id" uuid,
   "event_type" varchar NOT NULL,
   "title" varchar,
   "description" text,
@@ -211,7 +211,7 @@ CREATE TABLE "auditLog" (
   "created_at" timestamp
 );
 
-ALTER TABLE "shops" ADD FOREIGN KEY ("owner_user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "locations" ADD FOREIGN KEY ("owner_user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "product_categories" ADD FOREIGN KEY ("parent_id") REFERENCES "product_categories" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -233,13 +233,13 @@ ALTER TABLE "batches" ADD FOREIGN KEY ("created_by") REFERENCES "users" ("id") D
 
 ALTER TABLE "product_items" ADD FOREIGN KEY ("variant_id") REFERENCES "product_variants" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "product_items" ADD FOREIGN KEY ("current_shop_point_id") REFERENCES "shops" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "product_items" ADD FOREIGN KEY ("current_location_point_id") REFERENCES "locations" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "ownerships" ADD FOREIGN KEY ("product_item_id") REFERENCES "product_items" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "ownerships" ADD FOREIGN KEY ("owner_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "ownerships" ADD FOREIGN KEY ("purchase_shop_point_id") REFERENCES "shops" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "ownerships" ADD FOREIGN KEY ("purchase_location_point_id") REFERENCES "locations" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "warranties" ADD FOREIGN KEY ("product_item_id") REFERENCES "product_items" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -251,7 +251,7 @@ ALTER TABLE "events" ADD FOREIGN KEY ("batch_id") REFERENCES "batches" ("id") DE
 
 ALTER TABLE "events" ADD FOREIGN KEY ("actor_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
-ALTER TABLE "events" ADD FOREIGN KEY ("shop_point_id") REFERENCES "shops" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "events" ADD FOREIGN KEY ("location_point_id") REFERENCES "locations" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "attachments" ADD FOREIGN KEY ("event_id") REFERENCES "events" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
@@ -409,12 +409,12 @@ CHECK (
 ); -- Ngày hết hạn không được trước ngày sản xuất.
 
 -- =========================================================
--- SHOPS
+-- LOCATIONS
 -- =========================================================
 
 
-ALTER TABLE shops
-ADD CONSTRAINT chk_shops_type
+ALTER TABLE locations
+ADD CONSTRAINT chk_locations_type
 CHECK (type IN (
   'WAREHOUSE',        -- Kho lưu trữ hàng hóa.
   'STORE',            -- Cửa hàng bán trực tiếp.
@@ -422,16 +422,16 @@ CHECK (type IN (
   'WARRANTY_CENTER'   -- Trung tâm bảo hành.
 ));
 
-ALTER TABLE shops
-ADD CONSTRAINT chk_shops_latitude
+ALTER TABLE locations
+ADD CONSTRAINT chk_locations_latitude
 CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90); -- Latitude phải nằm trong biên độ địa lý hợp lệ.
 
-ALTER TABLE shops
-ADD CONSTRAINT chk_shops_longitude
+ALTER TABLE locations
+ADD CONSTRAINT chk_locations_longitude
 CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180); -- Longitude phải nằm trong biên độ địa lý hợp lệ.
 
-CREATE INDEX IF NOT EXISTS idx_shops_geo_location
-ON shops USING GIST(geo_location); -- Tối ưu tìm shop gần vị trí user bằng PostGIS.
+CREATE INDEX IF NOT EXISTS idx_locations_geo_location
+ON locations USING GIST(geo_location); -- Tối ưu tìm location gần vị trí user bằng PostGIS.
 
 -- =========================================================
 -- PRODUCT ITEMS
@@ -468,8 +468,8 @@ ON product_items(variant_id); -- Tối ưu lấy item theo variant.
 CREATE INDEX IF NOT EXISTS idx_product_items_batch_id
 ON product_items(batch_id); -- Tối ưu lấy item theo batch/lô hàng.
 
-CREATE INDEX IF NOT EXISTS idx_product_items_current_shop_point_id
-ON product_items(current_shop_point_id); -- Tối ưu tìm item đang ở shop/kho nào.
+CREATE INDEX IF NOT EXISTS idx_product_items_current_location_point_id
+ON product_items(current_location_point_id); -- Tối ưu tìm item đang ở location/kho nào.
 
 ALTER TABLE product_items
 ADD CONSTRAINT chk_product_items_item_code_format

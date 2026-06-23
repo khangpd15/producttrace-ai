@@ -1,0 +1,20 @@
+_format_version: "3.0"
+
+services:
+  - name: go-core-service
+    url: http://go-core-service:8080
+
+    routes:
+      - name: go-core-route
+        paths:
+          - /api
+        strip_path: false
+
+  - name: nest-ai-service
+    url: http://nest-ai-service:3000
+
+    routes:
+      - name: nest-ai-route
+        paths:
+          - /ai
+        strip_path: false
