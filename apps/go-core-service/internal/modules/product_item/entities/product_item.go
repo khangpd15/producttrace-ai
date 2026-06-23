@@ -11,12 +11,12 @@ import (
 type ProductItem struct {
 	ID                uuid.UUID  `gorm:"type:uuid;primaryKey"`
 	VariantID         uuid.UUID  `gorm:"type:uuid;not null"`
-	BatchID           *uuid.UUID `gorm:"type:uuid"`
+	BatchID           uuid.UUID  `gorm:"type:uuid"`
 	CurrentLocationID *uuid.UUID `gorm:"type:uuid"`
 	ItemCode          string     `gorm:"type:varchar;not null"`
-	SerialNumber      *string    `gorm:"type:varchar"`
+	SerialNumber      string     `gorm:"type:varchar"`
 	VerificationToken string     `gorm:"type:varchar"`
-	Status            *string    `gorm:"type:varchar"`
+	Status            string     `gorm:"type:varchar"`
 	ProducedAt        *time.Time
 	PackedAt          *time.Time
 	SoldAt            *time.Time
