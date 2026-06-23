@@ -2,8 +2,14 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"time"
+	"unicode/utf8"
 
+	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/entity"
@@ -18,20 +24,27 @@ type UserServiceInterface interface {
 	UpdateUser(ctx context.Context, id string, req *request.UpdateUserRequest) (*response.UserResponse, error)
 	DeleteUser(ctx context.Context, id string) error
 	ListUsers(ctx context.Context, page, limit int, role, status, search string) (*response.UserListResponse, error)
-	UpdateProfile(ctx context.Context, id string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
+	GetProfile(ctx context.Context, id string) (*response.UserResponse, error)
+	UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
 }
 
 type UserService struct {
 	userRepo repository.UserRepositoryInterface
+	pub      *publisher.Publisher
 }
 
-func NewUserService(userRepo repository.UserRepositoryInterface) UserServiceInterface {
+func NewUserService(userRepo repository.UserRepositoryInterface, pub *publisher.Publisher) UserServiceInterface {
 	return &UserService{
 		userRepo: userRepo,
+		pub:      pub,
 	}
 }
 
 func mapToUserResponse(user *entity.User) *response.UserResponse {
+	avatar := ""
+	if user.AvatarUrl != nil {
+		avatar = *user.AvatarUrl
+	}
 	return &response.UserResponse{
 		ID:        user.ID.String(),
 		Email:     user.Email,
@@ -39,6 +52,7 @@ func mapToUserResponse(user *entity.User) *response.UserResponse {
 		FullName:  user.FullName,
 		Role:      string(user.Role),
 		Status:    string(user.Status),
+		Avatar:    avatar,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
@@ -159,22 +173,120 @@ func (s *UserService) ListUsers(ctx context.Context, page, limit int, role, stat
 	}, nil
 }
 
-func (s *UserService) UpdateProfile(ctx context.Context, id string, req *request.UpdateProfileRequest) (*response.UserResponse, error) {
+func (s *UserService) GetProfile(ctx context.Context, id string) (*response.UserResponse, error) {
 	user, err := s.userRepo.GetUserByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, apperror.WrapDBError(err, "User")
+	}
+	if user == nil {
+		return nil, apperror.NewNotFound("User profile")
+	}
+
+	if user.Status != entity.StatusActive {
+		return nil, apperror.NewForbidden("Account is not active")
+	}
+
+	return mapToUserResponse(user), nil
+}
+
+func (s *UserService) UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error) {
+	actor, err := s.userRepo.GetUserByID(ctx, actorID)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "Actor")
+	}
+	if actor == nil {
+		return nil, apperror.NewNotFound("Actor")
+	}
+
+	if actor.Status != entity.StatusActive {
+		return nil, apperror.NewForbidden("Account is not active")
+	}
+
+	if actorID != targetUserID && actor.Role != entity.RoleAdmin {
+		return nil, apperror.NewForbidden("Unauthorized update")
+	}
+
+	user, err := s.userRepo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "User")
 	}
 	if user == nil {
 		return nil, apperror.NewNotFound("User")
 	}
 
-	user.FullName = req.FullName
-	user.Phone = req.Phone
+	if req.FullName != nil {
+		if *req.FullName == "" {
+			return nil, apperror.NewValidation("Full name cannot be empty")
+		}
+		if utf8.RuneCountInString(*req.FullName) > 255 {
+			return nil, apperror.NewValidation("Full name must be at most 255 characters")
+		}
+		user.FullName = *req.FullName
+	}
+
+	if req.Phone != nil {
+		if *req.Phone == "" {
+			return nil, apperror.NewValidation("Phone cannot be empty")
+		}
+		phoneRegex := `^(0|\+84)[0-9]{9}$`
+		matched, _ := regexp.MatchString(phoneRegex, *req.Phone)
+		if !matched {
+			return nil, apperror.NewValidation("Invalid phone number")
+		}
+
+		if *req.Phone != user.Phone {
+			phoneExists, err := s.userRepo.CheckPhoneExists(ctx, *req.Phone, targetUserID)
+			if err != nil {
+				return nil, apperror.NewInternal("database error checking phone uniqueness")
+			}
+			if phoneExists {
+				return nil, apperror.NewConflict("Số điện thoại đã được sử dụng")
+			}
+		}
+		user.Phone = *req.Phone
+	}
+
+	if req.Avatar != nil {
+		user.AvatarUrl = req.Avatar
+	}
+
 	user.UpdatedAt = time.Now()
 
 	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
-		return nil, err
+		return nil, apperror.WrapDBError(err, "User")
+	}
+
+	avatar := ""
+	if updatedUser.AvatarUrl != nil {
+		avatar = *updatedUser.AvatarUrl
+	}
+
+	auditContent := fmt.Sprintf("User %s updated profile of user %s. Name: %s, Phone: %s, Avatar: %s", actorID, targetUserID, updatedUser.FullName, updatedUser.Phone, avatar)
+	err = s.userRepo.WriteAuditLog(ctx, auditContent, "PROFILE_UPDATE")
+	if err != nil {
+		fmt.Printf("failed to write audit log: %v\n", err)
+	}
+
+	if s.pub != nil {
+		event := types.Event{
+			EventID:       uuid.NewString(),
+			EventType:     "user.profile_updated",
+			EventVersion:  "1.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: uuid.NewString(),
+			Payload: map[string]interface{}{
+				"userId":    targetUserID,
+				"fullName":  updatedUser.FullName,
+				"phone":     updatedUser.Phone,
+				"avatarUrl": avatar,
+			},
+		}
+		err = s.pub.Publish(event)
+		if err != nil {
+			fmt.Printf("failed to publish profile updated event: %v\n", err)
+		}
 	}
 
 	return mapToUserResponse(updatedUser), nil

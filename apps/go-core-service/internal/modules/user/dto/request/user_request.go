@@ -18,6 +18,7 @@ type UpdateUserRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	FullName string `json:"full_name" binding:"required"`
-	Phone    string `json:"phone" binding:"required"`
+	FullName *string `json:"full_name"`
+	Phone    *string `json:"phone"`
+	Avatar   *string `json:"avatar"`
 }
