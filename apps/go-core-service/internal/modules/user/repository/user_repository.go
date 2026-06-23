@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
+	"github.com/google/uuid"
 	UserEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/entity"
 	"gorm.io/gorm"
 )
@@ -17,6 +19,8 @@ type UserRepositoryInterface interface {
 	GetUserByID(ctx context.Context, id string) (*UserEntity.User, error)
 	UpdateUserStatus(ctx context.Context, id string, status UserEntity.Status) error
 	CheckEmailExists(ctx context.Context, email string) (bool, error)
+	CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error)
+	WriteAuditLog(ctx context.Context, content string, logType string) error
 	UpdateUser(ctx context.Context, user *UserEntity.User) (*UserEntity.User, error)
 	DeleteUser(ctx context.Context, id string) error
 	ListUsers(ctx context.Context, page, limit int, role, status, search string) ([]*UserEntity.User, int64, error)
@@ -124,4 +128,23 @@ func (r *UserRepository) ListUsers(ctx context.Context, page, limit int, role, s
 	}
 
 	return users, total, nil
+}
+
+func (r *UserRepository) CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error) {
+	db := r.getDB(ctx)
+	var count int64
+	query := db.Model(&UserEntity.User{}).Where("phone = ? AND is_deleted = ?", phone, false)
+	if excludeUserID != "" {
+		query = query.Where("id != ?", excludeUserID)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *UserRepository) WriteAuditLog(ctx context.Context, content string, logType string) error {
+	db := r.getDB(ctx)
+	query := `INSERT INTO "auditLog" (id, content, type, created_at) VALUES (?, ?, ?, ?)`
+	return db.Exec(query, uuid.New().String(), content, logType, time.Now().UTC()).Error
 }

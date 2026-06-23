@@ -36,7 +36,7 @@ import (
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
-	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
+	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 )
 
 type App struct {
@@ -51,11 +51,11 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		log.Fatalf("failed to retrieve sql.DB from GORM client: %v", err)
 	}
 
-	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
+	productItemsRepo := productItemsRepo.NewProductItemRepository(database, databaseSQL)
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
-	uService := userService.NewUserService(uRepo)
+	uService := userService.NewUserService(uRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
@@ -80,6 +80,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductHandler: pHandler,
 		UserHandler:    uHandler,
 		AuthHandler:    aHandler,
+		UserRepo:       uRepo,
 	})
 
 	return &App{

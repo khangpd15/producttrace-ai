@@ -1,76 +1,129 @@
 package router
 
 import (
-    "github.com/gin-gonic/gin"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-    productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
-    authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
-    userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
-    batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	"github.com/gin-gonic/gin"
+
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
+	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
+	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
+	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
-
-
 type RouterDependency struct {
-	BatchHandler *batchHandler.BatchHandler
-	AuthHandler  *authHandler.AuthenHandler
-	UserHandler  *userHandler.UserHandler
-    ProductHandler *productHandler.ProductHandler
+	BatchHandler   *batchHandler.BatchHandler
+	AuthHandler    *authHandler.AuthenHandler
+	UserHandler    *userHandler.UserHandler
+	ProductHandler *productHandler.ProductHandler
+	UserRepo       userRepo.UserRepositoryInterface
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
-    r := gin.Default()
+	r := gin.Default()
 
-	api := r.Group("api")
+	// Disable proxy trusting by default to resolve the security warning
+	_ = r.SetTrustedProxies(nil)
 
-	SetupBatchRouter(api, deps.BatchHandler)
+	// Apply global Recovery, RequestID, and Logger middlewares
+	r.Use(middleware.RecoveryMiddleware())
+	r.Use(middleware.RequestIDMiddleware())
+	r.Use(middleware.LoggerMiddleware())
+
+	api := r.Group("/api")
+
 	SetupAuthRouter(api, deps.AuthHandler)
-	SetupUserRouter(api, deps.UserHandler)
+	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
+	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
+	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
 
 	return r
 }
 
+// AUTH
 func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
-	auth := api.Group("auth")
+	auth := api.Group("/auth")
 	{
 		auth.POST("/register", ah.Register)
 		auth.POST("/login", ah.Login)
 		auth.POST("/verify-otp", ah.VerifyOTP)
 		auth.POST("/refresh", ah.RefreshToken)
+		auth.POST("/logout", ah.Logout)
 	}
 }
 
-func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler) {
-	users := api.Group("users")
+// USER
+func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo userRepo.UserRepositoryInterface) {
+	users := api.Group("/users")
+
+	// Protected profile routes (requires authentication)
+	profileGroup := users.Group("")
+	profileGroup.Use(middleware.AuthMiddleware(uRepo))
 	{
-		users.PUT("/profile/:id", uh.UpdateProfile)
-		users.POST("", uh.CreateUser)
-		users.PUT("/:id", uh.UpdateUser)
-		users.DELETE("/:id", uh.DeleteUser)
-		users.GET("", uh.ListUsers)
-		users.GET("/:id", uh.GetUserDetail)
-  }
+		profileGroup.GET("/profile", uh.GetProfile)
+		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
+	}
+
+	// Admin-only management routes (requires ADMIN role)
+	adminGroup := users.Group("")
+	adminGroup.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
+	{
+		adminGroup.POST("", uh.CreateUser)
+		adminGroup.PUT("/:id", uh.UpdateUser)
+		adminGroup.DELETE("/:id", uh.DeleteUser)
+		adminGroup.GET("", uh.ListUsers)
+		adminGroup.GET("/:id", uh.GetUserDetail)
+	}
 }
 
-func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) {
+// BATCH
+func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo userRepo.UserRepositoryInterface) {
 	batches := api.Group("/batches")
-	{
-		batches.GET("", batchHandler.GetBatchList)
-		batches.GET("/:batch_code", batchHandler.GetBatchDetail)
-		batches.GET("/export-qr/:batch_id", batchHandler.ExportQR)
-		batches.POST("", batchHandler.CreateBatch)
 
+	// Public batch detail route (for anonymous QR scanning)
+	batches.GET("/:batch_code", bh.GetBatchDetail)
+
+	// Protected batch routes
+	protectedBatches := batches.Group("")
+	protectedBatches.Use(middleware.AuthMiddleware(uRepo))
+	{
+		// ADMIN and MANUFACTURER roles can view list, export QR PDF, and create batches
+		staffGroup := protectedBatches.Group("")
+		staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+		{
+			staffGroup.GET("", bh.GetBatchList)
+			staffGroup.GET("/export-qr/:batch_id", bh.ExportQR)
+			staffGroup.POST("", bh.CreateBatch)
+		}
 	}
 }
-func SetupProductRouter(api *gin.RouterGroup, productHandler *productHandler.ProductHandler) {
-    products := api.Group("/products")
-    // Product routes
-    {
-        products.POST("/", productHandler.CreateProduct)
-        products.GET("/", productHandler.GetAllProducts)
-        products.GET("/:id", productHandler.GetProductByID)
-        products.PUT("/:id", productHandler.UpdateProduct)
-        products.DELETE("/:id", productHandler.DeleteProduct)
-    }
 
+// PRODUCT
+func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler, uRepo userRepo.UserRepositoryInterface) {
+	products := api.Group("/products")
+	{
+		// Public endpoints to browse products
+		products.GET("", ph.GetAllProducts)
+		products.GET("/:id", ph.GetProductByID)
+
+		// Protected product management routes
+		protectedProducts := products.Group("")
+		protectedProducts.Use(middleware.AuthMiddleware(uRepo))
+		{
+			// ADMIN or MANUFACTURER can create or update products
+			staffGroup := protectedProducts.Group("")
+			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+			{
+				staffGroup.POST("", ph.CreateProduct)
+				staffGroup.PUT("/:id", ph.UpdateProduct)
+			}
+
+			// Only ADMIN can delete products
+			adminGroup := protectedProducts.Group("")
+			adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+			{
+				adminGroup.DELETE("/:id", ph.DeleteProduct)
+			}
+		}
+	}
 }
