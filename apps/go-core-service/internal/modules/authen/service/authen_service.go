@@ -25,6 +25,7 @@ type AuthenServiceInterface interface {
 	LoginUser(ctx context.Context, email, password string) (accessToken string, refreshToken string, err error)
 	VerifyOTP(ctx context.Context, email, otp string) error
 	RefreshToken(ctx context.Context, refreshToken string) (newAccessToken string, newRefreshToken string, err error)
+	Logout(ctx context.Context, refreshToken string) error
 }
 
 type AuthenService struct {
@@ -46,6 +47,40 @@ func NewAuthenService(
 }
 
 func (s *AuthenService) RegisterUser(ctx context.Context, email, phone, fullName, password string) (*UserEntity.User, error) {
+	// OTP Rate limiting: 5 OTPs per 15 minutes
+	limitKey := fmt.Sprintf("otp_limit:%s", email)
+	limitVal, err := s.cache.Get(ctx, limitKey)
+	if err == nil {
+		// Key exists, check count and expiry
+		var count int
+		var expiry int64
+		_, fmtErr := fmt.Sscanf(limitVal, "%d:%d", &count, &expiry)
+		if fmtErr == nil {
+			if time.Now().Unix() > expiry {
+				// Expired, reset limit
+				expiry = time.Now().Add(15 * time.Minute).Unix()
+				newVal := fmt.Sprintf("1:%d", expiry)
+				_ = s.cache.Set(ctx, limitKey, newVal, 15*time.Minute)
+			} else if count >= 5 {
+				return nil, apperror.NewTooManyRequests("Too many OTP requests. Please try again later.")
+			} else {
+				// Increment count
+				count++
+				newVal := fmt.Sprintf("%d:%d", count, expiry)
+				rem := time.Duration(expiry-time.Now().Unix()) * time.Second
+				if rem < 1*time.Second {
+					rem = 1 * time.Second
+				}
+				_ = s.cache.Set(ctx, limitKey, newVal, rem)
+			}
+		}
+	} else if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
+		// No limit key exists, create new one
+		expiry := time.Now().Add(15 * time.Minute).Unix()
+		val := fmt.Sprintf("1:%d", expiry)
+		_ = s.cache.Set(ctx, limitKey, val, 15*time.Minute)
+	}
+
 	// Check if user already exists
 	exists, err := s.userRepository.CheckEmailExists(ctx, email)
 	if err != nil {
@@ -158,7 +193,7 @@ func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error 
 	otpKey := fmt.Sprintf("otp:email:%s", email)
 	storedOtp, err := s.cache.Get(ctx, otpKey)
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
+		if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
 			return apperror.NewValidation("OTP has expired or is invalid")
 		}
 		return err
@@ -211,12 +246,19 @@ func (s *AuthenService) RefreshToken(ctx context.Context, oldRefreshToken string
 	userID := parts[0]
 	rawToken := parts[1]
 
+	// Check if token has been blacklisted (during logout)
+	blacklistKey := fmt.Sprintf("blacklist:refresh:%s", rawToken)
+	blacklisted, err := s.cache.Get(ctx, blacklistKey)
+	if err == nil && blacklisted == "true" {
+		return "", "", apperror.NewUnauthorized("Token has been blacklisted")
+	}
+
 	hashedToken := utils.HashToken(rawToken)
 	tokenKey := fmt.Sprintf("refresh_token:%s:%s", userID, hashedToken)
 
 	storedUserID, err := s.cache.Get(ctx, tokenKey)
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
+		if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
 			return "", "", apperror.NewUnauthorized("Invalid or expired refresh token")
 		}
 		return "", "", err
@@ -253,4 +295,28 @@ func (s *AuthenService) RefreshToken(ctx context.Context, oldRefreshToken string
 
 	newClientRefreshToken := fmt.Sprintf("%s.%s", user.ID.String(), newRawToken)
 	return newAccessToken, newClientRefreshToken, nil
+}
+
+func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
+	parts := strings.Split(refreshToken, ".")
+	if len(parts) != 2 {
+		return apperror.NewValidation("Invalid refresh token format")
+	}
+	userID := parts[0]
+	rawToken := parts[1]
+
+	hashedToken := utils.HashToken(rawToken)
+	tokenKey := fmt.Sprintf("refresh_token:%s:%s", userID, hashedToken)
+
+	// Delete from active refresh tokens
+	_ = s.cache.Delete(ctx, tokenKey)
+
+	// Blacklist the token identifier (rawToken) for 7 days (maximum lifetime of a refresh token)
+	blacklistKey := fmt.Sprintf("blacklist:refresh:%s", rawToken)
+	err := s.cache.Set(ctx, blacklistKey, "true", 7*24*time.Hour)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

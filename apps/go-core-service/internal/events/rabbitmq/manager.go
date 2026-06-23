@@ -18,37 +18,66 @@ var (
 )
 
 type Manager struct {
-	url            string
-	mu             sync.RWMutex
-	conn           *amqp.Connection
-	ch             *amqp.Channel
-	reconnecting   int32 // atomic boolean
-	
+	url          string
+	mu           sync.RWMutex
+	conn         *amqp.Connection
+	ch           *amqp.Channel
+	reconnecting int32 // atomic boolean
+
 	// Reconnection options
 	reconnectDelay time.Duration
 	maxRetries     int
 
-	ctx            context.Context
-	cancelFunc     context.CancelFunc
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 // NewManager creates a new Manager instance and initiates connection.
 func NewManager(url string) (*Manager, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	return NewManagerWithContext(context.Background(), url)
+}
+
+// NewManagerWithContext creates a new Manager instance using the provided context for initialization,
+// and manages connection retries and closures.
+func NewManagerWithContext(ctx context.Context, url string) (*Manager, error) {
+	mCtx, cancel := context.WithCancel(ctx)
 	m := &Manager{
 		url:            url,
 		reconnectDelay: 2 * time.Second,
 		maxRetries:     5,
-		ctx:            ctx,
+		ctx:            mCtx,
 		cancelFunc:     cancel,
 	}
 
-	if err := m.connect(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("initial rabbitmq connection failed: %w", err)
+	maxStartupRetries := 30
+	startupRetryDelay := 2 * time.Second
+
+	var err error
+	for i := 0; i < maxStartupRetries; i++ {
+		select {
+		case <-mCtx.Done():
+			cancel()
+			return nil, fmt.Errorf("initial rabbitmq connection cancelled: %w", mCtx.Err())
+		default:
+		}
+
+		err = m.connect()
+		if err == nil {
+			return m, nil
+		}
+
+		log.Printf("[RabbitMQ] Startup connection attempt %d/%d failed: %v. Retrying in %v...", i+1, maxStartupRetries, err, startupRetryDelay)
+
+		select {
+		case <-mCtx.Done():
+			cancel()
+			return nil, fmt.Errorf("initial rabbitmq connection cancelled during wait: %w", mCtx.Err())
+		case <-time.After(startupRetryDelay):
+		}
 	}
 
-	return m, nil
+	cancel()
+	return nil, fmt.Errorf("initial rabbitmq connection failed after %d attempts: %w", maxStartupRetries, err)
 }
 
 // Channel returns the current active RabbitMQ channel.
@@ -99,11 +128,11 @@ func (m *Manager) connect() error {
 	m.conn = conn
 	m.ch = ch
 	m.mu.Unlock()
-	
+
 	// Set up notification channels for unexpected closure
 	notifyConnClose := make(chan *amqp.Error, 1)
 	notifyChanClose := make(chan *amqp.Error, 1)
-	
+
 	conn.NotifyClose(notifyConnClose)
 	ch.NotifyClose(notifyChanClose)
 
@@ -120,11 +149,21 @@ func (m *Manager) watchClosure(conn *amqp.Connection, ch *amqp.Channel, notifyCo
 		return
 	case err, ok := <-notifyConnClose:
 		if ok {
+			select {
+			case <-m.ctx.Done():
+				return
+			default:
+			}
 			log.Printf("[RabbitMQ] Connection closed unexpectedly: %v. Triggering recovery...", err)
 			m.reconnect()
 		}
 	case err, ok := <-notifyChanClose:
 		if ok {
+			select {
+			case <-m.ctx.Done():
+				return
+			default:
+			}
 			log.Printf("[RabbitMQ] Channel closed unexpectedly: %v. Triggering recovery...", err)
 			m.reconnect()
 		}
@@ -133,6 +172,12 @@ func (m *Manager) watchClosure(conn *amqp.Connection, ch *amqp.Channel, notifyCo
 
 // reconnect executes the recovery loop to re-establish connection and topology.
 func (m *Manager) reconnect() {
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+	}
+
 	if !atomic.CompareAndSwapInt32(&m.reconnecting, 0, 1) {
 		return // Reconnection is already in progress
 	}
