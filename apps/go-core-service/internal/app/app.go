@@ -80,6 +80,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductHandler: pHandler,
 		UserHandler:    uHandler,
 		AuthHandler:    aHandler,
+		UserRepo:       uRepo,
 	})
 
 	return &App{
