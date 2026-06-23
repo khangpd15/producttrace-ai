@@ -39,10 +39,28 @@ type UpdateLocationReq struct {
 }
 
 type FindNearbyReq struct {
-	Latitude     float64 `json:"latitude"      binding:"required"`
-	Longitude    float64 `json:"longitude"     binding:"required"`
-	RadiusMeters float64 `json:"radius_meters" binding:"required,min=1,max=50000"`
-	Limit        int     `json:"limit"         binding:"omitempty,min=1,max=100"`
+	Latitude     float64 `form:"latitude"      binding:"required"`
+	Longitude    float64 `form:"longitude"     binding:"required"`
+	RadiusMeters float64 `form:"radius_meters" binding:"required,min=1,max=50000"`
+	Limit        int     `form:"limit"         binding:"omitempty,min=1,max=100"`
+}
+
+// ListLocationsReq là query params cho GET /locations
+type ListLocationsReq struct {
+	Page     int                  `form:"page"      binding:"omitempty,min=1"`
+	Limit    int                  `form:"limit"     binding:"omitempty,min=1,max=100"`
+	City     string               `form:"city"`
+	Type     domain.LocationType  `form:"type"      binding:"omitempty,oneof=WAREHOUSE STORE DEALER WARRANTY_CENTER"`
+	IsActive *bool                `form:"is_active"`
+}
+
+// ListLocationsResponse trả về danh sách có phân trang
+type ListLocationsResponse struct {
+	Data       []*LocationResponse `json:"data"`
+	Total      int64               `json:"total"`
+	Page       int                 `json:"page"`
+	Limit      int                 `json:"limit"`
+	TotalPages int                 `json:"total_pages"`
 }
 
 

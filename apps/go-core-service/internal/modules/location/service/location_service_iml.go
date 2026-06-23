@@ -93,6 +93,42 @@ func (s *locationService) GetLocationByID(ctx context.Context, id string) (*dto.
 	return toResponse(loc), nil
 }
 
+// ListLocations trả về danh sách Location theo filter và phân trang.
+func (s *locationService) ListLocations(ctx context.Context, req *dto.ListLocationsReq) (*dto.ListLocationsResponse, error) {
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	locs, total, err := s.repo.ListAll(ctx, req.City, req.Type, req.IsActive, offset, limit)
+	if err != nil {
+		return nil, fmt.Errorf("locationService.ListLocations: %w", err)
+	}
+
+	data := make([]*dto.LocationResponse, 0, len(locs))
+	for _, loc := range locs {
+		data = append(data, toResponse(loc))
+	}
+
+	totalPages := int(total) / limit
+	if int(total)%limit != 0 {
+		totalPages++
+	}
+
+	return &dto.ListLocationsResponse{
+		Data:       data,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
+}
+
 // GetLocationByCode lấy thông tin Location theo code.
 func (s *locationService) GetLocationByCode(ctx context.Context, code string) (*dto.LocationResponse, error) {
 	if code == "" {

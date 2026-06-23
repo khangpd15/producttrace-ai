@@ -57,6 +57,40 @@ func (r *locationRepository) GetByCode(ctx context.Context, code string) (*domai
 	return &loc, nil
 }
 
+// ListAll trả về danh sách Location có hỗ trợ filter và phân trang.
+// Các filter có thể để rỗng/nil để bỏ qua.
+func (r *locationRepository) ListAll(
+	ctx context.Context,
+	city string,
+	locType domain.LocationType,
+	isActive *bool,
+	offset, limit int,
+) ([]*domain.Location, int64, error) {
+	q := r.db.WithContext(ctx).Model(&domain.Location{}).Where("is_deleted = false")
+
+	if city != "" {
+		q = q.Where("city = ?", city)
+	}
+	if locType != "" {
+		q = q.Where("type = ?", locType)
+	}
+	if isActive != nil {
+		q = q.Where("is_active = ?", *isActive)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("locationRepository.ListAll count: %w", err)
+	}
+
+	var locs []*domain.Location
+	if err := q.Order("created_at DESC").Offset(offset).Limit(limit).Find(&locs).Error; err != nil {
+		return nil, 0, fmt.Errorf("locationRepository.ListAll: %w", err)
+	}
+
+	return locs, total, nil
+}
+
 // Update cập nhật toàn bộ thông tin của một Location.
 func (r *locationRepository) Update(ctx context.Context, loc *domain.Location) error {
 	loc.UpdatedAt = time.Now()
