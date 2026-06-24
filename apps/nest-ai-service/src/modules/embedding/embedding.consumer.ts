@@ -1,8 +1,8 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, KafkaContext } from '@nestjs/microservices';
 
-import { EmbeddingService } from '../modules/embedding/embedding.service';
-import { KAFKA } from './kafka.constants';
+import { EmbeddingService } from './embedding.service';
+import { KAFKA } from '../../kafka/kafka.constants';
 
 @Controller()
 export class EmbeddingConsumer {

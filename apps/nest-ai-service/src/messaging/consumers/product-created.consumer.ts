@@ -2,7 +2,7 @@ import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 
 import { Event } from '../types/event.interface';
-import { RABBITMQ } from '../rabbitmq/rabbitmq.constants';
+import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
 
 @Controller()
 export class ProductCreatedConsumer {
