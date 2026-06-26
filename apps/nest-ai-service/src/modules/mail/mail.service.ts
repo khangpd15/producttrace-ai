@@ -44,25 +44,23 @@ export class MailService {
     }
   }
   
-  async sendTemplateMail(to: string, templateId?: string, dynamicTemplateData?: any): Promise<boolean> {
+  async sendTemplateMail(to: string, templateId: string, dynamicTemplateData?: any): Promise<boolean> {
     const from = this.configService.get<string>('FROM_EMAIL');
-    const defaultTemplateId = this.configService.get<string>('TEMPLATE_ID');
-    const finalTemplateId = templateId || defaultTemplateId;
 
     if (!from) {
       this.logger.error('FROM_EMAIL is missing in environment variables');
       return false;
     }
 
-    if (!finalTemplateId) {
-      this.logger.error('TEMPLATE_ID is missing in environment variables');
+    if (!templateId) {
+      this.logger.error('templateId is required but was not provided');
       return false;
     }
 
     const msg = {
       to,
       from,
-      templateId: finalTemplateId,
+      templateId,
       dynamicTemplateData,
     };
 
