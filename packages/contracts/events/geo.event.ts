@@ -4,11 +4,11 @@ export interface ShopLocationSyncPayload {
   shopId: string;      // UUID của cửa hàng
   name: string;        // Tên cửa hàng
   type: 'WAREHOUSE' | 'STORE' | 'DEALER' | 'WARRANTY_CENTER'; // Loại cửa hàng
-  latitude: number;    // Bắt buộc là số thực (Float/Decimal)
-  longitude: number;   // Bắt buộc là số thực (Float/Decimal)
+  latitude: number;    // Vĩ độ (Float/Decimal)
+  longitude: number;   // Kinh độ (Float/Decimal)
 }
 
-// 2. Routing key (Tên sự kiện) để 2 bên hứng sự kiện
+// 2. Routing key để 2 bên hứng sự kiện
 export const GEO_RABBITMQ_EVENTS = {
   SHOP_LOCATION_SYNC: 'geo.shop.location_sync',
 };
