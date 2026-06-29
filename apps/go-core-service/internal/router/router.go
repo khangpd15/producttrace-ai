@@ -1,25 +1,22 @@
 package router
 
 import (
-    "github.com/gin-gonic/gin"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-    productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
-    authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
-    userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
-    batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	"github.com/gin-gonic/gin"
+	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
+	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 )
 
-
-
 type RouterDependency struct {
-	BatchHandler *batchHandler.BatchHandler
-	AuthHandler  *authHandler.AuthenHandler
-	UserHandler  *userHandler.UserHandler
-    ProductHandler *productHandler.ProductHandler
+	BatchHandler   *batchHandler.BatchHandler
+	AuthHandler    *authHandler.AuthenHandler
+	UserHandler    *userHandler.UserHandler
+	ProductHandler *productHandler.ProductHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
-    r := gin.Default()
+	r := gin.Default()
 
 	api := r.Group("api")
 
@@ -49,10 +46,10 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler) {
 		users.DELETE("/:id", uh.DeleteUser)
 		users.GET("", uh.ListUsers)
 		users.GET("/:id", uh.GetUserDetail)
-  }
+	}
 }
 
-func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) {
+func SetupBatchRouter(api *gin.RouterGroup, batchHandler *batchHandler.BatchHandler) {
 	batches := api.Group("/batches")
 	{
 		batches.GET("", batchHandler.GetBatchList)
@@ -63,14 +60,13 @@ func SetupBatchRouter(api *gin.RouterGroup, batchHandler *handler.BatchHandler) 
 	}
 }
 func SetupProductRouter(api *gin.RouterGroup, productHandler *productHandler.ProductHandler) {
-    products := api.Group("/products")
-    // Product routes
-    {
-        products.POST("/", productHandler.CreateProduct)
-        products.GET("/", productHandler.GetAllProducts)
-        products.GET("/:id", productHandler.GetProductByID)
-        products.PUT("/:id", productHandler.UpdateProduct)
-        products.DELETE("/:id", productHandler.DeleteProduct)
-    }
-
+	products := api.Group("/products")
+	// Product routes
+	{
+		products.POST("/", productHandler.CreateProduct)
+		products.GET("/", productHandler.GetAllProducts)
+		products.GET("/:id", productHandler.GetProductByID)
+		products.PUT("/:id", productHandler.UpdateProduct)
+		products.DELETE("/:id", productHandler.DeleteProduct)
+	}
 }

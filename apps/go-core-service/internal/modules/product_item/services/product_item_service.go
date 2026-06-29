@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/mapper"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 )
 
@@ -23,12 +25,20 @@ type ProductItemService interface {
 }
 
 type productItemService struct {
-	repo repositories.ProductItemRepository
+	repo        repositories.ProductItemRepository
+	batchRepo   batchRepo.BatchRepository
+	variantRepo variantRepo.ProductVariantRepository
 }
 
-func NewProductItemService(repo repositories.ProductItemRepository) ProductItemService {
+func NewProductItemService(
+	repo repositories.ProductItemRepository,
+	batchRepo batchRepo.BatchRepository,
+	variantRepo variantRepo.ProductVariantRepository,
+) ProductItemService {
 	return &productItemService{
-		repo: repo,
+		repo:        repo,
+		batchRepo:   batchRepo,
+		variantRepo: variantRepo,
 	}
 }
 
@@ -40,6 +50,26 @@ func NewProductItemService(repo repositories.ProductItemRepository) ProductItemS
 //   - serial_number:      SN{14 chữ số ngẫu nhiên}             regex: ^SN\d{14}$
 //   - verification_token: MD5 hex 32 ký tự thường              regex: ^[a-f0-9]{32}$
 func (s *productItemService) CreateProductItem(ctx context.Context, req *request.CreateProductItemRequest) (*response.ProductItemCreateResponse, error) {
+	// FK check: batch_id phải tồn tại trong bảng batches (chỉ khi được truyền vào).
+	if req.BatchID != uuid.Nil {
+		batchExists, err := s.batchRepo.ExistsByID(ctx, req.BatchID)
+		if err != nil {
+			return nil, err
+		}
+		if !batchExists {
+			return nil, apperror.NewNotFound("batch")
+		}
+	}
+
+	// FK check: variant_id phải tồn tại trong bảng product_variants.
+	variantExists, err := s.variantRepo.ExistsByID(ctx, req.VariantID)
+	if err != nil {
+		return nil, err
+	}
+	if !variantExists {
+		return nil, apperror.NewNotFound("product_variant")
+	}
+
 	now := time.Now()
 	newID := uuid.New()
 
@@ -59,6 +89,7 @@ func (s *productItemService) CreateProductItem(ctx context.Context, req *request
 
 	return s.repo.Create(ctx, pi)
 }
+
 
 // generateItemCode sinh item_code theo format PTA-{YYMM}-{8 ký tự HEX viết hoa}.
 // Ví dụ: PTA-2501-686F493D
