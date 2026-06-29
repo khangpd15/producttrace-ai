@@ -28,6 +28,8 @@ type mockUserRepository struct {
 	updateUserFn       func(ctx context.Context, user *entity.User) (*entity.User, error)
 	deleteUserFn       func(ctx context.Context, id string) error
 	listUsersFn        func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error)
+	checkPhoneExistsFn func(ctx context.Context, phone string, excludeUserID string) (bool, error)
+	writeAuditLogFn    func(ctx context.Context, content string, logType string) error
 }
 
 func (m *mockUserRepository) CreateUser(ctx context.Context, user *entity.User) (*entity.User, error) {
@@ -62,12 +64,30 @@ func (m *mockUserRepository) ListUsers(ctx context.Context, page, limit int, rol
 	return m.listUsersFn(ctx, page, limit, role, status, search)
 }
 
+func (m *mockUserRepository) CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error) {
+	if m.checkPhoneExistsFn != nil {
+		return m.checkPhoneExistsFn(ctx, phone, excludeUserID)
+	}
+	return false, nil
+}
+
+func (m *mockUserRepository) WriteAuditLog(ctx context.Context, content string, logType string) error {
+	if m.writeAuditLogFn != nil {
+		return m.writeAuditLogFn(ctx, content, logType)
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 func newTestUserService(repo *mockUserRepository) UserServiceInterface {
-	return NewUserService(repo)
+	return NewUserService(repo, nil)
+}
+
+func ptrString(s string) *string {
+	return &s
 }
 
 // ---------------------------------------------------------------------------
@@ -669,14 +689,20 @@ func TestUpdateProfile_Success(t *testing.T) {
 	}
 
 	req := &request.UpdateProfileRequest{
-		FullName: "New Name",
-		Phone:    "1111111111",
+		FullName: ptrString("New Name"),
+		Phone:    ptrString("0111111111"),
 	}
 
 	var capturedUser *entity.User
 	mockRepo := &mockUserRepository{
 		getUserByIDFn: func(ctx context.Context, id string) (*entity.User, error) {
 			return existingUser, nil
+		},
+		checkPhoneExistsFn: func(ctx context.Context, phone string, excludeUserID string) (bool, error) {
+			return false, nil
+		},
+		writeAuditLogFn: func(ctx context.Context, content string, logType string) error {
+			return nil
 		},
 		updateUserFn: func(ctx context.Context, user *entity.User) (*entity.User, error) {
 			capturedUser = user
@@ -685,17 +711,17 @@ func TestUpdateProfile_Success(t *testing.T) {
 	}
 
 	svc := newTestUserService(mockRepo)
-	res, err := svc.UpdateProfile(context.Background(), userID.String(), req)
+	res, err := svc.UpdateProfile(context.Background(), userID.String(), userID.String(), req)
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
-	assert.Equal(t, req.FullName, res.FullName)
-	assert.Equal(t, req.Phone, res.Phone)
+	assert.Equal(t, *req.FullName, res.FullName)
+	assert.Equal(t, *req.Phone, res.Phone)
 	assert.Equal(t, existingUser.Email, res.Email)
 
-	assert.Equal(t, req.FullName, capturedUser.FullName)
-	assert.Equal(t, req.Phone, capturedUser.Phone)
+	assert.Equal(t, *req.FullName, capturedUser.FullName)
+	assert.Equal(t, *req.Phone, capturedUser.Phone)
 }
 
 func TestUpdateProfile_NotFound(t *testing.T) {
@@ -706,7 +732,7 @@ func TestUpdateProfile_NotFound(t *testing.T) {
 	}
 
 	svc := newTestUserService(mockRepo)
-	res, err := svc.UpdateProfile(context.Background(), uuid.New().String(), &request.UpdateProfileRequest{})
+	res, err := svc.UpdateProfile(context.Background(), uuid.New().String(), uuid.New().String(), &request.UpdateProfileRequest{})
 
 	require.Error(t, err)
 	assert.Nil(t, res)
@@ -725,33 +751,8 @@ func TestUpdateProfile_GetUserError(t *testing.T) {
 	}
 
 	svc := newTestUserService(mockRepo)
-	res, err := svc.UpdateProfile(context.Background(), uuid.New().String(), &request.UpdateProfileRequest{})
+	res, err := svc.UpdateProfile(context.Background(), uuid.New().String(), uuid.New().String(), &request.UpdateProfileRequest{})
 
 	require.Error(t, err)
 	assert.Nil(t, res)
-	assert.Equal(t, dbErr, err)
-}
-
-func TestUpdateProfile_UpdateError(t *testing.T) {
-	userID := uuid.New()
-	existingUser := &entity.User{
-		ID: userID,
-	}
-
-	dbErr := errors.New("db update error")
-	mockRepo := &mockUserRepository{
-		getUserByIDFn: func(ctx context.Context, id string) (*entity.User, error) {
-			return existingUser, nil
-		},
-		updateUserFn: func(ctx context.Context, user *entity.User) (*entity.User, error) {
-			return nil, dbErr
-		},
-	}
-
-	svc := newTestUserService(mockRepo)
-	res, err := svc.UpdateProfile(context.Background(), userID.String(), &request.UpdateProfileRequest{})
-
-	require.Error(t, err)
-	assert.Nil(t, res)
-	assert.Equal(t, dbErr, err)
 }

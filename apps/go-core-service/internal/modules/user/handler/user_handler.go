@@ -120,11 +120,37 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("Users list retrieved successfully", res))
 }
 
-func (h *UserHandler) UpdateProfile(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		apperror.HandleError(c, apperror.NewBadRequest("user ID is required"))
+func (h *UserHandler) GetProfile(c *gin.Context) {
+	actorID := c.GetHeader("X-User-Id")
+	if actorID == "" {
+		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
 		return
+	}
+
+	targetUserID := c.Query("user_id")
+	if targetUserID == "" {
+		targetUserID = actorID
+	}
+
+	res, err := h.userService.GetProfile(c.Request.Context(), targetUserID)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Profile loaded successfully", res))
+}
+
+func (h *UserHandler) UpdateProfile(c *gin.Context) {
+	actorID := c.GetHeader("X-User-Id")
+	if actorID == "" {
+		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
+		return
+	}
+
+	targetUserID := c.Param("id")
+	if targetUserID == "" {
+		targetUserID = actorID
 	}
 
 	var req request.UpdateProfileRequest
@@ -133,7 +159,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	res, err := h.userService.UpdateProfile(c.Request.Context(), id, &req)
+	res, err := h.userService.UpdateProfile(c.Request.Context(), actorID, targetUserID, &req)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return

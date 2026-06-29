@@ -16,6 +16,7 @@ const (
 	CodeConflict     ErrorCode = "CONFLICT"
 	CodeValidation   ErrorCode = "VALIDATION_ERROR"
 	CodeInternal     ErrorCode = "INTERNAL_ERROR"
+	CodeTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 )
 
 // AppError is the standard error type used across all layers (repository → service → handler).
@@ -110,6 +111,15 @@ func NewInternal(message string) *AppError {
 		Code:    CodeInternal,
 		Message: message,
 		Status:  http.StatusInternalServerError,
+	}
+}
+
+// NewTooManyRequests creates a 429 Too Many Requests error.
+func NewTooManyRequests(message string) *AppError {
+	return &AppError{
+		Code:    CodeTooManyRequests,
+		Message: message,
+		Status:  http.StatusTooManyRequests,
 	}
 }
 

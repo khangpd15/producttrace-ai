@@ -58,3 +58,9 @@ func ValidateToken(tokenStr string) (*JWTClaims, error) {
 
 	return claims, nil
 }
+
+// ValidateAccessToken parses and validates a JWT access token string (alias of ValidateToken).
+func ValidateAccessToken(tokenStr string) (*JWTClaims, error) {
+	return ValidateToken(tokenStr)
+}
+

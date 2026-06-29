@@ -34,6 +34,7 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	IsDeleted    bool      `json:"is_deleted" gorm:"default:false"`
+	AvatarUrl    *string   `json:"avatar_url" gorm:"column:avatar_url"`
 }
 
 func NewUser(email, phone, fullName, passwordHash, role string) *User {
