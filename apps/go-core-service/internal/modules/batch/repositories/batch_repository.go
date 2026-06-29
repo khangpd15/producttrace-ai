@@ -20,6 +20,7 @@ type BatchRepository interface {
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
 	Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 type batchRepository struct {
@@ -283,4 +284,18 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 	}
 
 	return &result, nil
+}
+
+// ExistsByID kiểm tra batch có tồn tại và chưa bị xóa mềm.
+// Dùng SELECT COUNT(1) để tránh SELECT *, nhất quán với raw-SQL pattern của repo.
+func (rb *batchRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
+	var count int
+	err := rb.db.QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM batches WHERE id = $1 AND is_deleted = FALSE`,
+		id,
+	).Scan(&count)
+	if err != nil {
+		return false, apperror.WrapDBError(err, "batch")
+	}
+	return count > 0, nil
 }
