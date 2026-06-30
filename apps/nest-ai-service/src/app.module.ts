@@ -3,13 +3,29 @@ import { ConfigModule } from '@nestjs/config';
 
 import { EmbeddingModule } from './modules/embedding/embedding.module';
 
+import { ProductCreatedConsumer } from './messaging/consumers/product-created.consumer';
+import { UserRegisteredConsumer } from './messaging/consumers/user-registered.consumer';
+import { PasswordResetConsumer } from './messaging/consumers/password-reset.consumer';
+
+import { MailModule } from './modules/mail/mail.module';
+import { MockController } from './mock.controller';
+import { AuthModule } from './auth/auth.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '../../.env',
     }),
     EmbeddingModule,
+    MailModule,
+    AuthModule,
   ],
-  controllers: [],
+  controllers: [
+    ProductCreatedConsumer,
+    UserRegisteredConsumer,
+    PasswordResetConsumer,
+    MockController,
+  ],
 })
 export class AppModule {}

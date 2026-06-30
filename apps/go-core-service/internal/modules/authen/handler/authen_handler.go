@@ -94,3 +94,19 @@ func (h *AuthenHandler) RefreshToken(c *gin.Context) {
 		RefreshToken: refreshToken,
 	}))
 }
+
+func (h *AuthenHandler) Logout(c *gin.Context) {
+	var req request.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	err := h.authService.Logout(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Logged out successfully", nil))
+}
