@@ -6,7 +6,6 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/domain"
 )
 
-
 type CreateLocationReq struct {
 	OwnerUserID      string              `json:"owner_user_id" binding:"required"`
 	Code             string              `json:"code" binding:"required"`
@@ -21,6 +20,7 @@ type CreateLocationReq struct {
 	Latitude         *float64            `json:"latitude" binding:"required"`
 	Longitude        *float64            `json:"longitude" binding:"required"`
 	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
+	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
 }
 
 type UpdateLocationReq struct {
@@ -36,22 +36,17 @@ type UpdateLocationReq struct {
 	Longitude        *float64            `json:"longitude" binding:"required"`
 	IsActive         *bool               `json:"is_active"`
 	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
+	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
 }
 
-type FindNearbyReq struct {
-	Latitude     float64 `form:"latitude"      binding:"required"`
-	Longitude    float64 `form:"longitude"     binding:"required"`
-	RadiusMeters float64 `form:"radius_meters" binding:"required,min=1,max=50000"`
-	Limit        int     `form:"limit"         binding:"omitempty,min=1,max=100"`
-}
 
 // ListLocationsReq là query params cho GET /locations
 type ListLocationsReq struct {
-	Page     int                  `form:"page"      binding:"omitempty,min=1"`
-	Limit    int                  `form:"limit"     binding:"omitempty,min=1,max=100"`
-	City     string               `form:"city"`
-	Type     domain.LocationType  `form:"type"      binding:"omitempty,oneof=WAREHOUSE STORE DEALER WARRANTY_CENTER"`
-	IsActive *bool                `form:"is_active"`
+	Page     int                 `form:"page"      binding:"omitempty,min=1"`
+	Limit    int                 `form:"limit"     binding:"omitempty,min=1,max=100"`
+	City     string              `form:"city"`
+	Type     domain.LocationType `form:"type"      binding:"omitempty,oneof=WAREHOUSE STORE DEALER WARRANTY_CENTER"`
+	IsActive *bool               `form:"is_active"`
 }
 
 // ListLocationsResponse trả về danh sách có phân trang
@@ -62,7 +57,6 @@ type ListLocationsResponse struct {
 	Limit      int                 `json:"limit"`
 	TotalPages int                 `json:"total_pages"`
 }
-
 
 type LocationResponse struct {
 	ID               string              `json:"id"`
@@ -83,9 +77,11 @@ type LocationResponse struct {
 	IsActive         bool                `json:"is_active"`
 	CreatedAt        time.Time           `json:"created_at"`
 	UpdatedAt        time.Time           `json:"updated_at"`
+	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
 }
 
-type LocationWithDistanceResponse struct {
-	LocationResponse
-	DistanceMeters float64 `json:"distance_meters"`
+type GeoLocationDTO struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
+

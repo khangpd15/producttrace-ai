@@ -14,8 +14,6 @@ type LocationService interface {
 	GetLocationByCode(ctx context.Context, code string) (*dto.LocationResponse, error)
 	ListLocations(ctx context.Context, req *dto.ListLocationsReq) (*dto.ListLocationsResponse, error)
 	UpdateLocation(ctx context.Context, id string, req *dto.UpdateLocationReq) (*dto.LocationResponse, error)
-	DeleteLocation(ctx context.Context, id string) error
 	HardDeleteLocation(ctx context.Context, id string) error
-	FindNearby(ctx context.Context, req *dto.FindNearbyReq) ([]*dto.LocationWithDistanceResponse, error)
 }
 

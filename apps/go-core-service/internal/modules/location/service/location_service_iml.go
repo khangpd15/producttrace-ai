@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/domain"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 )
 
 type locationService struct {
@@ -42,14 +42,44 @@ func toResponse(loc *domain.Location) *dto.LocationResponse {
 		IsActive:         loc.IsActive,
 		CreatedAt:        loc.CreatedAt,
 		UpdatedAt:        loc.UpdatedAt,
+		GeoLocation: func() *dto.GeoLocationDTO {
+			if loc.GeoLocation == nil {
+				return nil
+			}
+			return &dto.GeoLocationDTO{
+				Latitude:  loc.GeoLocation.Latitude,
+				Longitude: loc.GeoLocation.Longitude,
+			}
+		}(),
 	}
 }
 
 func (s *locationService) CreateLocation(ctx context.Context, req *dto.CreateLocationReq) (*dto.LocationResponse, error) {
+	// Kiểm tra owner_user_id là UUID hợp lệ
+	if _, err := uuid.Parse(req.OwnerUserID); err != nil {
+		return nil, apperror.NewBadRequest("owner_user_id is not a valid UUID")
+	}
+
 	// Kiểm tra trùng code
-	existing, _ := s.repo.GetByCode(ctx, req.Code)
+	existing, err := s.repo.GetByCode(ctx, req.Code)
+	if err != nil {
+		return nil, err
+	}
 	if existing != nil {
-		return nil, fmt.Errorf("locationService.CreateLocation: code '%s' already exists", req.Code)
+		return nil, apperror.NewConflict("location with code '" + req.Code + "' already exists")
+	}
+
+	var geoLoc *domain.GeoLocation
+	if req.GeoLocation != nil {
+		geoLoc = &domain.GeoLocation{
+			Latitude:  req.GeoLocation.Latitude,
+			Longitude: req.GeoLocation.Longitude,
+		}
+	} else if req.Latitude != nil && req.Longitude != nil {
+		geoLoc = &domain.GeoLocation{
+			Latitude:  *req.Latitude,
+			Longitude: *req.Longitude,
+		}
 	}
 
 	loc := &domain.Location{
@@ -69,11 +99,11 @@ func (s *locationService) CreateLocation(ctx context.Context, req *dto.CreateLoc
 		Longitude:        *req.Longitude,
 		OpeningHoursJSON: req.OpeningHoursJSON,
 		IsActive:         true,
-		IsDeleted:        false,
+		GeoLocation:      geoLoc,
 	}
 
 	if err := s.repo.Create(ctx, loc); err != nil {
-		return nil, fmt.Errorf("locationService.CreateLocation: %w", err)
+		return nil, err
 	}
 
 	return toResponse(loc), nil
@@ -81,13 +111,14 @@ func (s *locationService) CreateLocation(ctx context.Context, req *dto.CreateLoc
 
 // GetLocationByID lấy thông tin Location theo ID.
 func (s *locationService) GetLocationByID(ctx context.Context, id string) (*dto.LocationResponse, error) {
-	if id == "" {
-		return nil, fmt.Errorf("locationService.GetLocationByID: id is required")
+	// Validate UUID format trước khi query DB
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, apperror.NewBadRequest("id is not a valid UUID")
 	}
 
 	loc, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("locationService.GetLocationByID: %w", err)
+		return nil, err
 	}
 
 	return toResponse(loc), nil
@@ -107,7 +138,7 @@ func (s *locationService) ListLocations(ctx context.Context, req *dto.ListLocati
 
 	locs, total, err := s.repo.ListAll(ctx, req.City, req.Type, req.IsActive, offset, limit)
 	if err != nil {
-		return nil, fmt.Errorf("locationService.ListLocations: %w", err)
+		return nil, err
 	}
 
 	data := make([]*dto.LocationResponse, 0, len(locs))
@@ -132,12 +163,15 @@ func (s *locationService) ListLocations(ctx context.Context, req *dto.ListLocati
 // GetLocationByCode lấy thông tin Location theo code.
 func (s *locationService) GetLocationByCode(ctx context.Context, code string) (*dto.LocationResponse, error) {
 	if code == "" {
-		return nil, fmt.Errorf("locationService.GetLocationByCode: code is required")
+		return nil, apperror.NewBadRequest("code is required")
 	}
 
 	loc, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
-		return nil, fmt.Errorf("locationService.GetLocationByCode: %w", err)
+		return nil, err
+	}
+	if loc == nil {
+		return nil, apperror.NewNotFound("location")
 	}
 
 	return toResponse(loc), nil
@@ -145,14 +179,15 @@ func (s *locationService) GetLocationByCode(ctx context.Context, code string) (*
 
 // UpdateLocation cập nhật thông tin của một Location theo ID.
 func (s *locationService) UpdateLocation(ctx context.Context, id string, req *dto.UpdateLocationReq) (*dto.LocationResponse, error) {
-	if id == "" {
-		return nil, fmt.Errorf("locationService.UpdateLocation: id is required")
+	// Validate UUID format trước khi query DB
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, apperror.NewBadRequest("id is not a valid UUID")
 	}
 
 	// Kiểm tra tồn tại
 	existing, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("locationService.UpdateLocation: %w", err)
+		return nil, err
 	}
 
 	existing.Name = req.Name
@@ -167,71 +202,39 @@ func (s *locationService) UpdateLocation(ctx context.Context, id string, req *dt
 	existing.Longitude = *req.Longitude
 	existing.OpeningHoursJSON = req.OpeningHoursJSON
 
+	if req.GeoLocation != nil {
+		existing.GeoLocation = &domain.GeoLocation{
+			Latitude:  req.GeoLocation.Latitude,
+			Longitude: req.GeoLocation.Longitude,
+		}
+	} else if req.Latitude != nil && req.Longitude != nil {
+		existing.GeoLocation = &domain.GeoLocation{
+			Latitude:  *req.Latitude,
+			Longitude: *req.Longitude,
+		}
+	}
+
 	if req.IsActive != nil {
 		existing.IsActive = *req.IsActive
 	}
 
 	if err := s.repo.Update(ctx, existing); err != nil {
-		return nil, fmt.Errorf("locationService.UpdateLocation: %w", err)
+		return nil, err
 	}
 
 	return toResponse(existing), nil
 }
 
-// DeleteLocation thực hiện soft-delete một Location theo ID.
-func (s *locationService) DeleteLocation(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("locationService.DeleteLocation: id is required")
-	}
-
-	// Kiểm tra tồn tại trước khi xóa
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
-		return fmt.Errorf("locationService.DeleteLocation: %w", err)
-	}
-
-	if err := s.repo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("locationService.DeleteLocation: %w", err)
-	}
-
-	return nil
-}
-
 // HardDeleteLocation xóa vĩnh viễn một Location khỏi database theo ID.
 func (s *locationService) HardDeleteLocation(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("locationService.HardDeleteLocation: id is required")
+	// Validate UUID format trước khi query DB
+	if _, err := uuid.Parse(id); err != nil {
+		return apperror.NewBadRequest("id is not a valid UUID")
 	}
 
 	if err := s.repo.HardDelete(ctx, id); err != nil {
-		return fmt.Errorf("locationService.HardDeleteLocation: %w", err)
+		return err
 	}
 
 	return nil
-}
-
-// FindNearby tìm các Location gần một tọa độ trong bán kính cho trước.
-func (s *locationService) FindNearby(ctx context.Context, req *dto.FindNearbyReq) ([]*dto.LocationWithDistanceResponse, error) {
-	if req.RadiusMeters <= 0 {
-		return nil, fmt.Errorf("locationService.FindNearby: radius_meters must be greater than 0")
-	}
-
-	limit := req.Limit
-	if limit <= 0 {
-		limit = 20
-	}
-
-	results, err := s.repo.FindNearby(ctx, req.Latitude, req.Longitude, req.RadiusMeters, limit)
-	if err != nil {
-		return nil, fmt.Errorf("locationService.FindNearby: %w", err)
-	}
-
-	responses := make([]*dto.LocationWithDistanceResponse, 0, len(results))
-	for _, r := range results {
-		responses = append(responses, &dto.LocationWithDistanceResponse{
-			LocationResponse: *toResponse(&r.Location),
-			DistanceMeters:   r.DistanceMeters,
-		})
-	}
-
-	return responses, nil
 }

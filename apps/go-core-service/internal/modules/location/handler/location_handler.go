@@ -21,7 +21,7 @@ func NewLocationHandler(svc service.LocationService) *LocationHandler {
 func (h *LocationHandler) Create(c *gin.Context) {
 	var req dto.CreateLocationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}
 
@@ -37,7 +37,7 @@ func (h *LocationHandler) Create(c *gin.Context) {
 func (h *LocationHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, response.ResponseError("id is required", nil))
+		apperror.HandleError(c, apperror.NewBadRequest("id is required"))
 		return
 	}
 
@@ -54,7 +54,7 @@ func (h *LocationHandler) GetByID(c *gin.Context) {
 func (h *LocationHandler) GetAll(c *gin.Context) {
 	var req dto.ListLocationsReq
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}
 
@@ -70,13 +70,13 @@ func (h *LocationHandler) GetAll(c *gin.Context) {
 func (h *LocationHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, response.ResponseError("id is required", nil))
+		apperror.HandleError(c, apperror.NewBadRequest("id is required"))
 		return
 	}
 
 	var req dto.UpdateLocationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}
 
@@ -92,30 +92,14 @@ func (h *LocationHandler) Update(c *gin.Context) {
 func (h *LocationHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, response.ResponseError("id is required", nil))
+		apperror.HandleError(c, apperror.NewBadRequest("id is required"))
 		return
 	}
 
-	if err := h.svc.DeleteLocation(c.Request.Context(), id); err != nil {
+	if err := h.svc.HardDeleteLocation(c.Request.Context(), id); err != nil {
 		apperror.HandleError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, response.ResponseSuccess("Location deleted successfully", nil))
-}
-
-func (h *LocationHandler) FindNearby(c *gin.Context) {
-	var req dto.FindNearbyReq
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, response.ResponseError(err.Error(), nil))
-		return
-	}
-
-	locations, err := h.svc.FindNearby(c.Request.Context(), &req)
-	if err != nil {
-		apperror.HandleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, response.ResponseSuccess("OK", locations))
 }
