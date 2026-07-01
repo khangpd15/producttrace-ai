@@ -12,7 +12,7 @@ type LocationRepository interface {
 	Create(ctx context.Context, loc *domain.Location) error
 	GetByID(ctx context.Context, id string) (*domain.Location, error)
 	GetByCode(ctx context.Context, code string) (*domain.Location, error)
-	ListAll(ctx context.Context, city string, locType domain.LocationType, isActive *bool, offset, limit int) ([]*domain.Location, int64, error)
+	ListAll(ctx context.Context, city string, locType domain.LocationType, isActive *bool, keyword string, offset, limit int) ([]*domain.Location, int64, error)
 	Update(ctx context.Context, loc *domain.Location) error
 	HardDelete(ctx context.Context, id string) error
 }
