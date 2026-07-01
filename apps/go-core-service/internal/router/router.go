@@ -6,17 +6,19 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
 type RouterDependency struct {
-	BatchHandler   *batchHandler.BatchHandler
-	AuthHandler    *authHandler.AuthenHandler
-	UserHandler    *userHandler.UserHandler
-	ProductHandler *productHandler.ProductHandler
-	UserRepo       userRepo.UserRepositoryInterface
+	BatchHandler    *batchHandler.BatchHandler
+	AuthHandler     *authHandler.AuthenHandler
+	UserHandler     *userHandler.UserHandler
+	ProductHandler  *productHandler.ProductHandler
+	UserRepo        userRepo.UserRepositoryInterface
+	LocationHandler *locationHandler.LocationHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -36,7 +38,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-
+	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	return r
 }
 
@@ -124,6 +126,23 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 			{
 				adminGroup.DELETE("/:id", ph.DeleteProduct)
 			}
+		}
+	}
+}
+func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
+	locations := api.Group("/locations")
+	{
+		// Public endpoints to browse locations
+		locations.GET("/", locationHandler.GetAll)
+		locations.GET("/:id", locationHandler.GetByID)
+
+		// Admin-only management routes (requires ADMIN role)
+		adminGroup := locations.Group("")
+		adminGroup.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
+		{
+			adminGroup.POST("/", locationHandler.Create)
+			adminGroup.PUT("/:id", locationHandler.Update)
+			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
 	}
 }

@@ -10,6 +10,9 @@ import (
 
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
@@ -80,12 +83,18 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
+
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler:   batchHandler,
-		ProductHandler: pHandler,
-		UserHandler:    uHandler,
-		AuthHandler:    aHandler,
-		UserRepo:       uRepo,
+		BatchHandler:    batchHandler,
+		ProductHandler:  pHandler,
+		UserHandler:     uHandler,
+		AuthHandler:     aHandler,
+		UserRepo:        uRepo,
+		LocationHandler: lHandler,
 	})
 
 	return &App{

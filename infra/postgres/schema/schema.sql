@@ -117,8 +117,7 @@ CREATE TABLE "locations" (
   "opening_hours_json" jsonb,
   "is_active" boolean DEFAULT true,
   "created_at" timestamp,
-  "updated_at" timestamp,
-  "is_deleted" boolean DEFAULT false
+  "updated_at" timestamp
 );
 
 CREATE TABLE "product_items" (
