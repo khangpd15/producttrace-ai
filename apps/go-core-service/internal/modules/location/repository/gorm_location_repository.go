@@ -56,13 +56,14 @@ func (r *locationRepository) GetByCode(ctx context.Context, code string) (*domai
 	return &loc, nil
 }
 
-// ListAll trả về danh sách Location có hỗ trợ filter và phân trang.
+// ListAll trả về danh sách Location có hỗ trợ filter, tìm kiếm và phân trang.
 // Các filter có thể để rỗng/nil để bỏ qua.
 func (r *locationRepository) ListAll(
 	ctx context.Context,
 	city string,
 	locType domain.LocationType,
 	isActive *bool,
+	keyword string,
 	offset, limit int,
 ) ([]*domain.Location, int64, error) {
 	q := r.db.WithContext(ctx).Model(&domain.Location{})
@@ -75,6 +76,13 @@ func (r *locationRepository) ListAll(
 	}
 	if isActive != nil {
 		q = q.Where("is_active = ?", *isActive)
+	}
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where(
+			"code ILIKE ? OR name ILIKE ? OR address ILIKE ? OR ward ILIKE ? OR district ILIKE ? OR city ILIKE ? OR country ILIKE ?",
+			like, like, like, like, like, like, like,
+		)
 	}
 
 	var total int64
