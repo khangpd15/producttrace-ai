@@ -9,6 +9,8 @@ export const RABBITMQ = {
 
   ROUTING_KEYS: {
     PRODUCT_CREATED: 'product.created',
+    USER_REGISTERED: 'user.registered',
+    PASSWORD_RESET_REQUESTED: 'auth.password_reset_requested',
   },
 };
 
