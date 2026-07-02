@@ -10,22 +10,28 @@ import { PasswordResetConsumer } from './messaging/consumers/password-reset.cons
 import { MailModule } from './modules/mail/mail.module';
 import { MockController } from './mock.controller';
 import { AuthModule } from './auth/auth.module';
+import { SyncModule } from './modules/sync/sync.module';
+import { KafkaModule } from './kafka/kafka.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '../../.env',
+      envFilePath: '.env',
     }),
+    KafkaModule,
     EmbeddingModule,
+    SyncModule,
     MailModule,
     AuthModule,
   ],
   controllers: [
+    MockController,
+  ],
+  providers: [
     ProductCreatedConsumer,
     UserRegisteredConsumer,
     PasswordResetConsumer,
-    MockController,
   ],
 })
-export class AppModule {}
+export class AppModule { }

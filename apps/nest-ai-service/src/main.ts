@@ -3,59 +3,72 @@ import { ValidationPipe } from '@nestjs/common';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import * as fs from 'fs';
 
-// Load .env before any other imports that might rely on process.env
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
+const envPath = path.join(process.cwd(), '.env');
+
+console.log('ENV PATH =', envPath);
+console.log('ENV EXISTS =', fs.existsSync(envPath));
+
+dotenv.config({ path: envPath });
+
+console.log('KAFKA_BROKER AFTER DOTENV =', process.env.KAFKA_BROKER);
 
 import { AppModule } from './app.module';
 import { KAFKA } from './kafka/kafka.constants';
 import { RABBITMQ } from './messaging/rabbitmq/rabbitmq.constants';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  try {
+    console.log('========== BOOTSTRAP START ==========');
 
-  app.enableCors();
-  app.useGlobalPipes(new ValidationPipe());
+    console.log('Creating Nest application...');
+    const app = await NestFactory.create(AppModule);
+    console.log('Nest application created.');
 
-  // RabbitMQ microservice
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [RABBITMQ.URL],
-      queue: RABBITMQ.QUEUE,
-      queueOptions: {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': RABBITMQ.DLX,
-          'x-dead-letter-routing-key': RABBITMQ.DLQ_ROUTING_KEY,
+    app.enableCors();
+    app.useGlobalPipes(new ValidationPipe());
+    console.log('Connecting RabbitMQ microservice...');
+    console.log('RabbitMQ microservice connected.');
+
+    console.log('Connecting Kafka microservice...');
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.KAFKA,
+      options: {
+        client: {
+          clientId: 'nest-ai-service',
+          brokers: KAFKA.BROKERS,
+        },
+        consumer: {
+          groupId: KAFKA.GROUP_ID,
         },
       },
-      noAck: false,
-    },
-  });
+    });
+    console.log('Kafka microservice connected.');
 
-  // Kafka microservice
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.KAFKA,
-    options: {
-      client: {
-        clientId: 'nest-ai-service',
-        brokers: KAFKA.BROKERS,
-      },
-      consumer: {
-        groupId: KAFKA.GROUP_ID,
-      },
-    },
-  });
+    console.log('========== BEFORE startAllMicroservices ==========');
+    await app.startAllMicroservices();
+    console.log('========== AFTER startAllMicroservices ==========');
 
-  await app.startAllMicroservices();
+    const port = Number(process.env.PORT) || 3000;
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
+    console.log(`========== BEFORE app.listen(${port}) ==========`);
 
-  console.log(`Nest AI Service is running on HTTP port ${port}`);
-  console.log('RabbitMQ consumer started');
-  console.log('Kafka consumer started');
+    await app.listen(port, '0.0.0.0');
+
+    console.log('========== AFTER app.listen ==========');
+    console.log(`Nest AI Service is running on HTTP port ${port}`);
+    console.log('RabbitMQ consumer started');
+    console.log('Kafka consumer started');
+  } catch (error) {
+    console.error('========== BOOTSTRAP ERROR ==========');
+    console.error(error);
+
+    if (error instanceof Error) {
+      console.error('Message:', error.message);
+      console.error('Stack:', error.stack);
+    }
+  }
 }
 
 bootstrap();
