@@ -45,15 +45,69 @@ func SetupTopology(ch *amqp.Channel) error {
 		return fmt.Errorf("declare queue: %w", err)
 	}
 
+	qBatch, err := ch.QueueDeclare(
+		"batch.events", // name
+		true,           // durable
+		false,          // delete when unused
+		false,          // exclusive
+		false,          // no-wait
+		amqp.Table{
+			"x-dead-letter-exchange":    DLXExchange,
+			"x-dead-letter-routing-key": "batch.events.failed",
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("declare queue: %w", err)
+	}
+
+	routingGoKeys := []string{
+		BatchCreatedRK,
+		BatchDeletedRK,
+		BatchUpdatedRK,
+	}
+	for _, rk := range routingGoKeys {
+		err = ch.QueueBind(
+			qBatch.Name,
+			rk,
+			DefaultExchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("bind queue %s to exchange %s with rk %s: %w", qBatch.Name, DefaultExchange, rk, err)
+		}
+	}
+	dlqBatch, err := ch.QueueDeclare(
+		"batch.events.failed", // name
+		true,                  // durable
+		false,                 // delete when unused
+		false,                 // exclusive
+		false,                 // no-wait
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("declare dlq: %w", err)
+	}
+	err = ch.QueueBind(
+		dlqBatch.Name,
+		"batch.events.failed",
+		DLXExchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("bind dlq: %w", err)
+	}
+
 	// Bind routing keys
-	routingKeys := []string{
+	routingNestKeys := []string{
 		UserRegisteredRK,
 		ProductCreatedRK,
 		UserPasswordResetRK,
 		UserVerifiedRK,
 	}
 
-	for _, rk := range routingKeys {
+	for _, rk := range routingNestKeys {
 		err = ch.QueueBind(
 			q.Name,
 			rk,
