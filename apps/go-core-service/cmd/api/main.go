@@ -16,7 +16,6 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
-
 )
 
 type HealthResponse struct {
@@ -110,5 +109,4 @@ func main() {
 		log.Fatalf("failed to start server: %v \n", err)
 	}
 
-	
 }

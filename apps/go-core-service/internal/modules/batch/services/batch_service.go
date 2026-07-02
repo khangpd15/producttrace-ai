@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
@@ -28,6 +31,7 @@ type batchService struct {
 	pdfGenerator    qr.PDFGenerator
 	productItemRepo productRepo.ProductItemRepository
 	variantRepo     variantRepo.ProductVariantRepository
+	publisher       *publisher.Publisher
 }
 
 func NewbatchService(
@@ -35,12 +39,14 @@ func NewbatchService(
 	pdfGenerator qr.PDFGenerator,
 	productItemRepo productRepo.ProductItemRepository,
 	variantRepo variantRepo.ProductVariantRepository,
+	publisher *publisher.Publisher,
 ) BatchService {
 	return &batchService{
 		repo:            repo,
 		pdfGenerator:    pdfGenerator,
 		productItemRepo: productItemRepo,
 		variantRepo:     variantRepo,
+		publisher:       publisher,
 	}
 }
 
@@ -86,7 +92,26 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 
 	}
 
-	return sb.retryCreateBatch(ctx, req)
+	batchRes, err := sb.retryCreateBatch(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     rabbitmq.BatchCreatedRK,
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       batchRes,
+	}
+
+	if err := sb.publisher.Publish(event); err != nil {
+		return nil, apperror.NewInternal("fail to publish batch create event")
+	}
+
+	return batchRes, nil
 }
 
 func (sb *batchService) retryCreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {

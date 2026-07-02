@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
+	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,12 +87,12 @@ func ptr[T any](v T) *T { return &v }
 
 // newService tạo service với variantRepo mặc định (ExistsByID luôn trả true).
 func newService(repo *mockBatchRepository) BatchService {
-	return NewbatchService(repo, nil, nil, &mockProductVariantRepository{})
+	return NewbatchService(repo, nil, nil, &mockProductVariantRepository{}, nil)
 }
 
 // newServiceWithVariantRepo tạo service với variant repo tuỳ chỉnh.
 func newServiceWithVariantRepo(repo *mockBatchRepository, vRepo *mockProductVariantRepository) BatchService {
-	return NewbatchService(repo, nil, nil, vRepo)
+	return NewbatchService(repo, nil, nil, vRepo, nil)
 }
 
 // ---------------------------------------------------------------------------

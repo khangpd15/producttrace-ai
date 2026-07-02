@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -323,4 +324,31 @@ func (m *Manager) Close() error {
 	}
 
 	return err
+}
+
+func (m *Manager) Consume(ctx context.Context, queueName string) (<-chan amqp.Delivery, error) {
+	m.mu.RLock()
+	ch := m.ch
+	conn := m.conn
+	m.mu.RUnlock()
+
+	if conn == nil || ch == nil || conn.IsClosed() || ch.IsClosed() {
+		return nil, ErrNotConnected
+	}
+
+	msgs, err := ch.Consume(
+		queueName, // queue
+		"",        // consumer
+		false,     // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
+	)
+
+	if err != nil {
+		return nil, apperror.NewInternal("fail to consume from rabbitMQ")
+	}
+
+	return msgs, nil
 }

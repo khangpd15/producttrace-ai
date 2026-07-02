@@ -6,14 +6,19 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/big"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	batchDTO "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/response"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/mapper"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
@@ -21,24 +26,27 @@ import (
 )
 
 type ProductItemService interface {
-	CreateProductItem(ctx context.Context, req *request.CreateProductItemRequest) (*response.ProductItemCreateResponse, error)
+	CreateProductItem(ctx context.Context, batch *batchDTO.BatchCreateResponse) (*response.ProductItemCreateResponse, error)
 }
 
 type productItemService struct {
 	repo        repositories.ProductItemRepository
 	batchRepo   batchRepo.BatchRepository
 	variantRepo variantRepo.ProductVariantRepository
+	manager     *rabbitmq.Manager
 }
 
 func NewProductItemService(
 	repo repositories.ProductItemRepository,
 	batchRepo batchRepo.BatchRepository,
 	variantRepo variantRepo.ProductVariantRepository,
+	manager *rabbitmq.Manager,
 ) ProductItemService {
 	return &productItemService{
 		repo:        repo,
 		batchRepo:   batchRepo,
 		variantRepo: variantRepo,
+		manager:     manager,
 	}
 }
 
@@ -49,10 +57,10 @@ func NewProductItemService(
 //   - item_code:          PTA-{YYMM}-{8 ký tự HEX viết hoa}   regex: ^PTA-\d{4}-[A-F0-9]{8}$
 //   - serial_number:      SN{14 chữ số ngẫu nhiên}             regex: ^SN\d{14}$
 //   - verification_token: MD5 hex 32 ký tự thường              regex: ^[a-f0-9]{32}$
-func (s *productItemService) CreateProductItem(ctx context.Context, req *request.CreateProductItemRequest) (*response.ProductItemCreateResponse, error) {
+func (s *productItemService) CreateProductItem(ctx context.Context, batch *batchDTO.BatchCreateResponse) (*response.ProductItemCreateResponse, error) {
 	// FK check: batch_id phải tồn tại trong bảng batches (chỉ khi được truyền vào).
-	if req.BatchID != uuid.Nil {
-		batchExists, err := s.batchRepo.ExistsByID(ctx, req.BatchID)
+	if batch.ID != uuid.Nil {
+		batchExists, err := s.batchRepo.ExistsByID(ctx, batch.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +70,7 @@ func (s *productItemService) CreateProductItem(ctx context.Context, req *request
 	}
 
 	// FK check: variant_id phải tồn tại trong bảng product_variants.
-	variantExists, err := s.variantRepo.ExistsByID(ctx, req.VariantID)
+	variantExists, err := s.variantRepo.ExistsByID(ctx, batch.VariantID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,26 +78,36 @@ func (s *productItemService) CreateProductItem(ctx context.Context, req *request
 		return nil, apperror.NewNotFound("product_variant")
 	}
 
-	now := time.Now()
-	newID := uuid.New()
+	items := make([]entities.ProductItem, 0)
 
-	itemCode, err := generateItemCode(now)
-	if err != nil {
-		return nil, apperror.NewInternal("failed to generate item_code")
+	for i := 0; i < batch.Quantity; i++ {
+		now := time.Now()
+		newID := uuid.New()
+
+		itemCode, err := generateItemCode(now)
+		if err != nil {
+			return nil, apperror.NewInternal("failed to generate item_code")
+		}
+
+		serialNumber, err := generateSerialNumber()
+		if err != nil {
+			return nil, apperror.NewInternal("failed to generate serial_number")
+		}
+
+		verificationToken := generateVerificationToken(itemCode, serialNumber, newID, now)
+
+		pi := mapper.CreateProductItemRequestToEntity(newID, itemCode, verificationToken, serialNumber, batch)
+		items = append(items, *pi)
 	}
 
-	serialNumber, err := generateSerialNumber()
-	if err != nil {
-		return nil, apperror.NewInternal("failed to generate serial_number")
+	if err := s.repo.Create(ctx, items); err != nil {
+		return nil, apperror.NewInternal("failed to create product item")
 	}
 
-	verificationToken := generateVerificationToken(itemCode, serialNumber, newID, now)
-
-	pi := mapper.CreateProductItemRequestToEntity(newID, itemCode, verificationToken, serialNumber, req)
-
-	return s.repo.Create(ctx, pi)
+	return &response.ProductItemCreateResponse{
+		Quantity: len(items),
+	}, nil
 }
-
 
 // generateItemCode sinh item_code theo format PTA-{YYMM}-{8 ký tự HEX viết hoa}.
 // Ví dụ: PTA-2501-686F493D
@@ -132,4 +150,31 @@ func generateVerificationToken(itemCode, serialNumber string, id uuid.UUID, now 
 	raw := fmt.Sprintf("%s:%s:%s:%d", itemCode, serialNumber, id.String(), now.UnixNano())
 	sum := md5.Sum([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+func (s *productItemService) ConsumeBatchEvent(ctx context.Context) error {
+	msgs, err := s.manager.Consume(ctx, rabbitmq.BatchCreatedRK)
+	if err != nil {
+		return apperror.NewInternal("failed to consume batch event")
+	}
+
+	for msg := range msgs {
+		var batch *batchDTO.BatchCreateResponse
+		err := json.Unmarshal([]byte(msg.Body), &batch)
+		if err != nil {
+			log.Printf("Failed to unmarshal batch event: %v", err)
+			msg.Nack(false, true)
+			continue
+		}
+		_, err = s.CreateProductItem(ctx, batch)
+		if err != nil {
+			log.Printf("Failed to create product item: %v", err)
+			msg.Nack(false, true)
+			continue
+		}
+		log.Printf("Batch event processed successfully: %v", batch.ID)
+		msg.Ack(false)
+	}
+
+	return nil
 }
