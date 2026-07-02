@@ -20,3 +20,7 @@ type VerifyOTPRequest struct {
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+type ResendOTPRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}

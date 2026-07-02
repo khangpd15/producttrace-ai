@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@nestjs/config": "^4.0.4",
+    "@sendgrid/mail": "^8.1.6"
+  }
+}
