@@ -24,6 +24,7 @@ type Product struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	IsDeleted    bool `gorm:"default:false"`
+	
 
 	// Relations
 	Category *categoryEntities.ProductCategory `gorm:"foreignKey:CategoryID"`

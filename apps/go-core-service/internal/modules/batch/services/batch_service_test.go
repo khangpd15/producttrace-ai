@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
@@ -25,6 +26,7 @@ type mockBatchRepository struct {
 	findByCodeFn    func(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	createFn        func(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
 	findByBatchIDFn func(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
+	existsByIDFn    func(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 func (m *mockBatchRepository) FindAll(ctx context.Context) ([]*response.BatchListResponse, error) {
@@ -43,14 +45,54 @@ func (m *mockBatchRepository) Create(ctx context.Context, req *request.CreateBat
 	return m.createFn(ctx, req)
 }
 
+func (m *mockBatchRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
+	if m.existsByIDFn != nil {
+		return m.existsByIDFn(ctx, id)
+	}
+	return true, nil // mặc định: tồn tại (không ảnh hưởng các test không liên quan FK)
+}
+
+// ---------------------------------------------------------------------------
+// Mock ProductVariant Repository
+// ---------------------------------------------------------------------------
+
+type mockProductVariantRepository struct {
+	existsByIDFn func(ctx context.Context, id uuid.UUID) (bool, error)
+}
+
+func (m *mockProductVariantRepository) Create(ctx context.Context, variant *variantEntities.ProductVariant) error {
+	return nil
+}
+
+func (m *mockProductVariantRepository) ExistsBySKU(ctx context.Context, sku string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockProductVariantRepository) ExistsByBarcode(ctx context.Context, barcode string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockProductVariantRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
+	if m.existsByIDFn != nil {
+		return m.existsByIDFn(ctx, id)
+	}
+	return true, nil // mặc định: tồn tại
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 func ptr[T any](v T) *T { return &v }
 
+// newService tạo service với variantRepo mặc định (ExistsByID luôn trả true).
 func newService(repo *mockBatchRepository) BatchService {
-	return NewbatchService(repo, nil, nil)
+	return NewbatchService(repo, nil, nil, &mockProductVariantRepository{})
+}
+
+// newServiceWithVariantRepo tạo service với variant repo tuỳ chỉnh.
+func newServiceWithVariantRepo(repo *mockBatchRepository, vRepo *mockProductVariantRepository) BatchService {
+	return NewbatchService(repo, nil, nil, vRepo)
 }
 
 // ---------------------------------------------------------------------------
@@ -481,6 +523,96 @@ func TestCreateBatch_RepoError(t *testing.T) {
 	}
 
 	svc := newService(mock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeInternal, appErr.Code)
+}
+
+// ---------------------------------------------------------------------------
+// CreateBatch – Foreign Key Validation
+// ---------------------------------------------------------------------------
+
+func TestCreateBatch_VariantExists_Success(t *testing.T) {
+	req := buildCreateRequest()
+
+	want := &response.BatchCreateResponse{
+		ID:        uuid.New(),
+		BatchCode: "APL-2026-0001",
+		VariantID: req.VariantID,
+		Quantity:  req.Quantity,
+		Status:    "ACTIVE",
+		CreatedAt: time.Now(),
+	}
+
+	batchMock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			return want, nil
+		},
+	}
+	variantMock := &mockProductVariantRepository{
+		existsByIDFn: func(ctx context.Context, id uuid.UUID) (bool, error) {
+			return true, nil // variant tồn tại
+		},
+	}
+
+	svc := newServiceWithVariantRepo(batchMock, variantMock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, want.BatchCode, got.BatchCode)
+}
+
+func TestCreateBatch_VariantNotFound_Error(t *testing.T) {
+	req := buildCreateRequest()
+
+	batchMock := &mockBatchRepository{
+		// createFn KHÔNG được gọi khi FK check thất bại
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			t.Fatal("repo.Create không nên được gọi khi variant không tồn tại")
+			return nil, nil
+		},
+	}
+	variantMock := &mockProductVariantRepository{
+		existsByIDFn: func(ctx context.Context, id uuid.UUID) (bool, error) {
+			return false, nil // variant không tồn tại
+		},
+	}
+
+	svc := newServiceWithVariantRepo(batchMock, variantMock)
+	got, err := svc.CreateBatch(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, got)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeNotFound, appErr.Code)
+	assert.Contains(t, appErr.Message, "product_variant")
+}
+
+func TestCreateBatch_VariantCheckInternalError(t *testing.T) {
+	req := buildCreateRequest()
+	dbErr := apperror.NewInternal("database error")
+
+	batchMock := &mockBatchRepository{
+		createFn: func(ctx context.Context, r *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+			t.Fatal("repo.Create không nên được gọi khi check variant lỗi DB")
+			return nil, nil
+		},
+	}
+	variantMock := &mockProductVariantRepository{
+		existsByIDFn: func(ctx context.Context, id uuid.UUID) (bool, error) {
+			return false, dbErr // lỗi DB khi kiểm tra
+		},
+	}
+
+	svc := newServiceWithVariantRepo(batchMock, variantMock)
 	got, err := svc.CreateBatch(context.Background(), req)
 
 	require.Error(t, err)

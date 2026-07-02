@@ -40,6 +40,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+	productItemService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
 )
 
 type App struct {
@@ -64,17 +65,21 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
 
 	batchRepo := batchRepo.NewBatchRepository(databaseSQL)
-	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo)
+
+	// Product module
+	pRepo := productRepo.NewProductRepository(database)
+	pVariantRepo := variantRepo.NewProductVariantRepository(database)
+
+	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo, pVariantRepo)
 	batchHandler := batchHandler.NewBatchHandler(batchService)
+
+	_ = productItemService.NewProductItemService(productItemsRepo, batchRepo, pVariantRepo)
 
 	// Initialize Auth Module
 	redisCache := cache.NewRedisCache(redisClient)
 	aService := authService.NewAuthenService(uRepo, redisCache, pub)
 	aHandler := authHandler.NewAuthenHandler(aService)
 
-	// Product module
-	pRepo := productRepo.NewProductRepository(database)
-	pVariantRepo := variantRepo.NewProductVariantRepository(database)
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
