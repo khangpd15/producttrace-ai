@@ -6,17 +6,19 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
 type RouterDependency struct {
-	BatchHandler   *batchHandler.BatchHandler
-	AuthHandler    *authHandler.AuthenHandler
-	UserHandler    *userHandler.UserHandler
-	ProductHandler *productHandler.ProductHandler
-	UserRepo       userRepo.UserRepositoryInterface
+	BatchHandler     *batchHandler.BatchHandler
+	AuthHandler      *authHandler.AuthenHandler
+	UserHandler      *userHandler.UserHandler
+	ProductHandler   *productHandler.ProductHandler
+	OwnershipHandler *ownershipHandler.OwnershipHandler
+	UserRepo         userRepo.UserRepositoryInterface
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -36,6 +38,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
+	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
 
 	return r
 }
@@ -126,4 +129,29 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 			}
 		}
 	}
+}
+
+// OWNERSHIP
+func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHandler, uRepo userRepo.UserRepositoryInterface) {
+	ownerships := api.Group("/ownership")
+	ownerships.Use(middleware.AuthMiddleware(uRepo))
+
+	// Customer routes: chỉ cần QR code, thông tin lấy từ profile JWT
+	customerGroup := ownerships.Group("")
+	customerGroup.Use(middleware.RoleMiddleware("CUSTOMER"))
+	{
+		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
+		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+	}
+
+	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
+	adminGroup := ownerships.Group("/admin")
+	adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+	{
+		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
+		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+	}
+
+	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
+	ownerships.GET("/:product_item_id", oh.GetOwnershipDetail)
 }

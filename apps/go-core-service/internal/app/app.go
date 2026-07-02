@@ -36,6 +36,10 @@ import (
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
+	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
+	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 )
 
@@ -75,12 +79,21 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
+	// Ownership Module
+	oRepo := ownershipRepo.NewOwnershipRepository(database)
+	oProductAdapter := ownershipAdapters.NewDummyProductAdapter()
+	oEmailAdapter := ownershipAdapters.NewDummyEmailAdapter()
+	oUserAdapter := ownershipAdapters.NewDummyUserAdapter()
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
+	oHandler := ownershipHandler.NewOwnershipHandler(oService)
+
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler:   batchHandler,
-		ProductHandler: pHandler,
-		UserHandler:    uHandler,
-		AuthHandler:    aHandler,
-		UserRepo:       uRepo,
+		BatchHandler:     batchHandler,
+		ProductHandler:   pHandler,
+		UserHandler:      uHandler,
+		AuthHandler:      aHandler,
+		OwnershipHandler: oHandler,
+		UserRepo:         uRepo,
 	})
 
 	return &App{
