@@ -37,7 +37,6 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
-	productItemService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
 )
 
 type App struct {
@@ -52,7 +51,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		log.Fatalf("failed to retrieve sql.DB from GORM client: %v", err)
 	}
 
-	productItemsRepo := productItemsRepo.NewProductItemRepository(database, databaseSQL)
+	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
@@ -69,8 +68,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub)
 	batchHandler := batchHandler.NewBatchHandler(batchService)
-
-	_ = productItemService.NewProductItemService(productItemsRepo, batchRepo, pVariantRepo)
 
 	// Initialize Auth Module
 	redisCache := cache.NewRedisCache(redisClient)

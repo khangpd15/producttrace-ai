@@ -14,5 +14,9 @@ func CreateProductItemRequestToEntity(newID uuid.UUID, itemCode string, verifica
 		ItemCode:          itemCode,
 		VerificationToken: verificationToken,
 		SerialNumber:      serialNumber,
+		// Status phải được set tường minh vì GORM gửi empty string "" cho field không được gán,
+		// vi phạm CHECK constraint chk_product_items_status trên DB.
+		// "IN_STOCK" là trạng thái khởi đầu của mọi item vừa được tạo trong batch.
+		Status: "IN_STOCK",
 	}
 }

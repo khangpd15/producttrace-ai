@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/consumer"
 	batchDTO "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/response"
@@ -23,30 +23,46 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+// batchEventEnvelope là struct dùng để unwrap message từ publisher.
+// Publisher gửi theo NestJS format:
+//
+//	{
+//	  "pattern": "batch.created",
+//	  "data": {
+//	    "eventId": "...",
+//	    "eventType": "batch.created",
+//	    "payload": { ...BatchCreateResponse... }   <-- đây là data thực
+//	  }
+//	}
+type batchEventEnvelope struct {
+	Pattern string `json:"pattern"`
+	Data    struct {
+		EventID  string          `json:"eventId"`
+		Payload  json.RawMessage `json:"payload"` // BatchCreateResponse được nest ở đây
+	} `json:"data"`
+}
 
 type ProductItemService interface {
 	CreateProductItem(ctx context.Context, batch *batchDTO.BatchCreateResponse) (*response.ProductItemCreateResponse, error)
+	ConsumeBatchEvent(ctx context.Context) error
 }
 
 type productItemService struct {
 	repo        repositories.ProductItemRepository
 	batchRepo   batchRepo.BatchRepository
 	variantRepo variantRepo.ProductVariantRepository
-	manager     *rabbitmq.Manager
+	consumer    *consumer.Consumer
 }
 
-func NewProductItemService(
-	repo repositories.ProductItemRepository,
-	batchRepo batchRepo.BatchRepository,
-	variantRepo variantRepo.ProductVariantRepository,
-	manager *rabbitmq.Manager,
-) ProductItemService {
+func NewProductItemService(repo repositories.ProductItemRepository, batchRepo batchRepo.BatchRepository, variantRepo variantRepo.ProductVariantRepository, consumer *consumer.Consumer) ProductItemService {
 	return &productItemService{
 		repo:        repo,
 		batchRepo:   batchRepo,
 		variantRepo: variantRepo,
-		manager:     manager,
+		consumer:    consumer,
 	}
 }
 
@@ -153,27 +169,42 @@ func generateVerificationToken(itemCode, serialNumber string, id uuid.UUID, now 
 }
 
 func (s *productItemService) ConsumeBatchEvent(ctx context.Context) error {
-	msgs, err := s.manager.Consume(ctx, rabbitmq.BatchCreatedRK)
+	// Bug #1 fixed: dùng tên queue "batch.events" thay vì routing key BatchCreatedRK ("batch.created").
+	// Bug #2 fixed: publisher.Publish() wrap message theo NestJS format {"pattern": "...", "data": {...}},
+	//               nên cần unwrap trước khi unmarshal vào BatchCreateResponse.
+	// Bug #3 fixed: bỏ msg.Ack/Nack trong handler — consumer.dispatch đã quản lý acknowledgment;
+	//               gọi 2 lần sẽ gây PRECONDITION_FAILED (unknown delivery tag) từ RabbitMQ.
+	err := s.consumer.StartConsumer(&consumer.ConsumerSpec{
+		Queue:    "batch.events",
+		Prefetch: 1,
+		Handler: func(ctx context.Context, msg amqp.Delivery) error {
+			// Step 1: Unwrap outer envelope {pattern, data: types.Event}
+			var envelope batchEventEnvelope
+			if err := json.Unmarshal(msg.Body, &envelope); err != nil {
+				log.Printf("[BatchWorker] Failed to unmarshal envelope: %v | body: %s", err, string(msg.Body))
+				return err
+			}
+
+			// Step 2: Unmarshal payload (BatchCreateResponse) từ data.payload
+			var batch batchDTO.BatchCreateResponse
+			if err := json.Unmarshal(envelope.Data.Payload, &batch); err != nil {
+				log.Printf("[BatchWorker] Failed to unmarshal batch payload: %v | payload: %s", err, string(envelope.Data.Payload))
+				return err
+			}
+
+			log.Printf("[BatchWorker] Processing batch event: id=%v, quantity=%d", batch.ID, batch.Quantity)
+
+			_, err := s.CreateProductItem(ctx, &batch)
+			if err != nil {
+				log.Printf("[BatchWorker] Failed to create product item for batch %v: %v", batch.ID, err)
+				return err
+			}
+			log.Printf("[BatchWorker] Batch event processed successfully: %v", batch.ID)
+			return nil
+		},
+	})
 	if err != nil {
 		return apperror.NewInternal("failed to consume batch event")
-	}
-
-	for msg := range msgs {
-		var batch *batchDTO.BatchCreateResponse
-		err := json.Unmarshal([]byte(msg.Body), &batch)
-		if err != nil {
-			log.Printf("Failed to unmarshal batch event: %v", err)
-			msg.Nack(false, true)
-			continue
-		}
-		_, err = s.CreateProductItem(ctx, batch)
-		if err != nil {
-			log.Printf("Failed to create product item: %v", err)
-			msg.Nack(false, true)
-			continue
-		}
-		log.Printf("Batch event processed successfully: %v", batch.ID)
-		msg.Ack(false)
 	}
 
 	return nil
