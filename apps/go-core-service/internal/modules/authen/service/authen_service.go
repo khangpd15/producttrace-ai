@@ -26,6 +26,7 @@ type AuthenServiceInterface interface {
 	VerifyOTP(ctx context.Context, email, otp string) error
 	RefreshToken(ctx context.Context, refreshToken string) (newAccessToken string, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string) error
+	ReSendOTP(ctx context.Context, email string) error
 }
 
 type AuthenService struct {
@@ -188,6 +189,85 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 	clientRefreshToken := fmt.Sprintf("%s.%s", user.ID.String(), rawToken)
 	return accessToken, clientRefreshToken, nil
 }
+func (s *AuthenService) ReSendOTP(ctx context.Context, email string) error {
+	// OTP Rate limiting: 5 OTPs per 15 minutes
+	limitKey := fmt.Sprintf("otp_limit:%s", email)
+	limitVal, err := s.cache.Get(ctx, limitKey)
+	if err == nil {
+		// Key exists, check count and expiry
+		var count int
+		var expiry int64
+		_, fmtErr := fmt.Sscanf(limitVal, "%d:%d", &count, &expiry)
+		if fmtErr == nil {
+			if time.Now().Unix() > expiry {
+				// Expired, reset limit
+				expiry = time.Now().Add(15 * time.Minute).Unix()
+				newVal := fmt.Sprintf("1:%d", expiry)
+				_ = s.cache.Set(ctx, limitKey, newVal, 15*time.Minute)
+			} else if count >= 5 {
+				return apperror.NewTooManyRequests("Too many OTP requests. Please try again later.")
+			} else {
+				// Increment count
+				count++
+				newVal := fmt.Sprintf("%d:%d", count, expiry)
+				rem := time.Duration(expiry-time.Now().Unix()) * time.Second
+				if rem < 1*time.Second {
+					rem = 1 * time.Second
+				}
+				_ = s.cache.Set(ctx, limitKey, newVal, rem)
+			}
+		}
+	} else if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
+		// No limit key exists, create new one
+		expiry := time.Now().Add(15 * time.Minute).Unix()
+		val := fmt.Sprintf("1:%d", expiry)
+		_ = s.cache.Set(ctx, limitKey, val, 15*time.Minute)
+	}
+
+	user, err := s.userRepository.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return apperror.NewNotFound("User not found")
+	}
+
+	if user.Status != UserEntity.StatusPending {
+		return apperror.NewValidation("User is already verified or inactive")
+	}
+
+	// Generate new OTP
+	otpCode, err := utils.GenerateOTP()
+	if err != nil {
+		return err
+	}
+
+	// Save OTP to Redis with 5m TTL
+	err = s.cache.Set(ctx, fmt.Sprintf("otp:email:%s", email), otpCode, 5*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	// Publish event to RabbitMQ
+	event := types.Event{
+		EventID:       uuid.New().String(),
+		EventType:     rabbitmq.UserRegisteredRK,
+		EventVersion:  "1.0.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.New().String(),
+		Payload: map[string]interface{}{
+			"email":     user.Email,
+			"full_name": user.FullName,
+			"otp_code":  otpCode,
+		},
+	}
+
+	// Publish user.registered event
+	_ = s.publisher.Publish(event)
+
+	return nil
+}
 
 func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error {
 	otpKey := fmt.Sprintf("otp:email:%s", email)
@@ -230,7 +310,8 @@ func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error 
 		Producer:      "go-core-service",
 		CorrelationID: uuid.New().String(),
 		Payload: map[string]interface{}{
-			"email": user.Email,
+			"email":     user.Email,
+			"full_name": user.FullName,
 		},
 	}
 	_ = s.publisher.Publish(event)
