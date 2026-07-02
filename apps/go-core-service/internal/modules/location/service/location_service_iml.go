@@ -136,7 +136,26 @@ func (s *locationService) ListLocations(ctx context.Context, req *dto.ListLocati
 	}
 	offset := (page - 1) * limit
 
-	locs, total, err := s.repo.ListAll(ctx, req.City, req.Type, req.IsActive, offset, limit)
+	// Chuyển đổi status string → *bool cho isActive
+	var isActive *bool
+	switch req.Status {
+	case "ACTIVE":
+		t := true
+		isActive = &t
+	case "INACTIVE":
+		f := false
+		isActive = &f
+	default:
+		// "", "ALL" → không lọc
+		isActive = nil
+	}
+
+	var locType domain.LocationType
+	if req.Type != "" && req.Type != "ALL" {
+		locType = domain.LocationType(req.Type)
+	}
+
+	locs, total, err := s.repo.ListAll(ctx, req.City, locType, isActive, req.Keyword, offset, limit)
 	if err != nil {
 		return nil, err
 	}

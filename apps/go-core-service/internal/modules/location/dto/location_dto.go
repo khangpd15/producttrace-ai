@@ -42,11 +42,12 @@ type UpdateLocationReq struct {
 
 // ListLocationsReq là query params cho GET /locations
 type ListLocationsReq struct {
-	Page     int                 `form:"page"      binding:"omitempty,min=1"`
-	Limit    int                 `form:"limit"     binding:"omitempty,min=1,max=100"`
-	City     string              `form:"city"`
-	Type     domain.LocationType `form:"type"      binding:"omitempty,oneof=WAREHOUSE STORE DEALER WARRANTY_CENTER"`
-	IsActive *bool               `form:"is_active"`
+	Page    int    `form:"page"      binding:"omitempty,min=1"`
+	Limit   int    `form:"limit"     binding:"omitempty,min=1,max=100"`
+	City    string `form:"city"`
+	Status  string `form:"status"    binding:"omitempty,oneof=ALL ACTIVE INACTIVE"`
+	Type    string `form:"type"      binding:"omitempty,oneof=ALL WAREHOUSE STORE DEALER WARRANTY_CENTER"`
+	Keyword string `form:"keyword"`
 }
 
 // ListLocationsResponse trả về danh sách có phân trang
