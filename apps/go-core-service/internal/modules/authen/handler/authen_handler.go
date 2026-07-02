@@ -59,6 +59,21 @@ func (h *AuthenHandler) Login(c *gin.Context) {
 		RefreshToken: refreshToken,
 	}))
 }
+func (h *AuthenHandler) ResendOTP(c *gin.Context) {
+	var req request.ResendOTPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	err := h.authService.ReSendOTP(c.Request.Context(), req.Email)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("OTP resent successfully. Please check your email.", nil))
+}
 
 func (h *AuthenHandler) VerifyOTP(c *gin.Context) {
 	var req request.VerifyOTPRequest

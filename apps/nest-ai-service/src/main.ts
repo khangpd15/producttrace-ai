@@ -8,37 +8,16 @@ import * as path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 import { AppModule } from './app.module';
-import { RABBITMQ } from './messaging/rabbitmq/rabbitmq.constants';
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe());
 
-  // Connect RabbitMQ microservice
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [RABBITMQ.URL],
-      queue: RABBITMQ.QUEUE,
-      queueOptions: {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': RABBITMQ.DLX,
-          'x-dead-letter-routing-key': RABBITMQ.DLQ_ROUTING_KEY,
-        },
-      },
-      noAck: false,
-    },
-  });
-
-  await app.startAllMicroservices();
-  
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
   console.log(`Nest AI Service is running on HTTP port ${port}`);
-  console.log('Nest AI RabbitMQ consumer started');
+  console.log('Nest AI RabbitMQ consumer started via RabbitMQModule');
 }
 
 bootstrap();

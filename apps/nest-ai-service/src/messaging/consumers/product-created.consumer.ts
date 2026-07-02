@@ -1,27 +1,36 @@
-import { Controller, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
-
-import { Event } from '../types/event.interface';
+import { Injectable, Logger } from '@nestjs/common';
+import { BaseConsumer } from './base.consumer';
 import { RABBITMQ } from '../rabbitmq/rabbitmq.constants';
+import { Event } from '../types/event.interface';
+import { IsNotEmpty, IsString } from 'class-validator';
 
-@Controller()
-export class ProductCreatedConsumer {
-  private readonly logger = new Logger(ProductCreatedConsumer.name);
+export class ProductCreatedPayload {
+  @IsString({ message: 'product_name must be a string' })
+  @IsNotEmpty({ message: 'product_name is required' })
+  product_name!: string;
 
-  @EventPattern(RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED)
-  async handle(
-    @Payload() event: Event,
-    @Ctx() context: RmqContext,
-  ) {
-    const channel = context.getChannelRef();
-    const message = context.getMessage();
+  @IsString({ message: 'manufacturer must be a string' })
+  @IsNotEmpty({ message: 'manufacturer is required' })
+  manufacturer!: string;
 
-    try {
-      this.logger.log(JSON.stringify(event));
+  @IsString({ message: 'batch_code must be a string' })
+  @IsNotEmpty({ message: 'batch_code is required' })
+  batch_code!: string;
+}
 
-      channel.ack(message);
-    } catch (error) {
-      channel.nack(message, false, false);
-    }
+@Injectable()
+export class ProductCreatedConsumer extends BaseConsumer<ProductCreatedPayload> {
+  protected readonly logger = new Logger(ProductCreatedConsumer.name);
+  protected readonly queueName = RABBITMQ.QUEUES.PRODUCT_CREATED;
+  protected readonly payloadClass = ProductCreatedPayload;
+
+  /**
+   * Business logic implementation for product.created event.
+   * Currently just logs product trace details to the console.
+   */
+  protected async processPayload(payload: ProductCreatedPayload, event: Event<ProductCreatedPayload>): Promise<void> {
+    this.logger.log(
+      `[Product Created Event Processed] Name: ${payload.product_name} | Manufacturer: ${payload.manufacturer} | Batch Code: ${payload.batch_code}`
+    );
   }
 }
