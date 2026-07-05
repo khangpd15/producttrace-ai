@@ -282,6 +282,9 @@ func (m *Manager) publishOnce(ctx context.Context, routingKey string, body []byt
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent, // Make message persistent
 			Timestamp:    time.Now().UTC(),
+			Headers: amqp.Table{
+				"pattern": routingKey,
+			},
 			Body:         body,
 		},
 	)

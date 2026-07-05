@@ -1,8 +1,23 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 
-import { ProductCreatedConsumer } from './messaging/consumers/product-created.consumer';
+import { MailModule } from './modules/mail/mail.module';
+import { MockController } from './mock.controller';
+import { AuthModule } from './auth/auth.module';
+import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
 
 @Module({
-  controllers: [ProductCreatedConsumer],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '../../.env',
+    }),
+    MailModule,
+    AuthModule,
+    RabbitMQModule,
+  ],
+  controllers: [
+    MockController,
+  ],
 })
 export class AppModule {}

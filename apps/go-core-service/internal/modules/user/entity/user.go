@@ -48,7 +48,7 @@ func NewUser(email, phone, fullName, passwordHash, role string) *User {
 		FullName:     fullName,
 		PasswordHash: passwordHash,
 		Role:         Role(role),
-		Status:       StatusActive,
+		Status:       StatusPending,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 		IsDeleted:    false,

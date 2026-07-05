@@ -14,19 +14,23 @@ type VariantResponse struct {
     Currency *string   `json:"currency"`
     Images   []string  `json:"images"`
     Status   *string   `json:"status"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ProductResponse struct {
-    ID           uuid.UUID         `json:"id"`
-    CategoryID   *uuid.UUID        `json:"category_id"`
-    Name         string            `json:"name"`
-    Slug         *string           `json:"slug"`
-    Description  *string           `json:"description"`
-    ThumbnailURL *string           `json:"thumbnail_url"`
-    Status       *string           `json:"status"`
-    CreatedBy    *uuid.UUID        `json:"created_by"`
-    CreatedAt    time.Time         `json:"created_at"`
-    UpdatedAt    time.Time         `json:"updated_at"`
+    ID           uuid.UUID        `json:"id"`
+    CategoryID   *uuid.UUID       `json:"category_id"`
+    Name         string           `json:"name"`
+    Slug         *string          `json:"slug"`
+    Description  *string          `json:"description"`
+    ThumbnailURL *string          `json:"thumbnail_url"`
+    Tags         []string         `json:"tags"`
+    Metadata     map[string]interface{} `json:"metadata"`
+    Status       *string          `json:"status"`
+    CreatedBy    *uuid.UUID       `json:"created_by"`
+    CreatedAt    time.Time        `json:"created_at"`
+    UpdatedAt    time.Time        `json:"updated_at"`
     Variants     []VariantResponse `json:"variants"`
 }
 
