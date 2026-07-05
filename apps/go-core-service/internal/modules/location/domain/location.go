@@ -39,9 +39,14 @@ func (o *OpeningHours) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var b []byte
+	switch v := value.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return errors.New("unsupported type for OpeningHours.Scan")
 	}
 	return json.Unmarshal(b, &o)
 }
@@ -100,10 +105,12 @@ func (g *GeoLocation) Scan(value interface{}) error {
 		return nil
 	}
 
-	if len(data) == 50 {
-		decoded := make([]byte, 25)
+	// Thử hex decode cho bất kỳ byte slice có độ dài chẵn >= 42 (min EWKB Point)
+	// 42 = 21 bytes × 2 hex chars (Point không có SRID), 50 = 25 bytes × 2 (Point có SRID)
+	if len(data)%2 == 0 && len(data) >= 42 {
+		decoded := make([]byte, len(data)/2)
 		n, err := hex.Decode(decoded, data)
-		if err == nil && n == 25 {
+		if err == nil && n == len(data)/2 {
 			data = decoded
 		}
 	}
