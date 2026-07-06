@@ -19,7 +19,7 @@ type BatchRepository interface {
 	FindAll(ctx context.Context) ([]*response.BatchListResponse, error)
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
-	Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	Create(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
@@ -186,7 +186,7 @@ func (rb *batchRepository) FindByBatchID(ctx context.Context, batchID uuid.UUID)
 //
 // Ví dụ: prefix "APL" + năm 2026 → lock key "APL-2026" → batch code "APL-2026-0013"
 // Các prefix khác nhau (SAM-2026, XMI-2026) vẫn chạy song song.
-func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	now := time.Now()
 	year := now.Year()
 	// lockKey là đơn vị granularity của advisory lock
@@ -196,7 +196,7 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 	// tự động release khi transaction kết thúc (commit hoặc rollback).
 	tx, err := rb.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch") 
+		return nil, apperror.WrapDBError(err, "batch")
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -240,14 +240,14 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 			id, variant_id, batch_code,
 			manufacture_date, expiry_date, imported_at,
 			manufacturer_name, supplier_name, origin_country, production_place,
-			quantity, status,
-			created_at, updated_at, is_deleted
+			quantity, status, created_by,
+			created_at, is_deleted
 		) VALUES (
 			$1,  $2,  $3,
 			$4,  $5,  $6,
 			$7,  $8,  $9,  $10,
-			$11, 'ACTIVE',
-			$12, $12, FALSE
+			$11, 'ACTIVE', 12
+			$13, FALSE
 		)
 		RETURNING id, batch_code, variant_id, quantity, status, created_at`
 
@@ -263,6 +263,7 @@ func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchR
 		req.OriginCountry,
 		req.ProductionPlace,
 		req.Quantity,
+		currenUserID,
 		now,
 	)
 
