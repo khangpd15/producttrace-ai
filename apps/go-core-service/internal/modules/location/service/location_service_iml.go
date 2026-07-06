@@ -69,17 +69,10 @@ func (s *locationService) CreateLocation(ctx context.Context, req *dto.CreateLoc
 		return nil, apperror.NewConflict("location with code '" + req.Code + "' already exists")
 	}
 
-	var geoLoc *domain.GeoLocation
-	if req.GeoLocation != nil {
-		geoLoc = &domain.GeoLocation{
-			Latitude:  req.GeoLocation.Latitude,
-			Longitude: req.GeoLocation.Longitude,
-		}
-	} else if req.Latitude != nil && req.Longitude != nil {
-		geoLoc = &domain.GeoLocation{
-			Latitude:  *req.Latitude,
-			Longitude: *req.Longitude,
-		}
+	// Tự động tạo geo_location từ latitude và longitude
+	geoLoc := &domain.GeoLocation{
+		Latitude:  *req.Latitude,
+		Longitude: *req.Longitude,
 	}
 
 	loc := &domain.Location{
@@ -221,16 +214,10 @@ func (s *locationService) UpdateLocation(ctx context.Context, id string, req *dt
 	existing.Longitude = *req.Longitude
 	existing.OpeningHoursJSON = req.OpeningHoursJSON
 
-	if req.GeoLocation != nil {
-		existing.GeoLocation = &domain.GeoLocation{
-			Latitude:  req.GeoLocation.Latitude,
-			Longitude: req.GeoLocation.Longitude,
-		}
-	} else if req.Latitude != nil && req.Longitude != nil {
-		existing.GeoLocation = &domain.GeoLocation{
-			Latitude:  *req.Latitude,
-			Longitude: *req.Longitude,
-		}
+	// Tự động cập nhật geo_location từ latitude và longitude
+	existing.GeoLocation = &domain.GeoLocation{
+		Latitude:  *req.Latitude,
+		Longitude: *req.Longitude,
 	}
 
 	if req.IsActive != nil {

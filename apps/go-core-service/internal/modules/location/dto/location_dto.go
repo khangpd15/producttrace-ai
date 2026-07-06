@@ -20,7 +20,6 @@ type CreateLocationReq struct {
 	Latitude         *float64            `json:"latitude" binding:"required"`
 	Longitude        *float64            `json:"longitude" binding:"required"`
 	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
-	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
 }
 
 type UpdateLocationReq struct {
@@ -36,7 +35,6 @@ type UpdateLocationReq struct {
 	Longitude        *float64            `json:"longitude" binding:"required"`
 	IsActive         *bool               `json:"is_active"`
 	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
-	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
 }
 
 

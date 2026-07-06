@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/domain"
@@ -32,7 +33,7 @@ func (r *locationRepository) GetByID(ctx context.Context, id string) (*domain.Lo
 		Where("id = ?", id).
 		First(&loc)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, apperror.NewNotFound("location")
 		}
 		return nil, apperror.WrapDBError(result.Error, "location")
@@ -47,7 +48,7 @@ func (r *locationRepository) GetByCode(ctx context.Context, code string) (*domai
 		Where("code = ?", code).
 		First(&loc)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			// Code chưa tồn tại — trả nil, nil để caller kiểm tra existence
 			return nil, nil
 		}
