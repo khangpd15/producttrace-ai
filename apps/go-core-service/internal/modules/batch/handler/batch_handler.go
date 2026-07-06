@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -56,7 +57,21 @@ func (hb *BatchHandler) CreateBatch(c *gin.Context) {
 		return
 	}
 
-	result, err := hb.service.CreateBatch(c.Request.Context(), &req)
+	currentUserIDStr := utils.GetCurrentUserID(c)
+
+	if currentUserIDStr == "" {
+		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
+		return
+	}
+
+	currentUserID, err := uuid.Parse(currentUserIDStr)
+
+	if err == nil {
+		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
+		return
+	}
+
+	result, err := hb.service.CreateBatch(c.Request.Context(), &req, currentUserID)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return

@@ -22,7 +22,7 @@ import (
 type BatchService interface {
 	GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
-	CreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
 }
 
@@ -60,7 +60,7 @@ func (sb *batchService) GetBatchDetail(ctx context.Context, batchCode string) (*
 
 // CreateBatch normalize prefix rồi kiểm tra business rule trước khi delegate xuống repo.
 // Batch code sẽ được tự động sinh tại tầng repository dùng advisory lock.
-func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	// Normalize prefix: xóa khoảng trắng, chuyển về uppercase
 	// để "apl", "APL", " Apl " đều tạo ra cùng lock key APL-2026.
 	req.Prefix = strings.ToUpper(strings.TrimSpace(req.Prefix))
@@ -92,7 +92,7 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 
 	}
 
-	batchRes, err := sb.retryCreateBatch(ctx, req)
+	batchRes, err := sb.retryCreateBatch(ctx, req, currenUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +114,10 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 	return batchRes, nil
 }
 
-func (sb *batchService) retryCreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+func (sb *batchService) retryCreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	var lastErr error
 	for i := 0; i < 3; i++ {
-		result, err := sb.repo.Create(ctx, req)
+		result, err := sb.repo.Create(ctx, req, currenUserID)
 		if err == nil {
 			return result, nil
 		}
