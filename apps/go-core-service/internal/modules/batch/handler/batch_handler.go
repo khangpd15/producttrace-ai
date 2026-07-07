@@ -63,10 +63,11 @@ func (hb *BatchHandler) CreateBatch(c *gin.Context) {
 		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
 		return
 	}
-
+	fmt.Println("currentUserIDStr:", currentUserIDStr)
 	currentUserID, err := uuid.Parse(currentUserIDStr)
+	fmt.Println("currentUserID:", currentUserID)
 
-	if err == nil {
+	if err != nil {
 		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
 		return
 	}
