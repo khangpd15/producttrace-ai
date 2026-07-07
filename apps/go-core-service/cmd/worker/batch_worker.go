@@ -27,11 +27,7 @@ func main() {
 	databasePostgres := database.ConnectPostgres()
 	log.Println("PostgreSQL GORM connected successfully")
 
-	databasePostgresSQL, err := database.ConnectPostgresSQL()
-	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
-	}
-	log.Println("PostgreSQL SQL connected successfully")
+
 
 	// Setup RabbitMQ Manager
 	rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -50,7 +46,7 @@ func main() {
 
 	// InitializeRepositories
 	repo := repositories.NewProductItemRepository(databasePostgres)
-	batchRepo := batchRepo.NewBatchRepository(databasePostgresSQL)
+	batchRepo := batchRepo.NewBatchRepository(databasePostgres)
 	variantRepo := variantRepo.NewProductVariantRepository(databasePostgres)
 	service := services.NewProductItemService(repo, batchRepo, variantRepo, cons)
 
