@@ -6,22 +6,21 @@ export class QdrantService implements OnModuleInit {
   // Thêm hàm này vào bên trong class QdrantService của bạn
   async findStoresByRadius(lat: number, lng: number, radiusInMeters: number = 5000) {
     try {
-      // Sử dụng hàm scroll để lọc dữ liệu thô trong payload mà không cần dùng đến Vector Search
       const result = await this.client.scroll('stores_collection', {
         filter: {
           must: [
             {
               geo_radius: {
-                key: 'location', // tọa độ lưu trong payload của Qdrant
+                key: 'location',
                 range: {
-                  radius: radiusInMeters,   // Bán kính tìm kiếm (mét)
+                  radius: radiusInMeters,  
                   center: { lat: lat, lon: lng }, // Tọa độ vị trí của người dùng
                 },
               },
             },
           ],
         },
-        limit: 10, // Lấy tối đa 10 cửa hàng gần nhất
+        limit: 10, 
         with_payload: true,
       });
 
@@ -37,6 +36,7 @@ export class QdrantService implements OnModuleInit {
   }
   private client: QdrantClient;
   private readonly collectionName = 'products_collection';
+  private readonly storeCollection = 'stores_collection';
 
   constructor() {
     this.client = new QdrantClient({
@@ -82,4 +82,23 @@ export class QdrantService implements OnModuleInit {
     }
     return Math.abs(hash); 
   }
+  async upsertStoreToQdrant(store: { id: number; name: string; lat: number; lng: number; address?: string }) {
+  await this.client.upsert(this.storeCollection, {
+    wait: true,
+    points: [
+      {
+        id: store.id, 
+        vector: {},   
+        payload: {
+          name: store.name,
+          address: store.address || '',
+          location: { 
+            lat: Number(store.lat), 
+            lon: Number(store.lng) 
+          }
+        },
+      },
+    ],
+  });
+}
 }

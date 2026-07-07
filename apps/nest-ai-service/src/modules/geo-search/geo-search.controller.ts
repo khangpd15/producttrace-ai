@@ -1,24 +1,23 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UsePipes, ValidationPipe } from '@nestjs/common';
 import { QdrantService } from '../../integrations/qdrant/qdrant.service';
-import { SearchGeoDto } from './dto/search-geo.dto'; 
+import { SearchGeoDto } from './dto/search-geo.dto';
 
-@Controller('geo')
+@Controller('geo-search')
 export class GeoSearchController {
   constructor(private readonly qdrantService: QdrantService) {}
 
-  @Get('/nearest-store')
-  async getNearestStore(@Query() query: SearchGeoDto) { 
-    console.log(`[GET] Request finding nearest stores: Lat ${query.lat}, Lng ${query.lng}`);
+  @Get('nearest')
+  @UsePipes(new ValidationPipe({ transform: true })) 
+  async getNearestStore(@Query() query: SearchGeoDto) {
+    const { lat, lng, radius = 5000 } = query;
 
-    const stores = await this.qdrantService.findStoresByRadius(
-      query.lat, 
-      query.lng, 
-      query.radius // DTO tự gán mặc định là 5000 
-    );
+    console.log(`[🚀 UC-P3-GEO-01] Request nearest store: Lat ${lat}, Lng ${lng}, Radius ${radius}m`);
+
+    const stores = await this.qdrantService.findStoresByRadius(lat, lng, radius);
 
     return {
       success: true,
-      message: `Found ${stores.length} stores within ${query.radius}m`, 
+      message: `Found ${stores.length} stores within ${radius}m`,
       data: stores,
     };
   }

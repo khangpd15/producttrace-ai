@@ -1,18 +1,22 @@
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsNumber, IsOptional, IsPositive, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class SearchGeoDto {
+  @Type(() => Number)
   @IsNumber()
-  lat!: number; // Vĩ độ
+  @Min(-90)
+  @Max(90)
+  lat!: number;
 
+  @Type(() => Number)
   @IsNumber()
-  lng!: number; // Kinh độ
+  @Min(-180)
+  @Max(180)
+  lng!: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  @Min(0)
-  radius?: number; // Bán kính tìm kiếm (km)
-
-  @IsOptional()
-  @IsString()
-  keyword?: string; // Từ khóa tìm kiếm thêm (nếu có)
+  @IsPositive()
+  radius?: number; 
 }
