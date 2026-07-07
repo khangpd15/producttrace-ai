@@ -153,5 +153,10 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	}
 
 	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
-	ownerships.GET("/:product_item_id", oh.GetOwnershipDetail)
+	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
+	
+	// CRUD Extensions
+	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
+	ownerships.DELETE("/:id", oh.DeleteOwnership)
+	ownerships.GET("", oh.SearchOwnerships)
 }

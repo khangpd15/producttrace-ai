@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -22,6 +23,7 @@ type mockOwnershipRepo struct {
 	createOwnershipFn                   func(ctx context.Context, tx *gorm.DB, o *entity.Ownership) (*entity.Ownership, error)
 	getOwnershipByProductItemIDFn       func(ctx context.Context, productItemID uuid.UUID) (*entity.Ownership, error)
 	getOwnershipHistoryByProductItemIDFn func(ctx context.Context, productItemID uuid.UUID) ([]entity.Ownership, error)
+	GetOwnershipByIDFunc                 func(ctx context.Context, id uuid.UUID) (*entity.Ownership, error)
 }
 
 func (m *mockOwnershipRepo) CreateOwnership(ctx context.Context, tx *gorm.DB, o *entity.Ownership) (*entity.Ownership, error) {
@@ -33,6 +35,29 @@ func (m *mockOwnershipRepo) GetOwnershipByProductItemID(ctx context.Context, pro
 func (m *mockOwnershipRepo) GetOwnershipHistoryByProductItemID(ctx context.Context, productItemID uuid.UUID) ([]entity.Ownership, error) {
 	return m.getOwnershipHistoryByProductItemIDFn(ctx, productItemID)
 }
+func (m *mockOwnershipRepo) BeginTx(ctx context.Context) *gorm.DB {
+	return &gorm.DB{}
+}
+func (m *mockOwnershipRepo) GetOwnershipByID(ctx context.Context, id uuid.UUID) (*entity.Ownership, error) {
+	if m.GetOwnershipByIDFunc != nil {
+		return m.GetOwnershipByIDFunc(ctx, id)
+	}
+	return nil, nil
+}
+func (m *mockOwnershipRepo) UpdateOwnershipStatusAndEndedAt(ctx context.Context, tx *gorm.DB, id uuid.UUID, status string) error {
+	return nil
+}
+func (m *mockOwnershipRepo) TransferOwnershipTx(ctx context.Context, oldID uuid.UUID, newOwnership *entity.Ownership) error {
+	if m.createOwnershipFn != nil {
+		_, err := m.createOwnershipFn(ctx, nil, newOwnership)
+		return err
+	}
+	return nil
+}
+func (m *mockOwnershipRepo) SearchOwnerships(ctx context.Context, filter repository.SearchFilter) ([]entity.Ownership, int64, error) {
+	return []entity.Ownership{}, 0, nil
+}
+
 
 type mockProductPort struct {
 	findProductByQRFn                func(ctx context.Context, qr string) (uuid.UUID, error)
@@ -51,6 +76,9 @@ func (m *mockProductPort) UpdateOwnershipStatus(ctx context.Context, id uuid.UUI
 }
 func (m *mockProductPort) GetProductItemDetail(_ context.Context, _ uuid.UUID) (string, string, error) {
 	return "Demo Product", "SKU-001", nil
+}
+func (m *mockProductPort) SearchProductItemIDs(ctx context.Context, name string, code string) ([]uuid.UUID, error) {
+	return []uuid.UUID{}, nil
 }
 
 type mockEmailPort struct {
@@ -75,6 +103,9 @@ func (m *mockUserProvider) GetUserEmailByID(ctx context.Context, userID uuid.UUI
 }
 func (m *mockUserProvider) EnsureUserExists(ctx context.Context, email, fullName, phone string) (uuid.UUID, error) {
 	return m.ensureUserExistsFn(ctx, email, fullName, phone)
+}
+func (m *mockUserProvider) SearchUserIDs(ctx context.Context, name string, email string, phone string) ([]uuid.UUID, error) {
+	return []uuid.UUID{}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -310,4 +341,84 @@ func TestGetOwnershipDetail_OwnershipNotFound(t *testing.T) {
 	assert.Nil(t, res)
 	// Thông báo lỗi theo spec: "ownership information not found"
 	assert.EqualError(t, err, "ownership information not found")
+}
+
+// ---------------------------------------------------------------------------
+// CRUD Extensions Tests
+// ---------------------------------------------------------------------------
+
+func TestTransferOwnership(t *testing.T) {
+	ctx := context.Background()
+	oldOwnershipId := uuid.New()
+	ownerId := dummyUserID
+
+	req := dto.TransferOwnershipReq{
+		NewOwnerName:  "Test Transfer",
+		NewOwnerEmail: "new@example.com",
+	}
+
+	t.Run("success transfer", func(t *testing.T) {
+		mockRepo := defaultRepo()
+		mockRepo.GetOwnershipByIDFunc = func(ctx context.Context, id uuid.UUID) (*entity.Ownership, error) {
+			return &entity.Ownership{
+				ID:            oldOwnershipId,
+				ProductItemID: dummyProductID,
+				OwnerID:       ownerId,
+				Status:        entity.OwnershipStatusActive,
+				OwnedAt:       time.Now(),
+			}, nil
+		}
+		mockRepo.createOwnershipFn = func(ctx context.Context, tx *gorm.DB, o *entity.Ownership) (*entity.Ownership, error) {
+			return o, nil
+		}
+
+		mockUser := defaultUserProvider()
+		mockUser.ensureUserExistsFn = func(ctx context.Context, email, fullName, phone string) (uuid.UUID, error) {
+			return uuid.New(), nil // successfully found or created new user
+		}
+
+		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), mockUser)
+		err := s.TransferOwnership(ctx, oldOwnershipId, req, ownerId, "CUSTOMER")
+		assert.NoError(t, err)
+	})
+}
+
+func TestDeleteOwnership(t *testing.T) {
+	ctx := context.Background()
+	oldOwnershipId := uuid.New()
+
+	t.Run("success soft delete", func(t *testing.T) {
+		mockRepo := defaultRepo()
+		mockRepo.GetOwnershipByIDFunc = func(ctx context.Context, id uuid.UUID) (*entity.Ownership, error) {
+			return &entity.Ownership{
+				ID:      oldOwnershipId,
+				OwnerID: dummyUserID,
+				Status:  entity.OwnershipStatusActive,
+			}, nil
+		}
+		
+		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), defaultUserProvider())
+		err := s.DeleteOwnership(ctx, oldOwnershipId, dummyUserID, "CUSTOMER")
+		assert.NoError(t, err)
+	})
+}
+
+func TestSearchOwnerships(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("success list logic", func(t *testing.T) {
+		mockRepo := defaultRepo()
+		mockUser := defaultUserProvider()
+		mockProduct := defaultProductPort()
+
+		s := NewOwnershipService(mockRepo, mockProduct, defaultEmailPort(""), mockUser)
+		res, err := s.SearchOwnerships(ctx, dto.SearchOwnershipsReq{
+			Page: 1, 
+			Limit: 10,
+		}, dummyUserID, "ADMIN")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 1, res.Page)
+	})
 }

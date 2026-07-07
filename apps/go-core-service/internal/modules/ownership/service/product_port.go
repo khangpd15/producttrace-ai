@@ -19,4 +19,7 @@ type IProductService interface {
 
 	// GetProductItemDetail returns basic info to display on the ownership detail page
 	GetProductItemDetail(ctx context.Context, productItemID uuid.UUID) (name string, sku string, err error)
+
+	// SearchProductItemIDs dùng để filter search ownership theo sản phẩm (FR-042)
+	SearchProductItemIDs(ctx context.Context, productName string, productCode string) ([]uuid.UUID, error)
 }

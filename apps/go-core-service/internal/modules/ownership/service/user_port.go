@@ -14,4 +14,7 @@ type IUserInfoProvider interface {
 	// EnsureUserExists is used by Admin flow: searches for user by email.
 	// If not found, it creates a placeholder/guest user account so we can link ownership.
 	EnsureUserExists(ctx context.Context, email, fullName, phone string) (ownerID uuid.UUID, err error)
+
+	// SearchUserIDs dùng để filter search ownership (FR-042)
+	SearchUserIDs(ctx context.Context, name string, email string, phone string) ([]uuid.UUID, error)
 }

@@ -20,6 +20,11 @@ type IOwnershipService interface {
 
 	// UC-P1-OWNER-02: Xem thông tin chi tiết quyền sở hữu
 	GetOwnershipDetail(ctx context.Context, productItemID uuid.UUID) (*dto.OwnershipDetailRes, error)
+	
+	// CRUD Extensions
+	TransferOwnership(ctx context.Context, id uuid.UUID, req dto.TransferOwnershipReq, currentUserID uuid.UUID, role string) error
+	DeleteOwnership(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, role string) error
+	SearchOwnerships(ctx context.Context, req dto.SearchOwnershipsReq, currentUserID uuid.UUID, role string) (*dto.PaginatedOwnershipsRes, error)
 }
 
 type OwnershipService struct {
@@ -200,3 +205,138 @@ func (s *OwnershipService) GetOwnershipDetail(ctx context.Context, productItemID
 		OwnershipHistory: historyItems,
 	}, nil
 }
+
+// ---------------------------------------------------------------------------
+// CRUD Extensions
+// ---------------------------------------------------------------------------
+
+// TransferOwnership (Update)
+func (s *OwnershipService) TransferOwnership(ctx context.Context, id uuid.UUID, req dto.TransferOwnershipReq, currentUserID uuid.UUID, role string) error {
+	oldOwnership, err := s.repo.GetOwnershipByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("ownership information not found")
+		}
+		return err
+	}
+
+	// Authorization
+	if role != "ADMIN" && oldOwnership.OwnerID != currentUserID {
+		return errors.New("access denied")
+	}
+
+	if oldOwnership.Status != entity.OwnershipStatusActive {
+		return errors.New("only active ownerships can be transferred")
+	}
+
+	// Ensure new user exists
+	newOwnerID, err := s.userProvider.EnsureUserExists(ctx, req.NewOwnerEmail, req.NewOwnerName, req.NewOwnerPhone)
+	if err != nil {
+		return err
+	}
+
+	newOwnership := entity.NewOwnership(oldOwnership.ProductItemID, newOwnerID)
+	newOwnership.OwnershipType = "TRANSFERRED"
+
+	return s.repo.TransferOwnershipTx(ctx, oldOwnership.ID, newOwnership)
+}
+
+// DeleteOwnership (Soft Delete)
+func (s *OwnershipService) DeleteOwnership(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, role string) error {
+	oldOwnership, err := s.repo.GetOwnershipByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("ownership information not found")
+		}
+		return err
+	}
+
+	if role != "ADMIN" && oldOwnership.OwnerID != currentUserID {
+		return errors.New("access denied")
+	}
+
+	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, oldOwnership.ID, string(entity.OwnershipStatusRevoked))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SearchOwnerships (List & Filter FR-040 & FR-042)
+func (s *OwnershipService) SearchOwnerships(ctx context.Context, req dto.SearchOwnershipsReq, currentUserID uuid.UUID, role string) (*dto.PaginatedOwnershipsRes, error) {
+	filter := repository.SearchFilter{
+		Page:            req.Page,
+		Limit:           req.Limit,
+		OwnershipStatus: req.OwnershipStatus,
+		Role:            role,
+		CurrentUserID:   currentUserID,
+	}
+
+	// Cross-module search: Users
+	if req.OwnerName != "" || req.OwnerEmail != "" || req.OwnerPhone != "" {
+		ownerIDs, err := s.userProvider.SearchUserIDs(ctx, req.OwnerName, req.OwnerEmail, req.OwnerPhone)
+		if err != nil {
+			return nil, err
+		}
+		if len(ownerIDs) == 0 {
+			return &dto.PaginatedOwnershipsRes{Data: []dto.OwnershipSummaryRes{}, TotalItems: 0, TotalPages: 0, Page: req.Page, Limit: req.Limit}, nil
+		}
+		filter.OwnerIDs = ownerIDs
+	}
+
+	// Cross-module search: Products
+	if req.ProductName != "" || req.ProductCode != "" {
+		itemIDs, err := s.productPort.SearchProductItemIDs(ctx, req.ProductName, req.ProductCode)
+		if err != nil {
+			return nil, err
+		}
+		if len(itemIDs) == 0 {
+			return &dto.PaginatedOwnershipsRes{Data: []dto.OwnershipSummaryRes{}, TotalItems: 0, TotalPages: 0, Page: req.Page, Limit: req.Limit}, nil
+		}
+		filter.ProductItemIDs = itemIDs
+	}
+
+	ownerships, total, err := s.repo.SearchOwnerships(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]dto.OwnershipSummaryRes, len(ownerships))
+	for i, o := range ownerships {
+		results[i] = dto.OwnershipSummaryRes{
+			OwnershipID:      o.ID,
+			ProductID:        o.ProductItemID,
+			Status:           string(o.Status),
+			RegistrationDate: o.OwnedAt,
+		}
+
+		name, email, phone, _ := s.userProvider.GetUserEmailByID(ctx, o.OwnerID)
+		results[i].OwnerName = name
+		results[i].OwnerEmail = email
+		results[i].OwnerPhone = phone
+
+		prodName, prodSKU, _ := s.productPort.GetProductItemDetail(ctx, o.ProductItemID)
+		results[i].ProductName = prodName
+		results[i].ProductSKU = prodSKU
+	}
+
+	limit := req.Limit
+	if limit < 1 {
+		limit = 10
+	}
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+
+	return &dto.PaginatedOwnershipsRes{
+		Data:       results,
+		TotalItems: total,
+		TotalPages: totalPages,
+		Page:       page,
+		Limit:      limit,
+	}, nil
+}
+

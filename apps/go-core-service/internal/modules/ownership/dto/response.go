@@ -38,3 +38,27 @@ type OwnershipDetailRes struct {
 	// --- Lịch sử đăng ký quyền sở hữu (AC-002) ---
 	OwnershipHistory []OwnershipHistoryItem `json:"ownership_history"`
 }
+
+// OwnershipSummaryRes là response rút gọn dùng cho danh sách (FR-040)
+type OwnershipSummaryRes struct {
+	OwnershipID      uuid.UUID `json:"ownership_id"`
+	ProductID        uuid.UUID `json:"product_id"`
+	Status           string    `json:"status"`
+	RegistrationDate time.Time `json:"registration_date"`
+	
+	OwnerName  string `json:"owner_name"`
+	OwnerEmail string `json:"owner_email"`
+	OwnerPhone string `json:"owner_phone"`
+
+	ProductName string `json:"product_name"`
+	ProductSKU  string `json:"product_sku"`
+}
+
+// PaginatedOwnershipsRes chứa danh sách quyền sở hữu kèm thông tin phân trang (FR-040, FR-042)
+type PaginatedOwnershipsRes struct {
+	Data       []OwnershipSummaryRes `json:"data"`
+	TotalItems int64                 `json:"total_items"`
+	TotalPages int                   `json:"total_pages"`
+	Page       int                   `json:"page"`
+	Limit      int                   `json:"limit"`
+}

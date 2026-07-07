@@ -142,3 +142,79 @@ func (h *OwnershipHandler) GetOwnershipDetail(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("Thông tin sở hữu", res))
 }
 
+// ---------------------------------------------------------------------------
+// CRUD Extensions
+// ---------------------------------------------------------------------------
+
+func (h *OwnershipHandler) TransferOwnership(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewValidation("ID không hợp lệ"))
+		return
+	}
+
+	var req dto.TransferOwnershipReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	userID, ok := getUserID(c)
+	if !ok {
+		return // error is handled inside getUserId
+	}
+	role := getRole(c)
+
+	if err := h.ownershipService.TransferOwnership(c.Request.Context(), id, req, userID, role); err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Chuyển quyền sở hữu thành công", nil))
+}
+
+func (h *OwnershipHandler) DeleteOwnership(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewValidation("ID không hợp lệ"))
+		return
+	}
+
+	userID, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	role := getRole(c)
+
+	if err := h.ownershipService.DeleteOwnership(c.Request.Context(), id, userID, role); err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Xóa quyền sở hữu thành công", nil))
+}
+
+func (h *OwnershipHandler) SearchOwnerships(c *gin.Context) {
+	var req dto.SearchOwnershipsReq
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	userID, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	role := getRole(c)
+
+	res, err := h.ownershipService.SearchOwnerships(c.Request.Context(), req, userID, role)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Danh sách quyền sở hữu", res))
+}
+

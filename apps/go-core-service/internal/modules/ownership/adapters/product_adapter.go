@@ -34,3 +34,8 @@ func (a *DummyProductAdapter) GetProductItemDetail(ctx context.Context, productI
 	log.Printf("[ProductAdapter] Faking GetProductItemDetail for ProductItem: %s\n", productItemID)
 	return "Sản phẩm Demo " + productItemID.String()[:8], "SKU-DEMO-12345", nil
 }
+
+func (a *DummyProductAdapter) SearchProductItemIDs(ctx context.Context, productName string, productCode string) ([]uuid.UUID, error) {
+	log.Printf("[ProductAdapter] Faking SearchProductItemIDs for Name: %s, Code: %s\n", productName, productCode)
+	return []uuid.UUID{uuid.New(), uuid.New()}, nil
+}
