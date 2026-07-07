@@ -17,7 +17,7 @@ import (
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 )
 
-func main() {
+func batchWorker() {
 	// Load .env file (chỉ có tác dụng khi chạy local; production dùng biến môi trường thật)
 	if err := godotenv.Load(); err != nil {
 		log.Println("[WARN] .env file not found, using system environment variables")

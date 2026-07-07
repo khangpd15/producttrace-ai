@@ -135,12 +135,12 @@ services:
     networks:
       - app-networks
 
-  batch-worker-service:
+  worker-service:
     build:
       context: ./apps/go-core-service
       dockerfile: Dockerfile.worker
 
-    container_name: batch-worker-service
+    container_name: worker-service
 
     restart: unless-stopped
 

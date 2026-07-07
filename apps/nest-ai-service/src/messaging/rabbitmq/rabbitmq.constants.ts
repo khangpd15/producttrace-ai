@@ -1,24 +1,54 @@
 export const RABBITMQ = {
-  // Fallback URL if not provided in environment variables
-  URL: process.env.RABBITMQ_URL || 'amqp://admin:admin123@localhost:5672/%2F',
 
-  // Exchange configuration
-  EXCHANGE: 'producttrace.events',
-  EXCHANGE_TYPE: 'topic',
+  URL:
+    process.env.RABBITMQ_URL
+    ||
+    'amqp://admin:admin123@localhost:5672/%2F',
 
-  // Queues configurations
+
+  EXCHANGE:
+    'product-trace.events',
+
+
+  DLX_EXCHANGE:
+    'product-trace.dlx',
+
+
+  EXCHANGE_TYPE:
+    'topic',
+
+
   QUEUES: {
-    USER_REGISTERED: 'notification.user.registered',
-    USER_VERIFIED: 'notification.user.verified',
-    PASSWORD_RESET: 'notification.password.reset',
-    PRODUCT_CREATED: 'notification.product.created',
+
+    USER_REGISTERED:
+      'ai.events',
+
+    USER_VERIFIED:
+      'notification.user.verified',
+
+    PASSWORD_RESET:
+      'notification.password.reset',
+
+    PRODUCT_CREATED:
+      'notification.product.created',
+
   },
 
-  // Routing Keys configurations
+
   ROUTING_KEYS: {
-    USER_REGISTERED: 'user.registered',
-    USER_VERIFIED: 'user.verified',
-    PASSWORD_RESET: 'password.reset',
-    PRODUCT_CREATED: 'product.created',
-  },
+
+    USER_REGISTERED:
+      'otp.registered',
+
+    USER_VERIFIED:
+      'otp.verified',
+
+    PASSWORD_RESET:
+      'otp.password_reset_requested',
+
+    PRODUCT_CREATED:
+      'product.created',
+
+  }
+
 };
