@@ -40,7 +40,7 @@ import (
 type batchEventEnvelope struct {
 	Pattern string `json:"pattern"`
 	Data    struct {
-		EventID  string          `json:"eventId"`
+		EventID  string          `json:"event_id"`
 		Payload  json.RawMessage `json:"payload"` // BatchCreateResponse được nest ở đây
 	} `json:"data"`
 }
