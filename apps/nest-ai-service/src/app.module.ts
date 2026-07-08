@@ -7,6 +7,7 @@ import { PasswordResetConsumer } from './messaging/consumers/password-reset.cons
 import { MailModule } from './modules/mail/mail.module';
 import { MockController } from './mock.controller';
 import { AuthModule } from './auth/auth.module';
+import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
     }),
     MailModule,
     AuthModule,
+    SearchModule,
   ],
   controllers: [ProductCreatedConsumer, UserRegisteredConsumer, PasswordResetConsumer, MockController],
 })
