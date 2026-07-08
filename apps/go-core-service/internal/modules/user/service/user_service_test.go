@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -755,4 +756,237 @@ func TestUpdateProfile_GetUserError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, res)
+}
+
+// ---------------------------------------------------------------------------
+// SearchUsers Tests (FR-011)
+// ---------------------------------------------------------------------------
+
+func TestSearchUsers_Success_WithAllFilters(t *testing.T) {
+	user1 := &entity.User{ID: uuid.New(), Email: "john@example.com", FullName: "John Doe", Role: entity.RoleCustomer, Status: entity.StatusActive}
+	user2 := &entity.User{ID: uuid.New(), Email: "john.smith@example.com", FullName: "John Smith", Role: entity.RoleCustomer, Status: entity.StatusActive}
+	usersList := []*entity.User{user1, user2}
+
+	var capturedPage, capturedLimit int
+	var capturedRole, capturedStatus, capturedSearch string
+
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			capturedPage = page
+			capturedLimit = limit
+			capturedRole = role
+			capturedStatus = status
+			capturedSearch = search
+			return usersList, 2, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: "John",
+		Role:    "CUSTOMER",
+		Status:  "ACTIVE",
+		Page:    1,
+		Limit:   10,
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	assert.Equal(t, 1, res.Page)
+	assert.Equal(t, 10, res.Limit)
+	assert.Equal(t, int64(2), res.Total)
+	require.Len(t, res.Items, 2)
+	assert.Equal(t, user1.ID.String(), res.Items[0].ID)
+	assert.Equal(t, user2.ID.String(), res.Items[1].ID)
+
+	assert.Equal(t, 1, capturedPage)
+	assert.Equal(t, 10, capturedLimit)
+	assert.Equal(t, "CUSTOMER", capturedRole)
+	assert.Equal(t, "ACTIVE", capturedStatus)
+	assert.Equal(t, "John", capturedSearch)
+}
+
+func TestSearchUsers_Success_KeywordOnly(t *testing.T) {
+	user1 := &entity.User{ID: uuid.New(), Email: "test@example.com", FullName: "Test User"}
+	usersList := []*entity.User{user1}
+
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			assert.Equal(t, "test", search)
+			assert.Equal(t, "", role)
+			assert.Equal(t, "", status)
+			return usersList, 1, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: "test",
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Items, 1)
+	assert.Equal(t, user1.ID.String(), res.Items[0].ID)
+}
+
+func TestSearchUsers_Success_EmptyResults(t *testing.T) {
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			return []*entity.User{}, 0, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: "nonexistent",
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, int64(0), res.Total)
+	assert.Empty(t, res.Items)
+}
+
+func TestSearchUsers_KeywordTooLong(t *testing.T) {
+	longKeyword := strings.Repeat("a", 256)
+
+	mockRepo := &mockUserRepository{}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: longKeyword,
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, res)
+
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeValidation, appErr.Code)
+}
+
+func TestSearchUsers_DefaultPagination(t *testing.T) {
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			assert.Equal(t, 1, page)
+			assert.Equal(t, 10, limit)
+			return []*entity.User{}, 0, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: "test",
+		Page:    0,
+		Limit:   -5,
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, 1, res.Page)
+	assert.Equal(t, 10, res.Limit)
+}
+
+func TestSearchUsers_RepoError(t *testing.T) {
+	dbErr := errors.New("db connection failure")
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			return nil, 0, dbErr
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Keyword: "test",
+		Page:    1,
+		Limit:   10,
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.Error(t, err)
+	assert.Nil(t, res)
+	assert.Equal(t, dbErr, err)
+}
+
+func TestSearchUsers_ByRoleOnly(t *testing.T) {
+	user1 := &entity.User{ID: uuid.New(), Email: "admin@example.com", FullName: "Admin User", Role: entity.RoleAdmin, Status: entity.StatusActive}
+	usersList := []*entity.User{user1}
+
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			assert.Equal(t, "ADMIN", role)
+			assert.Equal(t, "", status)
+			assert.Equal(t, "", search)
+			return usersList, 1, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Role: "ADMIN",
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Items, 1)
+	assert.Equal(t, "ADMIN", res.Items[0].Role)
+}
+
+func TestSearchUsers_ByStatusOnly(t *testing.T) {
+	user1 := &entity.User{ID: uuid.New(), Email: "active@example.com", FullName: "Active User", Role: entity.RoleCustomer, Status: entity.StatusActive}
+	usersList := []*entity.User{user1}
+
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			assert.Equal(t, "", role)
+			assert.Equal(t, "ACTIVE", status)
+			assert.Equal(t, "", search)
+			return usersList, 1, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{
+		Status: "ACTIVE",
+	}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Items, 1)
+	assert.Equal(t, "ACTIVE", res.Items[0].Status)
+}
+
+func TestSearchUsers_EmptyRequest(t *testing.T) {
+	user1 := &entity.User{ID: uuid.New(), Email: "u1@example.com"}
+	user2 := &entity.User{ID: uuid.New(), Email: "u2@example.com"}
+	usersList := []*entity.User{user1, user2}
+
+	mockRepo := &mockUserRepository{
+		listUsersFn: func(ctx context.Context, page, limit int, role, status, search string) ([]*entity.User, int64, error) {
+			assert.Equal(t, "", role)
+			assert.Equal(t, "", status)
+			assert.Equal(t, "", search)
+			assert.Equal(t, 1, page)
+			assert.Equal(t, 10, limit)
+			return usersList, 2, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	req := &request.SearchUserRequest{}
+	res, err := svc.SearchUsers(context.Background(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, int64(2), res.Total)
+	require.Len(t, res.Items, 2)
 }

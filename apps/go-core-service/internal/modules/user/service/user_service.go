@@ -24,6 +24,7 @@ type UserServiceInterface interface {
 	UpdateUser(ctx context.Context, id string, req *request.UpdateUserRequest) (*response.UserResponse, error)
 	DeleteUser(ctx context.Context, id string) error
 	ListUsers(ctx context.Context, page, limit int, role, status, search string) (*response.UserListResponse, error)
+	SearchUsers(ctx context.Context, req *request.SearchUserRequest) (*response.UserListResponse, error)
 	GetProfile(ctx context.Context, id string) (*response.UserResponse, error)
 	UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
 }
@@ -156,6 +157,40 @@ func (s *UserService) ListUsers(ctx context.Context, page, limit int, role, stat
 	}
 
 	users, total, err := s.userRepo.ListUsers(ctx, page, limit, role, status, search)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*response.UserResponse, len(users))
+	for i, u := range users {
+		items[i] = mapToUserResponse(u)
+	}
+
+	return &response.UserListResponse{
+		Items: items,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	}, nil
+}
+
+func (s *UserService) SearchUsers(ctx context.Context, req *request.SearchUserRequest) (*response.UserListResponse, error) {
+	// Validate keyword length
+	if utf8.RuneCountInString(req.Keyword) > 255 {
+		return nil, apperror.NewValidation("Keyword must be at most 255 characters")
+	}
+
+	// Normalize pagination defaults
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	users, total, err := s.userRepo.ListUsers(ctx, page, limit, req.Role, req.Status, req.Keyword)
 	if err != nil {
 		return nil, err
 	}

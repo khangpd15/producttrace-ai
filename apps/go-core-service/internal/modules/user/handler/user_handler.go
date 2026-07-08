@@ -120,6 +120,22 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("Users list retrieved successfully", res))
 }
 
+func (h *UserHandler) SearchUsers(c *gin.Context) {
+	var req request.SearchUserRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	res, err := h.userService.SearchUsers(c.Request.Context(), &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Search results retrieved successfully", res))
+}
+
 func (h *UserHandler) GetProfile(c *gin.Context) {
 	actorID := c.GetHeader("X-User-Id")
 	if actorID == "" {

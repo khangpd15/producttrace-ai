@@ -65,6 +65,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
+		profileGroup.GET("/search", uh.SearchUsers)
 	}
 
 	// Admin-only management routes (requires ADMIN role)
