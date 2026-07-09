@@ -15,6 +15,7 @@ import (
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
@@ -30,6 +31,8 @@ type RouterDependency struct {
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
+	TraceHandler                 *traceHandler.TraceHandler
+	RateLimiter                  *middleware.RateLimiter
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -55,6 +58,9 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())
 
+	// Static serving of exported certificates/files
+	r.Static("/storage", "./storage")
+
 	api := r.Group("/api")
 
 	SetupAuthRouter(api, deps.AuthHandler)
@@ -66,6 +72,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
+	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	return r
 }
 
@@ -125,6 +132,15 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
 		protectedBatches.GET("/search", bh.SearchBatch)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
+		// UC-P2-BATCH-05: Xem sản phẩm trong lô — Admin, Staff, Dealer
+		protectedBatches.GET("/:id/products", bh.GetBatchProducts)
+
+		// UC-P2-BATCH-06: Xem lịch sử thay đổi lô — chỉ Admin và Staff (không có Dealer/Customer)
+		historyGroup := protectedBatches.Group("")
+		historyGroup.Use(middleware.RoleMiddleware("ADMIN", "STAFF"))
+		{
+			historyGroup.GET("/:id/history", bh.GetBatchHistory)
+		}
 
 		// MANAGER and WAREHOUSE can export batch
 		exportGroup := protectedBatches.Group("")
@@ -278,7 +294,7 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 
 	variants := api.Group("/variants")
 	{
-		variants.GET("/:variant_id/attributes", ah.GetAttributeValuesByVariantID)
+		variants.GET("/:id/attributes", ah.GetAttributeValuesByVariantID)
 
 		protectedVariants := variants.Group("")
 		protectedVariants.Use(middleware.AuthMiddleware(uRepo))
@@ -286,8 +302,26 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 			staffGroup := protectedVariants.Group("")
 			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
 			{
-				staffGroup.POST("/:variant_id/attributes", ah.AssignAttributes)
+				staffGroup.POST("/:id/attributes", ah.AssignAttributes)
 			}
 		}
 	}
+}
+
+// TRACE
+func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
+
+	legacy := api.Group("/trace")
+
+	// Public search with rate limiting
+	legacy.GET("/search", rl.Limit(30, time.Minute), th.Search)
+
+	// Protected export endpoints
+	protected := legacy.Group("")
+	protected.Use(middleware.AuthMiddleware(uRepo))
+	{
+		protected.POST("/export/pdf", th.ExportPDF)
+		protected.POST("/export/excel", th.ExportExcel)
+	}
+
 }
