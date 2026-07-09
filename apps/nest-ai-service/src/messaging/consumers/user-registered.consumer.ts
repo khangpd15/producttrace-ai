@@ -22,7 +22,7 @@ export class UserRegisteredPayload {
 @Injectable()
 export class UserRegisteredConsumer extends BaseConsumer<UserRegisteredPayload> {
   protected readonly logger = new Logger(UserRegisteredConsumer.name);
-  protected readonly queueName = RABBITMQ.QUEUES.USER_REGISTERED;
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
   protected readonly payloadClass = UserRegisteredPayload;
 
   constructor(private readonly emailService: MailService) {

@@ -37,6 +37,9 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
+	// CORS is handled centrally by Kong Gateway (see infra/kong/kong.yml).
+	// We disable Go's CORS middleware here to prevent duplicate CORS headers.
+	// r.Use(middleware.CORSMiddleware())
 	// CORS middleware — must be registered before all routes
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
@@ -75,6 +78,8 @@ func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 		auth.POST("/resend-otp", ah.ResendOTP)
 		auth.POST("/refresh", ah.RefreshToken)
 		auth.POST("/logout", ah.Logout)
+		auth.POST("/forgot-password", ah.ForgotPassword)
+		auth.POST("/reset-password", ah.ResetPassword)
 	}
 }
 
