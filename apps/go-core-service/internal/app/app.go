@@ -2,14 +2,16 @@ package app
 
 import (
 	"database/sql"
-	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
-
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
@@ -21,11 +23,12 @@ import (
 	attributeValueService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/services"
 	categoryRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
+	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	variantService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
-
-	"github.com/redis/go-redis/v9"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 
@@ -39,13 +42,8 @@ import (
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
 	// Cache pkg
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
-
-	"os"
-
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
-	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 )
 
 type App struct {
@@ -53,12 +51,13 @@ type App struct {
 }
 
 // NewApp bootstraps and configures all components and their DI requirements.
-func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publisher, databaseSQL *sql.DB) *App {
-	// Extract underlying sql.DB for the raw SQL queries in the Batch repository
-	_, err := database.DB()
-	if err != nil {
-		log.Fatalf("failed to retrieve sql.DB from GORM client: %v", err)
-	}
+// _ *sql.DB: kept for backward-compatible call sites in cmd/; no longer used
+// because all repositories now use GORM exclusively.
+func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publisher, _ *sql.DB) *App {
+
+	// Audit Log (shared service — inject vào mọi module cần ghi log)
+	auditRepo := auditlog.NewAuditLogRepository(database)
+	auditService := auditlog.NewAuditLogService(auditRepo)
 
 	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
@@ -69,7 +68,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
 
-	batchRepo := batchRepo.NewBatchRepository(databaseSQL)
+	bRepo := batchRepo.NewBatchRepository(database)
 
 	// Product module
 	pRepo := productRepo.NewProductRepository(database)
@@ -100,6 +99,9 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
+
+	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
+	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,

@@ -18,16 +18,16 @@ type ProductItem struct {
 	VerificationToken string     `gorm:"type:varchar"`
 	// default:"IN_STOCK" — GORM sẽ dùng giá trị này khi Status = "" (zero value của string).
 	// Bắt buộc vì DB có CHECK constraint chk_product_items_status không cho phép empty string.
-	Status            string     `gorm:"type:varchar;default:IN_STOCK"`
-	ProducedAt        *time.Time
-	PackedAt          *time.Time
-	SoldAt            *time.Time
-	RegisteredAt      *time.Time
-	LastScannedAt     *time.Time
-	MetadataJSON      datatypes.JSON `gorm:"type:jsonb"`
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	IsDeleted         bool `gorm:"default:false"`
+	Status        string `gorm:"type:varchar;default:IN_STOCK"`
+	ProducedAt    *time.Time
+	PackedAt      *time.Time
+	SoldAt        *time.Time
+	RegisteredAt  *time.Time
+	LastScannedAt *time.Time
+	MetadataJSON  datatypes.JSON `gorm:"type:jsonb"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	IsDeleted     bool `gorm:"default:false"`
 
 	// Relations
 	Variant entities.ProductVariant `gorm:"foreignKey:VariantID"`

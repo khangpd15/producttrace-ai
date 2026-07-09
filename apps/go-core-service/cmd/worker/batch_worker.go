@@ -17,7 +17,7 @@ import (
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 )
 
-func main() {
+func batchWorker() {
 	// Load .env file (chỉ có tác dụng khi chạy local; production dùng biến môi trường thật)
 	if err := godotenv.Load(); err != nil {
 		log.Println("[WARN] .env file not found, using system environment variables")
@@ -26,12 +26,6 @@ func main() {
 	// Connect to PostgreSQL (GORM client)
 	databasePostgres := database.ConnectPostgres()
 	log.Println("PostgreSQL GORM connected successfully")
-
-	databasePostgresSQL, err := database.ConnectPostgresSQL()
-	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
-	}
-	log.Println("PostgreSQL SQL connected successfully")
 
 	// Setup RabbitMQ Manager
 	rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -50,7 +44,7 @@ func main() {
 
 	// InitializeRepositories
 	repo := repositories.NewProductItemRepository(databasePostgres)
-	batchRepo := batchRepo.NewBatchRepository(databasePostgresSQL)
+	batchRepo := batchRepo.NewBatchRepository(databasePostgres)
 	variantRepo := variantRepo.NewProductVariantRepository(databasePostgres)
 	service := services.NewProductItemService(repo, batchRepo, variantRepo, cons)
 

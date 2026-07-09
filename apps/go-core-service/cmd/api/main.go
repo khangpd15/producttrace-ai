@@ -101,8 +101,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	defer mgr.Close()
-	log.Println("RabbitMQ manager initialized successfully")
 
 	log.Printf("Go service is running on port %s\n", port)
 	if err := appli.Router.Run(":" + port); err != nil {

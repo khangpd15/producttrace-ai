@@ -37,5 +37,8 @@ const (
 
 	// Notification routing keys
 	NotificationCreatedRK = "notification.created"
-	OTPGeneratedRK        = "otp.generated"
+	OTPRegisterUserRK     = "otp.registered"
+	OTPVerifiedRK   = "otp.verified"
+	OTPForgotRK     = "otp.forgot"
+
 )

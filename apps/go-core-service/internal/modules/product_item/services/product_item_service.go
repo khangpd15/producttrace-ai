@@ -17,6 +17,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/consumer"
 	batchDTO "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/mapper"
@@ -40,7 +41,7 @@ import (
 type batchEventEnvelope struct {
 	Pattern string `json:"pattern"`
 	Data    struct {
-		EventID  string          `json:"eventId"`
+		EventID  string          `json:"event_id"`
 		Payload  json.RawMessage `json:"payload"` // BatchCreateResponse được nest ở đây
 	} `json:"data"`
 }
@@ -48,6 +49,8 @@ type batchEventEnvelope struct {
 type ProductItemService interface {
 	CreateProductItem(ctx context.Context, batch *batchDTO.BatchCreateResponse) (*response.ProductItemCreateResponse, error)
 	ConsumeBatchEvent(ctx context.Context) error
+	GetProductItemList(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error)
+	GetProductItemDetail(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error)
 }
 
 type productItemService struct {
@@ -208,4 +211,18 @@ func (s *productItemService) ConsumeBatchEvent(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *productItemService) GetProductItemList(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = 10
+	}
+	return s.repo.FindAllWithFilter(ctx, req)
+}
+
+func (s *productItemService) GetProductItemDetail(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error) {
+	return s.repo.FindByItemCodeWithEvents(ctx, itemCode)
 }
