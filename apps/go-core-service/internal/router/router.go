@@ -1,6 +1,9 @@
 package router
 
 import (
+	"time"
+
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
@@ -8,17 +11,24 @@ import (
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
+	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
+	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
 type RouterDependency struct {
-	BatchHandler    *batchHandler.BatchHandler
-	AuthHandler     *authHandler.AuthenHandler
-	UserHandler     *userHandler.UserHandler
-	ProductHandler  *productHandler.ProductHandler
-	UserRepo        userRepo.UserRepositoryInterface
-	LocationHandler *locationHandler.LocationHandler
+	BatchHandler          *batchHandler.BatchHandler
+	AuthHandler           *authHandler.AuthenHandler
+	UserHandler           *userHandler.UserHandler
+	ProductHandler        *productHandler.ProductHandler
+	UserRepo              userRepo.UserRepositoryInterface
+	LocationHandler       *locationHandler.LocationHandler
+	ProductVariantHandler *variantHandler.ProductVariantHandler // new
+	ProductAttributeHandler *attributeHandler.AttributeHandler // new
+	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -30,6 +40,14 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// CORS is handled centrally by Kong Gateway (see infra/kong/kong.yml).
 	// We disable Go's CORS middleware here to prevent duplicate CORS headers.
 	// r.Use(middleware.CORSMiddleware())
+	// CORS middleware — must be registered before all routes
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// Apply global Recovery, RequestID, and Logger middlewares
 	r.Use(middleware.RecoveryMiddleware())
@@ -42,7 +60,11 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
+	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
+	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo) // new
+	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo) // new
+	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	return r
 }
 
@@ -90,21 +112,34 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 	batches := api.Group("/batches")
 
 	// Public batch detail route (for anonymous QR scanning)
-	batches.GET("/:batch_code", bh.GetBatchDetail)
+	batches.GET("/:id", bh.GetBatchDetail)
 
 	// Protected batch routes
 	protectedBatches := batches.Group("")
 	protectedBatches.Use(middleware.AuthMiddleware(uRepo))
 	{
-		// ADMIN and MANUFACTURER roles can view list, export QR PDF, and create batches
+		// ALL AUTHENTICATED USERS can view list and events
+		protectedBatches.GET("", bh.GetBatchList)
+		// Search batches — UC-P2-BATCH-03: GET /api/v1/batches/search
+		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
+		protectedBatches.GET("/search", bh.SearchBatch)
+		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
+
+		// MANAGER and WAREHOUSE can export batch
+		exportGroup := protectedBatches.Group("")
+		exportGroup.Use(middleware.RoleMiddleware("MANAGER", "WAREHOUSE", "ADMIN")) // usually admin has all access
+		{
+			exportGroup.POST("/:id/export", bh.ExportBatch)
+		}
+
+		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")
 		staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
 		{
-			staffGroup.GET("", bh.GetBatchList)
-			staffGroup.GET("/export-qr/:batch_id", bh.ExportQR)
+			staffGroup.GET("/export-qr/:id", bh.ExportQR)
 			staffGroup.POST("", bh.CreateBatch)
-			staffGroup.PATCH("/:batch_id/status", bh.UpdateBatchStatus)
-			staffGroup.DELETE("/:batch_id", bh.DeleteBatch)
+			staffGroup.PATCH("/:id/status", bh.UpdateBatchStatus)
+			staffGroup.DELETE("/:id", bh.DeleteBatch)
 		}
 	}
 }
@@ -138,20 +173,120 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 		}
 	}
 }
+
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
 		// Public endpoints to browse locations
-		locations.GET("/", locationHandler.GetAll)
+		locations.GET("", locationHandler.GetAll)
 		locations.GET("/:id", locationHandler.GetByID)
 
 		// Admin-only management routes (requires ADMIN role)
 		adminGroup := locations.Group("")
 		adminGroup.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
 		{
-			adminGroup.POST("/", locationHandler.Create)
+			adminGroup.POST("", locationHandler.Create)
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
+		}
+	}
+}
+
+// PRODUCT VARIANT
+func SetupProductVariantRouter(api *gin.RouterGroup, vh *variantHandler.ProductVariantHandler, uRepo userRepo.UserRepositoryInterface) {
+	variants := api.Group("/variants")
+	{
+		// Public endpoints to browse variants
+		variants.GET("/:id", vh.GetVariantByID)
+		variants.GET("/product/:product_id", vh.GetVariantsByProductID)
+
+		// Protected variant management routes
+		protectedVariants := variants.Group("")
+		protectedVariants.Use(middleware.AuthMiddleware(uRepo))
+		{
+			// ADMIN or MANUFACTURER can update variants
+			staffGroup := protectedVariants.Group("")
+			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+			{
+				staffGroup.PUT("/:id", vh.UpdateVariant)
+			}
+
+			// Only ADMIN can delete variants
+			adminGroup := protectedVariants.Group("")
+			adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+			{
+				adminGroup.DELETE("/:id", vh.DeleteVariant)
+			}
+		}
+	}
+}
+
+// PRODUCT ATTRIBUTE
+func SetupProductAttributeRouter(api *gin.RouterGroup, ah *attributeHandler.AttributeHandler, uRepo userRepo.UserRepositoryInterface) {
+	attributes := api.Group("/attributes")
+	{
+		// Public endpoints to browse attributes
+		attributes.GET("", ah.ListAttributes)
+		attributes.GET("/:id", ah.GetAttributeByID)
+
+		// Protected attribute management routes
+		protectedAttributes := attributes.Group("")
+		protectedAttributes.Use(middleware.AuthMiddleware(uRepo))
+		{
+			// ADMIN or MANUFACTURER can create or update attributes
+			staffGroup := protectedAttributes.Group("")
+			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+			{
+				staffGroup.POST("", ah.CreateAttribute)
+				staffGroup.PUT("/:id", ah.UpdateAttribute)
+			}
+
+			// Only ADMIN can delete attributes
+			adminGroup := protectedAttributes.Group("")
+			adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+			{
+				adminGroup.DELETE("/:id", ah.DeleteAttribute)
+			}
+		}
+	}
+}
+
+// PRODUCT ATTRIBUTE VALUE
+func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHandler.AttributeValueHandler, uRepo userRepo.UserRepositoryInterface) {
+	values := api.Group("/attribute-values")
+	{
+		values.GET("", ah.ListAllAttributeValues)
+		values.GET("/:id", ah.GetAttributeValueByID)
+
+		protectedValues := values.Group("")
+		protectedValues.Use(middleware.AuthMiddleware(uRepo))
+		{
+			staffGroup := protectedValues.Group("")
+			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+			{
+				staffGroup.PUT("/:id", ah.UpdateAttributeValue)
+			}
+
+			adminGroup := protectedValues.Group("")
+			adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+			{
+				adminGroup.DELETE("/:id", ah.DeleteAttributeValue)
+			}
+		}
+	}
+
+	variants := api.Group("/variants")
+	{
+		variants.GET("/:variant_id/attributes", ah.GetAttributeValuesByVariantID)
+
+		protectedVariants := variants.Group("")
+		protectedVariants.Use(middleware.AuthMiddleware(uRepo))
+		{
+			staffGroup := protectedVariants.Group("")
+			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
+			{
+				staffGroup.POST("/:variant_id/attributes", ah.AssignAttributes)
+			}
 		}
 	}
 }

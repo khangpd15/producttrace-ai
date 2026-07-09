@@ -63,23 +63,3 @@ func ToVariantResponse(variant *variantEntities.ProductVariant) response.Variant
 		UpdatedAt: variant.UpdatedAt,
 	}
 }
-
-func ToListProductResponse(products []entities.Product, total int64, page, limit int) *response.ListProductResponse {
-	data := make([]response.ProductResponse, len(products))
-	for i, p := range products {
-		data[i] = *ToProductResponse(&p)
-	}
-
-	totalPages := int(total) / limit
-	if int(total)%limit != 0 {
-		totalPages++
-	}
-
-	return &response.ListProductResponse{
-		Data:       data,
-		Total:      total,
-		Page:       page,
-		Limit:      limit,
-		TotalPages: totalPages,
-	}
-}
