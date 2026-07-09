@@ -1,18 +1,23 @@
 package repositories
 
 import (
-	"context"
-
-	"github.com/google/uuid"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
-	"gorm.io/gorm"
+    "context"
+    "github.com/google/uuid"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
+    "gorm.io/gorm"
 )
 
 type ProductVariantRepository interface {
-	Create(ctx context.Context, variant *entities.ProductVariant) error
-	ExistsBySKU(ctx context.Context, sku string) (bool, error)
-	ExistsByBarcode(ctx context.Context, barcode string) (bool, error)
-	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
+    Create(ctx context.Context, variant *entities.ProductVariant) error
+    Update(ctx context.Context, variant *entities.ProductVariant) error
+    FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductVariant, error)
+    FindByProductID(ctx context.Context, productID uuid.UUID) ([]entities.ProductVariant, error)
+    SoftDelete(ctx context.Context, id uuid.UUID) error
+    ExistsBySKU(ctx context.Context, sku string) (bool, error)
+    ExistsByBarcode(ctx context.Context, barcode string) (bool, error)
+    ExistsBySKUExcludeID(ctx context.Context, sku string, id uuid.UUID) (bool, error)
+    ExistsByBarcodeExcludeID(ctx context.Context, barcode string, id uuid.UUID) (bool, error)
+    ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 type txKey struct{}
@@ -40,6 +45,36 @@ func (r *productVariantRepository) Create(ctx context.Context, variant *entities
 	return GetDB(ctx, r.db).Create(variant).Error
 }
 
+func (r *productVariantRepository) Update(ctx context.Context, variant *entities.ProductVariant) error {
+    return GetDB(ctx, r.db).Save(variant).Error
+}
+
+func (r *productVariantRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductVariant, error) {
+    var variant entities.ProductVariant
+    err := GetDB(ctx, r.db).
+        Where("id = ? AND is_deleted = false", id).
+        First(&variant).Error
+    if err != nil {
+        return nil, err
+    }
+    return &variant, nil
+}
+
+func (r *productVariantRepository) FindByProductID(ctx context.Context, productID uuid.UUID) ([]entities.ProductVariant, error) {
+    var variants []entities.ProductVariant
+    err := GetDB(ctx, r.db).
+        Where("product_id = ? AND is_deleted = false", productID).
+        Find(&variants).Error
+    return variants, err
+}
+
+func (r *productVariantRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
+    return GetDB(ctx, r.db).
+        Model(&entities.ProductVariant{}).
+        Where("id = ?", id).
+        Update("is_deleted", true).Error
+}
+
 func (r *productVariantRepository) ExistsBySKU(ctx context.Context, sku string) (bool, error) {
 	var count int64
 	err := GetDB(ctx, r.db).
@@ -58,8 +93,24 @@ func (r *productVariantRepository) ExistsByBarcode(ctx context.Context, barcode 
 	return count > 0, err
 }
 
-// ExistsByID kiểm tra variant có tồn tại và chưa bị xóa mềm.
-// Dùng COUNT(1) qua GORM để tránh SELECT *.
+func (r *productVariantRepository) ExistsBySKUExcludeID(ctx context.Context, sku string, id uuid.UUID) (bool, error) {
+    var count int64
+    err := GetDB(ctx, r.db).
+        Model(&entities.ProductVariant{}).
+        Where("sku = ? AND id != ? AND is_deleted = false", sku, id).
+        Count(&count).Error
+    return count > 0, err
+}
+
+func (r *productVariantRepository) ExistsByBarcodeExcludeID(ctx context.Context, barcode string, id uuid.UUID) (bool, error) {
+    var count int64
+    err := GetDB(ctx, r.db).
+        Model(&entities.ProductVariant{}).
+        Where("barcode = ? AND id != ? AND is_deleted = false", barcode, id).
+        Count(&count).Error
+    return count > 0, err
+}
+
 func (r *productVariantRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
 	var count int64
 	err := GetDB(ctx, r.db).
