@@ -115,6 +115,9 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 	{
 		// ALL AUTHENTICATED USERS can view list and events
 		protectedBatches.GET("", bh.GetBatchList)
+		// Search batches — UC-P2-BATCH-03: GET /api/v1/batches/search
+		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
+		protectedBatches.GET("/search", bh.SearchBatch)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
 
 		// MANAGER and WAREHOUSE can export batch

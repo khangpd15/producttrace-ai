@@ -40,9 +40,9 @@ var validFilterStatuses = map[string]struct{}{
 }
 
 type BatchService interface {
-	// GetBatchList trả về danh sách batch với filter động.
-	// userRole được dùng để thực thi BR-FIL-002: chỉ Admin xem được DRAFT.
-	GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error)
+	GetBatchList(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error)
+	// SearchBatches thực hiện tìm kiếm gần đúng theo UC-P2-BATCH-03.
+	SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
@@ -113,6 +113,22 @@ func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchL
 	}
 
 	return sb.repo.FindAllWithFilter(ctx, req)
+}
+
+// SearchBatches validate input rồi delegate xuống repository.
+// Business rules:
+//   - keyword tối đa 100 ký tự (ERR-001)
+//   - sortOrder được normalize thành uppercase trước khi truyền xuống repo
+func (sb *batchService) SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error) {
+	// Validate keyword length (ERR-001)
+	if len(req.Keyword) > 100 {
+		return nil, apperror.NewBadRequest("Search keyword is too long. Max limit is 100 characters.")
+	}
+
+	// Normalize sortOrder để đảm bảo whitelist check trong repo hoạt động chính xác
+	req.SortOrder = strings.ToUpper(strings.TrimSpace(req.SortOrder))
+
+	return sb.repo.SearchBatches(ctx, req)
 }
 
 func (sb *batchService) GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {

@@ -21,6 +21,8 @@ import (
 type BatchRepository interface {
 	// --- Read ---
 	FindAllWithFilter(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error)
+	// SearchBatches thực hiện tìm kiếm gần đúng (ILIKE) theo UC-P2-BATCH-03.
+	SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error)
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
 	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
@@ -150,6 +152,124 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 		Items: items,
 		Meta:  meta,
 		Stats: stats,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Search (UC-P2-BATCH-03)
+// ---------------------------------------------------------------------------
+
+// searchSortFields là whitelist để tránh SQL Injection khi build ORDER BY động.
+var searchSortFields = map[string]string{
+	"createdAt": "b.created_at",
+	"batchCode": "b.batch_code",
+}
+
+// SearchBatches thực hiện tìm kiếm gần đúng (ILIKE) theo keyword trên các trường
+// batch_code, manufacturer_name và product_variant.name.
+//
+// Các điều kiện filter chỉ được apply khi client truyền vào (không sinh WHERE dư thừa).
+// sortBy và sortOrder được validate qua whitelist để đảm bảo an toàn.
+func (r *batchRepository) SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error) {
+	query := r.db.WithContext(ctx).
+		Table("batches b").
+		Joins("JOIN product_variants pv ON pv.id = b.variant_id").
+		Joins("JOIN products p ON p.id = pv.product_id").
+		Where("b.is_deleted = false")
+
+	// Apply keyword filter (ILIKE — case-insensitive, BR-SEA-002)
+	if req.Keyword != "" {
+		kw := "%" + req.Keyword + "%"
+		query = query.Where(
+			"b.batch_code ILIKE ? OR pv.name ILIKE ? OR b.manufacturer_name ILIKE ?",
+			kw, kw, kw,
+		)
+	}
+
+	// Đếm tổng số bản ghi thỏa điều kiện (không limit/offset)
+	var totalRecords int64
+	if err := query.Count(&totalRecords).Error; err != nil {
+		return nil, apperror.WrapDBError(err, "batch")
+	}
+
+	// Tính pagination
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+	totalPages := int((totalRecords + int64(pageSize) - 1) / int64(pageSize))
+	if totalPages == 0 && totalRecords > 0 {
+		totalPages = 1
+	}
+
+	// Build ORDER BY — validate sortBy qua whitelist để tránh SQL Injection
+	sortCol, ok := searchSortFields[req.SortBy]
+	if !ok {
+		sortCol = "b.created_at"
+	}
+	sortDir := "DESC"
+	if strings.EqualFold(req.SortOrder, "ASC") {
+		sortDir = "ASC"
+	}
+	orderClause := sortCol + " " + sortDir
+
+	// Scan vào struct tạm để tránh conflict tên cột
+	type searchRow struct {
+		ID              uuid.UUID
+		BatchCode       string
+		ProductName     string
+		ManufactureDate *time.Time
+		Quantity        int
+		Status          string
+		CreatedAt       time.Time
+	}
+
+	var rows []searchRow
+	err := query.
+		Select(`
+			b.id,
+			b.batch_code,
+			p.name  AS product_name,
+			b.manufacture_date,
+			b.quantity,
+			b.status,
+			b.created_at
+		`).
+		Order(orderClause).
+		Limit(pageSize).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "batch")
+	}
+
+	// Map sang DTO
+	items := make([]response.SearchBatchItemDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, response.SearchBatchItemDTO{
+			BatchID:           row.ID,
+			BatchCode:         row.BatchCode,
+			ProductName:       row.ProductName,
+			ManufacturingDate: row.ManufactureDate,
+			Quantity:          row.Quantity,
+			Status:            row.Status,
+			CreatedAt:         row.CreatedAt,
+		})
+	}
+
+	return &response.SearchBatchResponse{
+		Items: items,
+		Pagination: response.SearchBatchPaginationDTO{
+			CurrentPage:  page,
+			PageSize:     pageSize,
+			TotalRecords: int(totalRecords),
+			TotalPages:   totalPages,
+		},
 	}, nil
 }
 

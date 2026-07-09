@@ -43,6 +43,25 @@ func (hb *BatchHandler) GetBatchList(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("get batch list successfully", batches))
 }
 
+// SearchBatch xử lý GET /api/v1/batches/search theo UC-P2-BATCH-03.
+// Handler chịu trách nhiệm: parse query params → validate → gọi service → trả response.
+// Không chứa business logic.
+func (hb *BatchHandler) SearchBatch(c *gin.Context) {
+	var req request.SearchBatchRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	result, err := hb.service.SearchBatches(c.Request.Context(), &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("search batches successfully", result))
+}
+
 func (hb *BatchHandler) GetBatchDetail(c *gin.Context) {
 	batchCode := c.Param("id")
 	if batchCode == "" {
