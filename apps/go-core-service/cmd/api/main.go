@@ -16,7 +16,6 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
-
 )
 
 type HealthResponse struct {
@@ -102,13 +101,10 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	defer mgr.Close()
-	log.Println("RabbitMQ manager initialized successfully")
 
 	log.Printf("Go service is running on port %s\n", port)
 	if err := appli.Router.Run(":" + port); err != nil {
 		log.Fatalf("failed to start server: %v \n", err)
 	}
 
-	
 }

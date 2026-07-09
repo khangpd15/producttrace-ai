@@ -2,9 +2,7 @@ package repositories
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -12,290 +10,346 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	"gorm.io/gorm"
 )
 
+// BatchRepository định nghĩa toàn bộ contract data-access cho Batch.
+// Tất cả implementations đều dùng GORM — không còn raw *sql.DB.
 type BatchRepository interface {
+	// --- Read ---
 	FindAll(ctx context.Context) ([]*response.BatchListResponse, error)
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
-	Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	// FindByID trả về entity đầy đủ (kể cả đã soft-delete) để service tự kiểm tra is_deleted.
+	FindByID(ctx context.Context, id uuid.UUID) (*entities.Batch, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
+
+	// --- Write ---
+	// Create sinh batch code tự động (advisory lock) và insert vào DB.
+	Create(ctx context.Context, req *request.CreateBatchRequest, currentUserID uuid.UUID) (*response.BatchCreateResponse, error)
+	// UpdateStatus cập nhật duy nhất field status; GORM tự set updated_at.
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
+	// SoftDelete set is_deleted = true; GORM tự set updated_at.
+	SoftDelete(ctx context.Context, id uuid.UUID) error
+
+	// --- Constraint checks (dùng trước khi delete) ---
+	ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error)
+	ExistsEvents(ctx context.Context, batchID uuid.UUID) (bool, error)
 }
 
 type batchRepository struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewBatchRepository(db *sql.DB) BatchRepository {
-	return &batchRepository{
-		db: db,
+// NewBatchRepository tạo BatchRepository backed bởi GORM.
+func NewBatchRepository(db *gorm.DB) BatchRepository {
+	return &batchRepository{db: db}
+}
+
+// ---------------------------------------------------------------------------
+// Read methods
+// ---------------------------------------------------------------------------
+
+// FindAll trả về danh sách batch chưa bị xóa mềm, kèm product_id từ variant.
+func (r *batchRepository) FindAll(ctx context.Context) ([]*response.BatchListResponse, error) {
+	type row struct {
+		BatchCode  string
+		ProductID  uuid.UUID
+		Status     string
+		CreatedAt  time.Time
+		ExpiryDate *time.Time
 	}
-}
 
-func (rb *batchRepository) FindAll(ctx context.Context) ([]*response.BatchListResponse, error) {
-	batches := make([]*response.BatchListResponse, 0)
-	sqlQuery := `select b.batch_code, pv.product_id, b.status, b.created_at,  b.expiry_date from batches b 
-				join product_variants pv on pv.id = b.variant_id
-				where b.is_deleted = FALSE`
-	rows, err := rb.db.QueryContext(ctx, sqlQuery)
-
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Table("batches b").
+		Select("b.batch_code, pv.product_id, b.status, b.created_at, b.expiry_date").
+		Joins("JOIN product_variants pv ON pv.id = b.variant_id").
+		Where("b.is_deleted = false").
+		Scan(&rows).Error
 	if err != nil {
 		return nil, apperror.WrapDBError(err, "batch")
 	}
 
-	defer rows.Close()
-
-	for rows.Next() {
-		var batch response.BatchListResponse
-		err := rows.Scan(&batch.BatchCode, &batch.ProductID, &batch.Status, &batch.CreatedAt, &batch.ExpiryDate)
-		if err != nil {
-			return nil, apperror.WrapDBError(err, "batch")
-		}
-		batches = append(batches, &batch)
+	result := make([]*response.BatchListResponse, 0, len(rows))
+	for _, rw := range rows {
+		result = append(result, &response.BatchListResponse{
+			BatchCode:  rw.BatchCode,
+			ProductID:  rw.ProductID,
+			Status:     rw.Status,
+			CreatedAt:  rw.CreatedAt,
+			ExpiryDate: rw.ExpiryDate,
+		})
 	}
-
-	return batches, rows.Err()
+	return result, nil
 }
 
-func (rb *batchRepository) FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
-	sqlQuery := `
-		SELECT
-			b.id,
-			b.batch_code,
-			b.manufacture_date,
-			b.expiry_date,
-			b.imported_at,
-			b.manufacturer_name,
-			b.supplier_name,
-			b.origin_country,
-			b.production_place,
-			b.quantity,
-			b.status,
-			b.created_at,
-			b.updated_at,
-			pv.id     AS variant_id,
-			pv.sku    AS variant_sku,
-			pv.name   AS variant_name,
+// FindByCode trả về chi tiết batch theo batch_code, kèm variant và product.
+func (r *batchRepository) FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
+	return r.findDetail(ctx, "b.batch_code = ?", batchCode)
+}
+
+// FindByBatchID trả về chi tiết batch theo UUID, kèm variant và product.
+func (r *batchRepository) FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error) {
+	return r.findDetail(ctx, "b.id = ?", batchID)
+}
+
+// findDetail là helper dùng chung cho FindByCode và FindByBatchID.
+func (r *batchRepository) findDetail(ctx context.Context, condition string, value any) (*response.BatchDetailResponse, error) {
+	type row struct {
+		ID               uuid.UUID
+		BatchCode        string
+		ManufactureDate  *time.Time
+		ExpiryDate       *time.Time
+		ImportedAt       *time.Time
+		ManufacturerName *string
+		SupplierName     *string
+		OriginCountry    *string
+		ProductionPlace  *string
+		Quantity         int
+		Status           string
+		CreatedAt        time.Time
+		UpdatedAt        time.Time
+		VariantID        uuid.UUID
+		VariantSKU       string
+		VariantName      string
+		VariantBarcode   *string
+		ProductID        uuid.UUID
+		ProductName      string
+	}
+
+	var r2 row
+	err := r.db.WithContext(ctx).
+		Table("batches b").
+		Select(`
+			b.id, b.batch_code,
+			b.manufacture_date, b.expiry_date, b.imported_at,
+			b.manufacturer_name, b.supplier_name, b.origin_country, b.production_place,
+			b.quantity, b.status, b.created_at, b.updated_at,
+			pv.id   AS variant_id,
+			pv.sku  AS variant_sku,
+			pv.name AS variant_name,
 			pv.barcode AS variant_barcode,
-			p.id      AS product_id,
-			p.name    AS product_name
-		FROM batches b
-			JOIN product_variants pv ON pv.id = b.variant_id
-			JOIN products p ON p.id = pv.product_id
-		WHERE b.batch_code = $1
-		  AND b.is_deleted = FALSE
-		LIMIT 1`
-
-	row := rb.db.QueryRowContext(ctx, sqlQuery, batchCode)
-
-	var detail response.BatchDetailResponse
-	err := row.Scan(
-		&detail.ID,
-		&detail.BatchCode,
-		&detail.ManufactureDate,
-		&detail.ExpiryDate,
-		&detail.ImportedAt,
-		&detail.ManufacturerName,
-		&detail.SupplierName,
-		&detail.OriginCountry,
-		&detail.ProductionPlace,
-		&detail.Quantity,
-		&detail.Status,
-		&detail.CreatedAt,
-		&detail.UpdatedAt,
-		&detail.Variant.VariantID,
-		&detail.Variant.SKU,
-		&detail.Variant.Name,
-		&detail.Variant.Barcode,
-		&detail.Product.ProductID,
-		&detail.Product.ProductName,
-	)
+			p.id    AS product_id,
+			p.name  AS product_name
+		`).
+		Joins("JOIN product_variants pv ON pv.id = b.variant_id").
+		Joins("JOIN products p ON p.id = pv.product_id").
+		Where(condition, value).
+		Where("b.is_deleted = false").
+		Limit(1).
+		Scan(&r2).Error
 	if err != nil {
-		log.Println(err)
 		return nil, apperror.WrapDBError(err, "batch")
 	}
-
-	return &detail, nil
-}
-
-func (rb *batchRepository) FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error) {
-	sqlQuery := `
-		SELECT
-			b.id,
-			b.batch_code,
-			b.manufacture_date,
-			b.expiry_date,
-			b.imported_at,
-			b.manufacturer_name,
-			b.supplier_name,
-			b.origin_country,
-			b.production_place,
-			b.quantity,
-			b.status,
-			b.created_at,
-			b.updated_at,
-			pv.id     AS variant_id,
-			pv.sku    AS variant_sku,
-			pv.name   AS variant_name,
-			pv.barcode AS variant_barcode,
-			p.id      AS product_id,
-			p.name    AS product_name
-		FROM batches b
-			JOIN product_variants pv ON pv.id = b.variant_id
-			JOIN products p ON p.id = pv.product_id
-		WHERE b.id = $1
-		  AND b.is_deleted = FALSE
-		LIMIT 1`
-
-	row := rb.db.QueryRowContext(ctx, sqlQuery, batchID)
-
-	var detail response.BatchDetailResponse
-	err := row.Scan(
-		&detail.ID,
-		&detail.BatchCode,
-		&detail.ManufactureDate,
-		&detail.ExpiryDate,
-		&detail.ImportedAt,
-		&detail.ManufacturerName,
-		&detail.SupplierName,
-		&detail.OriginCountry,
-		&detail.ProductionPlace,
-		&detail.Quantity,
-		&detail.Status,
-		&detail.CreatedAt,
-		&detail.UpdatedAt,
-		&detail.Variant.VariantID,
-		&detail.Variant.SKU,
-		&detail.Variant.Name,
-		&detail.Variant.Barcode,
-		&detail.Product.ProductID,
-		&detail.Product.ProductName,
-	)
-	if err != nil {
-		log.Println(err)
-		return nil, apperror.WrapDBError(err, "batch")
+	if r2.ID == (uuid.UUID{}) {
+		return nil, apperror.WrapDBError(gorm.ErrRecordNotFound, "batch")
 	}
 
-	return &detail, nil
+	return &response.BatchDetailResponse{
+		ID:               r2.ID,
+		BatchCode:        r2.BatchCode,
+		ManufactureDate:  r2.ManufactureDate,
+		ExpiryDate:       r2.ExpiryDate,
+		ImportedAt:       r2.ImportedAt,
+		ManufacturerName: r2.ManufacturerName,
+		SupplierName:     r2.SupplierName,
+		OriginCountry:    r2.OriginCountry,
+		ProductionPlace:  r2.ProductionPlace,
+		Quantity:         r2.Quantity,
+		Status:           r2.Status,
+		CreatedAt:        r2.CreatedAt,
+		UpdatedAt:        r2.UpdatedAt,
+		Variant: response.BatchDetailVariantResponse{
+			VariantID: r2.VariantID,
+			SKU:       r2.VariantSKU,
+			Name:      r2.VariantName,
+			Barcode:   r2.VariantBarcode,
+		},
+		Product: response.BatchDetailProductResponse{
+			ProductID:   r2.ProductID,
+			ProductName: r2.ProductName,
+		},
+	}, nil
 }
+
+// FindByID trả về entity Batch (kể cả đã soft-delete) để service kiểm tra is_deleted.
+func (r *batchRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.Batch, error) {
+	var batch entities.Batch
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&batch).Error
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "batch")
+	}
+	return &batch, nil
+}
+
+// ExistsByID kiểm tra batch tồn tại và chưa bị xóa mềm.
+func (r *batchRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.Batch{}).
+		Where("id = ? AND is_deleted = false", id).
+		Count(&count).Error
+	if err != nil {
+		return false, apperror.WrapDBError(err, "batch")
+	}
+	return count > 0, nil
+}
+
+// ---------------------------------------------------------------------------
+// Write methods
+// ---------------------------------------------------------------------------
 
 // Create sinh batch code tự động theo format [PREFIX]-[YEAR]-[SEQUENCE]
 // và dùng PostgreSQL Advisory Lock (transaction-scoped) để đảm bảo
 // sequence tăng tuần tự, không bị race condition.
 //
 // Ví dụ: prefix "APL" + năm 2026 → lock key "APL-2026" → batch code "APL-2026-0013"
-// Các prefix khác nhau (SAM-2026, XMI-2026) vẫn chạy song song.
-func (rb *batchRepository) Create(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+// Các prefix khác nhau (SAM-2026, XMI-2026) vẫn chạy song song vì lock key khác nhau.
+func (r *batchRepository) Create(ctx context.Context, req *request.CreateBatchRequest, currentUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	now := time.Now()
 	year := now.Year()
-	// lockKey là đơn vị granularity của advisory lock
 	lockKey := fmt.Sprintf("%s-%d", req.Prefix, year)
 
-	// Bắt đầu transaction — advisory lock pg_advisory_xact_lock sẽ
-	// tự động release khi transaction kết thúc (commit hoặc rollback).
-	tx, err := rb.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch") 
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	// Acquire session-level advisory lock trong phạm vi transaction.
-	// hashtext() chuyển string → int4 để dùng làm lock key.
-	// Nếu lock đang bị giữ bởi transaction khác, câu lệnh này sẽ BLOCK cho đến khi available.
-	_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", lockKey)
-	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch")
-	}
-
-	// Tìm batch_code lớn nhất hiện tại cho prefix+year này.
-	// Dùng COALESCE để luôn trả về 1 row (chuỗi rỗng nếu chưa có batch nào).
-	pattern := lockKey + "-%"
-	var lastCode string
-	err = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(batch_code), '') FROM batches WHERE batch_code LIKE $1`,
-		pattern,
-	).Scan(&lastCode)
-	if err != nil {
-		return nil, apperror.WrapDBError(err, "batch")
-	}
-
-	// Tính sequence tiếp theo.
-	nextSeq := 1
-	if lastCode != "" {
-		// lastCode có dạng "APL-2026-0012" → cắt phần sau lockKey+"-"
-		seqStr := strings.TrimPrefix(lastCode, lockKey+"-")
-		if seq, parseErr := strconv.Atoi(seqStr); parseErr == nil {
-			nextSeq = seq + 1
-		}
-	}
-
-	// Sinh batch code mới với padding 4 chữ số (APL-2026-0013).
-	newBatchCode := fmt.Sprintf("%s-%04d", lockKey, nextSeq)
-	newID := uuid.New()
-
-	// INSERT và lấy ngay dữ liệu vừa tạo qua RETURNING.
-	insertSQL := `
-		INSERT INTO batches (
-			id, variant_id, batch_code,
-			manufacture_date, expiry_date, imported_at,
-			manufacturer_name, supplier_name, origin_country, production_place,
-			quantity, status,
-			created_at, updated_at, is_deleted
-		) VALUES (
-			$1,  $2,  $3,
-			$4,  $5,  $6,
-			$7,  $8,  $9,  $10,
-			$11, 'ACTIVE',
-			$12, $12, FALSE
-		)
-		RETURNING id, batch_code, variant_id, quantity, status, created_at`
-
-	row := tx.QueryRowContext(ctx, insertSQL,
-		newID,
-		req.VariantID,
-		newBatchCode,
-		req.ManufactureDate,
-		req.ExpiryDate,
-		req.ImportedAt,
-		req.ManufacturerName,
-		req.SupplierName,
-		req.OriginCountry,
-		req.ProductionPlace,
-		req.Quantity,
-		now,
-	)
-
 	var result response.BatchCreateResponse
-	if err = row.Scan(
-		&result.ID,
-		&result.BatchCode,
-		&result.VariantID,
-		&result.Quantity,
-		&result.Status,
-		&result.CreatedAt,
-	); err != nil {
-		log.Println("[batch] insert error:", err)
-		return nil, apperror.WrapDBError(err, "batch")
-	}
 
-	if err = tx.Commit(); err != nil {
-		return nil, apperror.WrapDBError(err, "batch")
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1. Acquire PostgreSQL advisory lock (transaction-scoped).
+		//    Tự động release khi transaction kết thúc (commit hoặc rollback).
+		//    hashtext() chuyển string → int4 để dùng làm lock key.
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtext(?))", lockKey).Error; err != nil {
+			return apperror.WrapDBError(err, "batch")
+		}
+
+		// 2. Tìm batch_code lớn nhất cho prefix+year này.
+		pattern := lockKey + "-%"
+		var lastCode string
+		if err := tx.Raw(
+			"SELECT COALESCE(MAX(batch_code), '') FROM batches WHERE batch_code LIKE ?",
+			pattern,
+		).Scan(&lastCode).Error; err != nil {
+			return apperror.WrapDBError(err, "batch")
+		}
+
+		// 3. Tính sequence tiếp theo.
+		nextSeq := 1
+		if lastCode != "" {
+			seqStr := strings.TrimPrefix(lastCode, lockKey+"-")
+			if seq, parseErr := strconv.Atoi(seqStr); parseErr == nil {
+				nextSeq = seq + 1
+			}
+		}
+
+		// 4. Sinh batch code mới với padding 4 chữ số.
+		newBatchCode := fmt.Sprintf("%s-%04d", lockKey, nextSeq)
+		newID := uuid.New()
+
+		batch := entities.Batch{
+			ID:               newID,
+			VariantID:        req.VariantID,
+			BatchCode:        newBatchCode,
+			ManufactureDate:  req.ManufactureDate,
+			ExpiryDate:       req.ExpiryDate,
+			ImportedAt:       req.ImportedAt,
+			ManufacturerName: derefString(req.ManufacturerName),
+			SupplierName:     derefString(req.SupplierName),
+			OriginCountry:    derefString(req.OriginCountry),
+			ProductionPlace:  derefString(req.ProductionPlace),
+			Quantity:         req.Quantity,
+			Status:           "ACTIVE",
+			CreatedBy:        &currentUserID,
+			CreatedAt:        now,
+		}
+
+		// 5. INSERT via GORM.
+		if err := tx.Create(&batch).Error; err != nil {
+			return apperror.WrapDBError(err, "batch")
+		}
+
+		result = response.BatchCreateResponse{
+			ID:        batch.ID,
+			BatchCode: batch.BatchCode,
+			VariantID: batch.VariantID,
+			Quantity:  batch.Quantity,
+			Status:    batch.Status,
+			CreatedAt: batch.CreatedAt,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &result, nil
 }
 
-// ExistsByID kiểm tra batch có tồn tại và chưa bị xóa mềm.
-// Dùng SELECT COUNT(1) để tránh SELECT *, nhất quán với raw-SQL pattern của repo.
-func (rb *batchRepository) ExistsByID(ctx context.Context, id uuid.UUID) (bool, error) {
-	var count int
-	err := rb.db.QueryRowContext(ctx,
-		`SELECT COUNT(1) FROM batches WHERE id = $1 AND is_deleted = FALSE`,
-		id,
-	).Scan(&count)
+// UpdateStatus cập nhật field status; GORM tự set updated_at (autoUpdateTime).
+// Repository không validate enum — đó là trách nhiệm của Service.
+func (r *batchRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
+	result := r.db.WithContext(ctx).
+		Model(&entities.Batch{}).
+		Where("id = ?", id).
+		Update("status", status)
+	if result.Error != nil {
+		return apperror.WrapDBError(result.Error, "batch")
+	}
+	return nil
+}
+
+// SoftDelete set is_deleted = true; GORM tự set updated_at.
+func (r *batchRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Model(&entities.Batch{}).
+		Where("id = ?", id).
+		Update("is_deleted", true)
+	if result.Error != nil {
+		return apperror.WrapDBError(result.Error, "batch")
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Constraint checks
+// ---------------------------------------------------------------------------
+
+// ExistsProductItems kiểm tra có ít nhất 1 product item liên kết (chưa bị xóa).
+func (r *batchRepository) ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("product_items").
+		Where("batch_id = ? AND is_deleted = false", batchID).
+		Count(&count).Error
 	if err != nil {
-		return false, apperror.WrapDBError(err, "batch")
+		return false, apperror.WrapDBError(err, "product_items")
 	}
 	return count > 0, nil
+}
+
+// ExistsEvents kiểm tra có event nào liên kết qua product_items với batch này.
+func (r *batchRepository) ExistsEvents(ctx context.Context, batchID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("events").
+		Joins("JOIN product_items ON product_items.id = events.product_item_id").
+		Where("product_items.batch_id = ? AND events.is_deleted = false", batchID).
+		Count(&count).Error
+	if err != nil {
+		return false, apperror.WrapDBError(err, "events")
+	}
+	return count > 0, nil
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

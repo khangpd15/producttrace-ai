@@ -3,10 +3,14 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
@@ -14,13 +18,26 @@ import (
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 )
+
+// validBatchStatuses là tập hợp các status hợp lệ của Batch.
+var validBatchStatuses = map[string]struct{}{
+	"ACTIVE":   {},
+	"EXPIRED":  {},
+	"RECALLED": {},
+	"BLOCKED":  {},
+}
 
 type BatchService interface {
 	GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
-	CreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error)
+	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
+	// UpdateBatchStatus cập nhật duy nhất field status của một Batch.
+	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
+	// DeleteBatch thực hiện soft-delete một Batch nếu không có product items hoặc events liên kết.
+	DeleteBatch(ctx context.Context, batchID uuid.UUID, userID *uuid.UUID) error
 }
 
 type batchService struct {
@@ -28,6 +45,8 @@ type batchService struct {
 	pdfGenerator    qr.PDFGenerator
 	productItemRepo productRepo.ProductItemRepository
 	variantRepo     variantRepo.ProductVariantRepository
+	publisher       *publisher.Publisher
+	auditLog        auditlog.AuditLogService
 }
 
 func NewbatchService(
@@ -35,12 +54,16 @@ func NewbatchService(
 	pdfGenerator qr.PDFGenerator,
 	productItemRepo productRepo.ProductItemRepository,
 	variantRepo variantRepo.ProductVariantRepository,
+	publisher *publisher.Publisher,
+	auditLog auditlog.AuditLogService,
 ) BatchService {
 	return &batchService{
 		repo:            repo,
 		pdfGenerator:    pdfGenerator,
 		productItemRepo: productItemRepo,
 		variantRepo:     variantRepo,
+		publisher:       publisher,
+		auditLog:        auditLog,
 	}
 }
 
@@ -54,7 +77,7 @@ func (sb *batchService) GetBatchDetail(ctx context.Context, batchCode string) (*
 
 // CreateBatch normalize prefix rồi kiểm tra business rule trước khi delegate xuống repo.
 // Batch code sẽ được tự động sinh tại tầng repository dùng advisory lock.
-func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	// Normalize prefix: xóa khoảng trắng, chuyển về uppercase
 	// để "apl", "APL", " Apl " đều tạo ra cùng lock key APL-2026.
 	req.Prefix = strings.ToUpper(strings.TrimSpace(req.Prefix))
@@ -86,13 +109,32 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 
 	}
 
-	return sb.retryCreateBatch(ctx, req)
+	batchRes, err := sb.retryCreateBatch(ctx, req, currenUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     rabbitmq.BatchCreatedRK,
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       batchRes,
+	}
+
+	if err := sb.publisher.Publish(event); err != nil {
+		return nil, apperror.NewInternal("fail to publish batch create event")
+	}
+
+	return batchRes, nil
 }
 
-func (sb *batchService) retryCreateBatch(ctx context.Context, req *request.CreateBatchRequest) (*response.BatchCreateResponse, error) {
+func (sb *batchService) retryCreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error) {
 	var lastErr error
 	for i := 0; i < 3; i++ {
-		result, err := sb.repo.Create(ctx, req)
+		result, err := sb.repo.Create(ctx, req, currenUserID)
 		if err == nil {
 			return result, nil
 		}
@@ -157,4 +199,115 @@ func (sb *batchService) ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([
 			Items:     labels,
 		},
 	)
+}
+
+// UpdateBatchStatus cập nhật duy nhất field status của Batch.
+// Business rules:
+//   - Batch phải tồn tại
+//   - Batch không được đã soft-delete
+//   - Status phải thuộc enum hợp lệ (ACTIVE, EXPIRED, RECALLED, BLOCKED)
+//
+// Audit log được ghi sau khi update thành công.
+func (sb *batchService) UpdateBatchStatus(
+	ctx context.Context,
+	batchID uuid.UUID,
+	req *request.UpdateBatchStatusRequest,
+	userID *uuid.UUID,
+) (*response.BatchStatusResponse, error) {
+	// 1. Validate enum trước để fail-fast, tránh query DB không cần thiết.
+	newStatus := strings.ToUpper(strings.TrimSpace(req.Status))
+	if _, ok := validBatchStatuses[newStatus]; !ok {
+		return nil, apperror.NewValidation(
+			fmt.Sprintf("invalid status '%s': must be one of ACTIVE, EXPIRED, RECALLED, BLOCKED", req.Status),
+		)
+	}
+
+	// 2. Kiểm tra Batch tồn tại.
+	batch, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Không cho update Batch đã bị soft-delete.
+	if batch.IsDeleted {
+		return nil, apperror.NewBadRequest("batch has been deleted and cannot be updated")
+	}
+
+	// 4. Snapshot trạng thái cũ trước khi update (dùng cho audit log).
+	oldBatch := *batch
+
+	// 5. Cập nhật status trong DB.
+	if err := sb.repo.UpdateStatus(ctx, batchID, newStatus); err != nil {
+		return nil, apperror.Wrap(err, apperror.NewInternal("failed to update batch status"))
+	}
+
+	// 6. Ghi audit log — không block response nếu log lỗi.
+	if logErr := sb.auditLog.LogUpdate(ctx, userID, "Batch", batchID, oldBatch, map[string]string{
+		"status": newStatus,
+	}); logErr != nil {
+		// Log lỗi nhưng không trả về — operation chính đã thành công.
+		_ = logErr
+	}
+
+	return &response.BatchStatusResponse{
+		ID:        batch.ID,
+		BatchCode: batch.BatchCode,
+		Status:    newStatus,
+		UpdatedAt: time.Now().UTC(),
+	}, nil
+}
+
+// DeleteBatch thực hiện soft-delete một Batch.
+// Business rules:
+//   - Batch phải tồn tại
+//   - Batch chưa bị soft-delete
+//   - Không có product item liên kết (chưa deleted)
+//   - Không có event liên kết (qua product_items)
+//
+// Soft-delete và audit log được thực hiện trong transaction để đảm bảo atomic.
+func (sb *batchService) DeleteBatch(
+	ctx context.Context,
+	batchID uuid.UUID,
+	userID *uuid.UUID,
+) error {
+	// 1. Kiểm tra Batch tồn tại.
+	batch, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Không cho xóa Batch đã bị soft-delete.
+	if batch.IsDeleted {
+		return apperror.NewBadRequest("batch has already been deleted")
+	}
+
+	// 3. Không cho xóa nếu có product items liên kết.
+	hasItems, err := sb.repo.ExistsProductItems(ctx, batchID)
+	if err != nil {
+		return apperror.Wrap(err, apperror.NewInternal("failed to check product items"))
+	}
+	if hasItems {
+		return apperror.NewBadRequest("cannot delete batch: batch has linked product items")
+	}
+
+	// 4. Không cho xóa nếu có events liên kết.
+	hasEvents, err := sb.repo.ExistsEvents(ctx, batchID)
+	if err != nil {
+		return apperror.Wrap(err, apperror.NewInternal("failed to check events"))
+	}
+	if hasEvents {
+		return apperror.NewBadRequest("cannot delete batch: batch has linked events")
+	}
+
+	// 5. Soft-delete trong DB.
+	if err := sb.repo.SoftDelete(ctx, batchID); err != nil {
+		return apperror.Wrap(err, apperror.NewInternal("failed to delete batch"))
+	}
+
+	// 6. Ghi audit log — không block response nếu log lỗi.
+	if logErr := sb.auditLog.LogDelete(ctx, userID, "Batch", batchID, batch); logErr != nil {
+		_ = logErr
+	}
+
+	return nil
 }

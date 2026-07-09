@@ -285,7 +285,7 @@ func (m *Manager) publishOnce(ctx context.Context, routingKey string, body []byt
 			Headers: amqp.Table{
 				"pattern": routingKey,
 			},
-			Body:         body,
+			Body: body,
 		},
 	)
 	if err != nil {
@@ -326,4 +326,13 @@ func (m *Manager) Close() error {
 	}
 
 	return err
+}
+func (m *Manager) ChannelConnection() *amqp.Connection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.conn
+}
+
+func (m *Manager) Context() context.Context {
+	return m.ctx
 }

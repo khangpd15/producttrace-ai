@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -56,7 +57,22 @@ func (hb *BatchHandler) CreateBatch(c *gin.Context) {
 		return
 	}
 
-	result, err := hb.service.CreateBatch(c.Request.Context(), &req)
+	currentUserIDStr := utils.GetCurrentUserID(c)
+
+	if currentUserIDStr == "" {
+		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
+		return
+	}
+	fmt.Println("currentUserIDStr:", currentUserIDStr)
+	currentUserID, err := uuid.Parse(currentUserIDStr)
+	fmt.Println("currentUserID:", currentUserID)
+
+	if err != nil {
+		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
+		return
+	}
+
+	result, err := hb.service.CreateBatch(c.Request.Context(), &req, currentUserID)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -102,4 +118,63 @@ func (h *BatchHandler) ExportQR(c *gin.Context) {
 		"application/pdf",
 		pdfBytes,
 	)
+}
+
+// UpdateBatchStatus xử lý PATCH /batches/:batch_id/status.
+// Handler chỉ parse params, bind body, gọi service và trả response.
+func (hb *BatchHandler) UpdateBatchStatus(c *gin.Context) {
+	batchIDStr := c.Param("batch_id")
+	batchID, err := uuid.Parse(batchIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewBadRequest("invalid batch_id: must be a valid UUID"))
+		return
+	}
+
+	var req request.UpdateBatchStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	// Lấy current user ID từ context (có thể nil với system actions).
+	var userID *uuid.UUID
+	if idStr := utils.GetCurrentUserID(c); idStr != "" {
+		if parsed, parseErr := uuid.Parse(idStr); parseErr == nil {
+			userID = &parsed
+		}
+	}
+
+	result, svcErr := hb.service.UpdateBatchStatus(c.Request.Context(), batchID, &req, userID)
+	if svcErr != nil {
+		apperror.HandleError(c, svcErr)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("batch status updated successfully", result))
+}
+
+// DeleteBatch xử lý DELETE /batches/:batch_id.
+// Trả 200 OK khi soft-delete thành công.
+func (hb *BatchHandler) DeleteBatch(c *gin.Context) {
+	batchIDStr := c.Param("batch_id")
+	batchID, err := uuid.Parse(batchIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewBadRequest("invalid batch_id: must be a valid UUID"))
+		return
+	}
+
+	// Lấy current user ID từ context.
+	var userID *uuid.UUID
+	if idStr := utils.GetCurrentUserID(c); idStr != "" {
+		if parsed, parseErr := uuid.Parse(idStr); parseErr == nil {
+			userID = &parsed
+		}
+	}
+
+	if svcErr := hb.service.DeleteBatch(c.Request.Context(), batchID, userID); svcErr != nil {
+		apperror.HandleError(c, svcErr)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("batch deleted successfully", nil))
 }

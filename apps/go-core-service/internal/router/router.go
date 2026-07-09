@@ -109,6 +109,8 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 			staffGroup.GET("", bh.GetBatchList)
 			staffGroup.GET("/export-qr/:batch_id", bh.ExportQR)
 			staffGroup.POST("", bh.CreateBatch)
+			staffGroup.PATCH("/:batch_id/status", bh.UpdateBatchStatus)
+			staffGroup.DELETE("/:batch_id", bh.DeleteBatch)
 		}
 	}
 }
