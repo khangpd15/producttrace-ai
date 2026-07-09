@@ -21,12 +21,22 @@ import (
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 )
 
-// validBatchStatuses là tập hợp các status hợp lệ của Batch.
+// validBatchStatuses là tập hợp các status hợp lệ khi cập nhật (UpdateBatchStatus).
 var validBatchStatuses = map[string]struct{}{
 	"ACTIVE":   {},
 	"EXPIRED":  {},
 	"RECALLED": {},
 	"BLOCKED":  {},
+}
+
+// validFilterStatuses là tập hợp các status hợp lệ khi lọc danh sách batch (Filter API).
+// Bao gồm DRAFT và LOCKED theo UC-P2-BATCH-04.
+var validFilterStatuses = map[string]struct{}{
+	"DRAFT":    {},
+	"ACTIVE":   {},
+	"EXPIRED":  {},
+	"RECALLED": {},
+	"LOCKED":   {},
 }
 
 type BatchService interface {
@@ -71,7 +81,37 @@ func NewbatchService(
 	}
 }
 
-func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error) {
+// GetBatchList thực thi validation enum + business rules phân quyền DRAFT trước khi query.
+//
+// BR-FIL-001: Bỏ tham số status → trả tất cả statuses.
+//             Non-Admin tự động bị loại trừ DRAFT bằng ExcludeDraft=true.
+// BR-FIL-002: Non-Admin gửi status=DRAFT → 403 Forbidden.
+func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error) {
+	// Normalize status để so sánh không phân biệt hoa thường.
+	req.Status = strings.ToUpper(strings.TrimSpace(req.Status))
+
+	// Validate enum nếu status được cung cấp.
+	if req.Status != "" && req.Status != "ALL" {
+		if _, ok := validFilterStatuses[req.Status]; !ok {
+			return nil, apperror.NewValidation(
+				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED",
+			)
+		}
+
+		// BR-FIL-002: Non-Admin không được lọc DRAFT.
+		if req.Status == "DRAFT" && userRole != "ADMIN" {
+			return nil, apperror.NewForbidden(
+				"Bạn không có quyền xem các lô hàng ở trạng thái DRAFT",
+			)
+		}
+	}
+
+	// BR-FIL-001: Khi xem tất cả (status rỗng hoặc ALL), non-Admin
+	// không được thấy DRAFT. Service set ExcludeDraft để repository lọc.
+	if (req.Status == "" || req.Status == "ALL") && userRole != "ADMIN" {
+		req.ExcludeDraft = true
+	}
+
 	return sb.repo.FindAllWithFilter(ctx, req)
 }
 
