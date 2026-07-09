@@ -30,10 +30,12 @@ var validBatchStatuses = map[string]struct{}{
 }
 
 type BatchService interface {
-	GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error)
+	GetBatchList(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
+	ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error
+	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
 	// UpdateBatchStatus cập nhật duy nhất field status của một Batch.
 	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
 	// DeleteBatch thực hiện soft-delete một Batch nếu không có product items hoặc events liên kết.
@@ -67,8 +69,8 @@ func NewbatchService(
 	}
 }
 
-func (sb *batchService) GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error) {
-	return sb.repo.FindAll(ctx)
+func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error) {
+	return sb.repo.FindAllWithFilter(ctx, req)
 }
 
 func (sb *batchService) GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
@@ -199,6 +201,19 @@ func (sb *batchService) ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([
 			Items:     labels,
 		},
 	)
+}
+
+func (sb *batchService) ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error {
+	return sb.repo.ExportBatch(ctx, batchID, exportReq, currentUserID)
+}
+
+func (sb *batchService) GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error) {
+	// First check if batch exists
+	_, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	return sb.repo.GetBatchEvents(ctx, batchID)
 }
 
 // UpdateBatchStatus cập nhật duy nhất field status của Batch.

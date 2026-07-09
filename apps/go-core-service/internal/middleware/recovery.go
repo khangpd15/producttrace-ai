@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	Response "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 	"github.com/gin-gonic/gin"
+	Response "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
 
 func RecoveryMiddleware() gin.HandlerFunc {

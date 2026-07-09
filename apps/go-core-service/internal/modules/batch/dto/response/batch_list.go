@@ -4,22 +4,30 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
 
-type BatchListResponse struct {
-	BatchCode  string     `json:"batch_code"`
-	ProductID  uuid.UUID  `json:"product_id"`
-	Status     string     `json:"status"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiryDate *time.Time `json:"expiry_date"`
+type BatchListItemDTO struct {
+	ID              uuid.UUID  `json:"id"`
+	BatchCode       string     `json:"batch_code"`
+	VariantID       uuid.UUID  `json:"variant_id"`
+	VariantName     string     `json:"variant_name"`
+	Quantity        int        `json:"quantity"`
+	ManufactureDate *time.Time `json:"manufacture_date"`
+	ExpiryDate      *time.Time `json:"expiry_date"`
+	OriginCountry   string     `json:"origin_country"`
+	Status          string     `json:"status"`
 }
 
-func NewBatchListResponse(batchCode string, productID uuid.UUID, status string, createdAt time.Time, expiryDate *time.Time) *BatchListResponse {
-	return &BatchListResponse{
-		BatchCode:  batchCode,
-		ProductID:  productID,
-		Status:     status,
-		CreatedAt:  createdAt,
-		ExpiryDate: expiryDate,
-	}
+type BatchStatsDTO struct {
+	Total           int `json:"total"`
+	Active          int `json:"active"`
+	Expired         int `json:"expired"`
+	RecalledBlocked int `json:"recalled_blocked"`
+}
+
+type BatchListResponse struct {
+	Items []BatchListItemDTO      `json:"items"`
+	Meta  response.PaginationMeta `json:"meta"`
+	Stats BatchStatsDTO           `json:"stats"`
 }

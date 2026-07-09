@@ -27,8 +27,6 @@ func main() {
 	databasePostgres := database.ConnectPostgres()
 	log.Println("PostgreSQL GORM connected successfully")
 
-
-
 	// Setup RabbitMQ Manager
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
