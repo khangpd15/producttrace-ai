@@ -12,6 +12,9 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
@@ -22,10 +25,10 @@ import (
 	attributeValueRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
 	attributeValueService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/services"
 	categoryRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
-	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
+	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	variantService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
@@ -89,7 +92,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	vService := variantService.NewProductVariantService(pVariantRepo)
 	vHandler := variantHandler.NewProductVariantHandler(vService)
 
-	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub)
+	batchService := services.NewbatchService(bRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub, auditService)
 	batchHandler := batchHandler.NewBatchHandler(batchService)
 
 	// Initialize Auth Module
@@ -103,13 +106,20 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
+
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
+		ProductItemHandler:           piHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
 		UserRepo:                     uRepo,
-		ProductVariantHandler:        vHandler, 
+		LocationHandler:              lHandler,
+		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
 	})

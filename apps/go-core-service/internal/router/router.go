@@ -24,6 +24,7 @@ type RouterDependency struct {
 	AuthHandler           *authHandler.AuthenHandler
 	UserHandler           *userHandler.UserHandler
 	ProductHandler        *productHandler.ProductHandler
+	ProductItemHandler    *productItemHandler.ProductItemHandler
 	UserRepo              userRepo.UserRepositoryInterface
 	LocationHandler       *locationHandler.LocationHandler
 	ProductVariantHandler *variantHandler.ProductVariantHandler // new
@@ -280,5 +281,15 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 				staffGroup.POST("/:variant_id/attributes", ah.AssignAttributes)
 			}
 		}
+	}
+}
+
+// PRODUCT ITEM
+func SetupProductItemRouter(api *gin.RouterGroup, ph *productItemHandler.ProductItemHandler, uRepo userRepo.UserRepositoryInterface) {
+	items := api.Group("/product-items")
+	{
+		// Public: dùng để scan QR
+		items.GET("", ph.GetProductItemList)
+		items.GET("/:item_code", ph.GetProductItemDetail)
 	}
 }
