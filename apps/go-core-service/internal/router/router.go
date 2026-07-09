@@ -13,22 +13,23 @@ import (
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
-	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
+	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
 type RouterDependency struct {
-	BatchHandler          *batchHandler.BatchHandler
-	AuthHandler           *authHandler.AuthenHandler
-	UserHandler           *userHandler.UserHandler
-	ProductHandler        *productHandler.ProductHandler
-	UserRepo              userRepo.UserRepositoryInterface
-	LocationHandler       *locationHandler.LocationHandler
-	ProductVariantHandler *variantHandler.ProductVariantHandler // new
-	ProductAttributeHandler *attributeHandler.AttributeHandler // new
+	BatchHandler                 *batchHandler.BatchHandler
+	AuthHandler                  *authHandler.AuthenHandler
+	UserHandler                  *userHandler.UserHandler
+	ProductHandler               *productHandler.ProductHandler
+	UserRepo                     userRepo.UserRepositoryInterface
+	LocationHandler              *locationHandler.LocationHandler
+	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
+	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
+	ProductItemHandler           *productItemHandler.ProductItemHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -60,10 +61,10 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
+	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
-	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo) // new
-	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo) // new
+	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
+	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	return r
 }

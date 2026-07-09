@@ -40,7 +40,7 @@ var validFilterStatuses = map[string]struct{}{
 }
 
 type BatchService interface {
-	GetBatchList(ctx context.Context, req *request.GetBatchListRequest) (*response.BatchListResponse, error)
+	GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error)
 	// SearchBatches thực hiện tìm kiếm gần đúng theo UC-P2-BATCH-03.
 	SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
@@ -84,7 +84,9 @@ func NewbatchService(
 // GetBatchList thực thi validation enum + business rules phân quyền DRAFT trước khi query.
 //
 // BR-FIL-001: Bỏ tham số status → trả tất cả statuses.
-//             Non-Admin tự động bị loại trừ DRAFT bằng ExcludeDraft=true.
+//
+//	Non-Admin tự động bị loại trừ DRAFT bằng ExcludeDraft=true.
+//
 // BR-FIL-002: Non-Admin gửi status=DRAFT → 403 Forbidden.
 func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error) {
 	// Normalize status để so sánh không phân biệt hoa thường.
