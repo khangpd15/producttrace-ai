@@ -33,7 +33,12 @@ export abstract class BaseConsumer<T> {
     try {
       // 1. Parse JSON event
       try {
-        parsedEvent = JSON.parse(rawContent) as Event<any>;
+        const parsed = JSON.parse(rawContent);
+        if (parsed && typeof parsed === 'object' && 'pattern' in parsed && 'data' in parsed) {
+          parsedEvent = parsed.data as Event<any>;
+        } else {
+          parsedEvent = parsed as Event<any>;
+        }
       } catch (parseErr) {
         throw new Error(`Failed to parse message JSON: ${rawContent}`);
       }
