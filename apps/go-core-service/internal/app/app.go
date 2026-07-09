@@ -9,13 +9,15 @@ import (
 	"gorm.io/gorm"
 
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
+	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
+	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 
@@ -31,8 +33,8 @@ import (
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
 	// Cache pkg
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
 
 type App struct {
@@ -74,12 +76,16 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
+	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
+	piHandler := productItemsHandler.NewProductItemHandler(piService)
+
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler:   batchHandler,
-		ProductHandler: pHandler,
-		UserHandler:    uHandler,
-		AuthHandler:    aHandler,
-		UserRepo:       uRepo,
+		BatchHandler:       batchHandler,
+		ProductHandler:     pHandler,
+		ProductItemHandler: piHandler,
+		UserHandler:        uHandler,
+		AuthHandler:        aHandler,
+		UserRepo:           uRepo,
 	})
 
 	return &App{

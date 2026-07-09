@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/dto"
-
 )
 
 // LocationService định nghĩa interface cho business logic.
@@ -16,4 +15,3 @@ type LocationService interface {
 	UpdateLocation(ctx context.Context, id string, req *dto.UpdateLocationReq) (*dto.LocationResponse, error)
 	HardDeleteLocation(ctx context.Context, id string) error
 }
-

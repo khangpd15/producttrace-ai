@@ -11,17 +11,19 @@ import (
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
+	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
 
 type RouterDependency struct {
-	BatchHandler    *batchHandler.BatchHandler
-	AuthHandler     *authHandler.AuthenHandler
-	UserHandler     *userHandler.UserHandler
-	ProductHandler  *productHandler.ProductHandler
-	UserRepo        userRepo.UserRepositoryInterface
-	LocationHandler *locationHandler.LocationHandler
+	BatchHandler       *batchHandler.BatchHandler
+	AuthHandler        *authHandler.AuthenHandler
+	UserHandler        *userHandler.UserHandler
+	ProductHandler     *productHandler.ProductHandler
+	UserRepo           userRepo.UserRepositoryInterface
+	LocationHandler    *locationHandler.LocationHandler
+	ProductItemHandler *productItemHandler.ProductItemHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -50,6 +52,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
+	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	return r
 }
@@ -96,21 +99,31 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 	batches := api.Group("/batches")
 
 	// Public batch detail route (for anonymous QR scanning)
-	batches.GET("/:batch_code", bh.GetBatchDetail)
+	batches.GET("/:id", bh.GetBatchDetail)
 
 	// Protected batch routes
 	protectedBatches := batches.Group("")
 	protectedBatches.Use(middleware.AuthMiddleware(uRepo))
 	{
-		// ADMIN and MANUFACTURER roles can view list, export QR PDF, and create batches
+		// ALL AUTHENTICATED USERS can view list and events
+		protectedBatches.GET("", bh.GetBatchList)
+		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
+
+		// MANAGER and WAREHOUSE can export batch
+		exportGroup := protectedBatches.Group("")
+		exportGroup.Use(middleware.RoleMiddleware("MANAGER", "WAREHOUSE", "ADMIN")) // usually admin has all access
+		{
+			exportGroup.POST("/:id/export", bh.ExportBatch)
+		}
+
+		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")
 		staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
 		{
-			staffGroup.GET("", bh.GetBatchList)
-			staffGroup.GET("/export-qr/:batch_id", bh.ExportQR)
+			staffGroup.GET("/export-qr/:id", bh.ExportQR)
 			staffGroup.POST("", bh.CreateBatch)
-			staffGroup.PATCH("/:batch_id/status", bh.UpdateBatchStatus)
-			staffGroup.DELETE("/:batch_id", bh.DeleteBatch)
+			staffGroup.PATCH("/:id/status", bh.UpdateBatchStatus)
+			staffGroup.DELETE("/:id", bh.DeleteBatch)
 		}
 	}
 }
@@ -144,6 +157,23 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 		}
 	}
 }
+
+// PRODUCT ITEMS
+func SetupProductItemRouter(api *gin.RouterGroup, pih *productItemHandler.ProductItemHandler, uRepo userRepo.UserRepositoryInterface) {
+	productItems := api.Group("/product-items")
+
+	// Public route for product item detail scanning
+	productItems.GET("/:item_code", pih.GetProductItemDetail)
+
+	// Protected routes
+	protectedProductItems := productItems.Group("")
+	protectedProductItems.Use(middleware.AuthMiddleware(uRepo))
+	{
+		// ALL AUTHENTICATED USERS can view list
+		protectedProductItems.GET("", pih.GetProductItemList)
+	}
+}
+
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{

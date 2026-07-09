@@ -26,10 +26,10 @@ type productCategoryRepository struct {
 }
 
 type CategoryFilter struct {
-    Search    *string
-    Status    *string
-    Page      int
-    Limit     int
+	Search *string
+	Status *string
+	Page   int
+	Limit  int
 }
 
 func NewProductCategoryRepository(db *gorm.DB) ProductCategoryRepository {
@@ -117,29 +117,28 @@ func (r *productCategoryRepository) IsInUse(ctx context.Context, id uuid.UUID) (
 	return count > 0, err
 }
 
-
 func (r *productCategoryRepository) FindAll(ctx context.Context, filter CategoryFilter) ([]entities.ProductCategory, int64, error) {
-    var categories []entities.ProductCategory
-    var total int64
+	var categories []entities.ProductCategory
+	var total int64
 
-    query := r.db.WithContext(ctx).Model(&entities.ProductCategory{})
+	query := r.db.WithContext(ctx).Model(&entities.ProductCategory{})
 
-    if filter.Search != nil {
-        query = query.Where("name ILIKE ?", "%"+*filter.Search+"%")
-    }
-    if filter.Status != nil {
-        isActive := *filter.Status == "ACTIVE"
-        query = query.Where("is_active = ?", isActive)
-    }
+	if filter.Search != nil {
+		query = query.Where("name ILIKE ?", "%"+*filter.Search+"%")
+	}
+	if filter.Status != nil {
+		isActive := *filter.Status == "ACTIVE"
+		query = query.Where("is_active = ?", isActive)
+	}
 
-    query.Count(&total)
+	query.Count(&total)
 
-    offset := (filter.Page - 1) * filter.Limit
-    err := query.
-        Preload("Children").
-        Offset(offset).
-        Limit(filter.Limit).
-        Find(&categories).Error
+	offset := (filter.Page - 1) * filter.Limit
+	err := query.
+		Preload("Children").
+		Offset(offset).
+		Limit(filter.Limit).
+		Find(&categories).Error
 
-    return categories, total, err
+	return categories, total, err
 }
