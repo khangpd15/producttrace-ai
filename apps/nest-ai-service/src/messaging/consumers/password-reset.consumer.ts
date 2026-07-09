@@ -22,7 +22,7 @@ export class PasswordResetPayload {
 @Injectable()
 export class PasswordResetConsumer extends BaseConsumer<PasswordResetPayload> {
   protected readonly logger = new Logger(PasswordResetConsumer.name);
-  protected readonly queueName = RABBITMQ.QUEUES.PASSWORD_RESET;
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
   protected readonly payloadClass = PasswordResetPayload;
 
   constructor(private readonly emailService: MailService) {

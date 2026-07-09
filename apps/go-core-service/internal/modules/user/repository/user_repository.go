@@ -18,6 +18,7 @@ type UserRepositoryInterface interface {
 	GetUserByEmail(ctx context.Context, email string) (*UserEntity.User, error)
 	GetUserByID(ctx context.Context, id string) (*UserEntity.User, error)
 	UpdateUserStatus(ctx context.Context, id string, status UserEntity.Status) error
+	UpdatePassword(ctx context.Context, id string, hashedPassword string) error
 	CheckEmailExists(ctx context.Context, email string) (bool, error)
 	CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error)
 	WriteAuditLog(ctx context.Context, content string, logType string) error
@@ -67,6 +68,16 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*Use
 func (r *UserRepository) UpdateUserStatus(ctx context.Context, id string, status UserEntity.Status) error {
 	db := r.getDB(ctx)
 	return db.Model(&UserEntity.User{}).Where("id = ? AND is_deleted = ?", id, false).Update("status", status).Error
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, id string, hashedPassword string) error {
+	db := r.getDB(ctx)
+	return db.Model(&UserEntity.User{}).
+		Where("id = ? AND is_deleted = ?", id, false).
+		Updates(map[string]interface{}{
+			"password_hash": hashedPassword,
+			"updated_at":    time.Now().UTC(),
+		}).Error
 }
 
 func (r *UserRepository) CheckEmailExists(ctx context.Context, email string) (bool, error) {

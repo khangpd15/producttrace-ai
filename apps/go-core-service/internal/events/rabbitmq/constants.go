@@ -10,8 +10,7 @@ const (
 
 	// User routing keys
 	UserRegisteredRK    = "user.registered"
-	UserVerifiedRK      = "user.verified"
-	UserPasswordResetRK = "user.password_reset_requested"
+	UserPasswordForgotRK = "user.password_forgot"
 	UserLoggedInRK      = "user.logged_in"
 
 	// Product routing keys
@@ -38,7 +37,6 @@ const (
 	// Notification routing keys
 	NotificationCreatedRK = "notification.created"
 	OTPRegisterUserRK     = "otp.registered"
-	OTPVerifiedRK   = "otp.verified"
-	OTPForgotRK     = "otp.forgot"
-
+	OTPVerifiedRK         = "otp.verified"
+	OTPForgotRK           = "otp.forgot"
 )
