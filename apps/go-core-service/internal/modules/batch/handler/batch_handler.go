@@ -30,7 +30,10 @@ func (hb *BatchHandler) GetBatchList(c *gin.Context) {
 		return
 	}
 
-	batches, err := hb.service.GetBatchList(c.Request.Context(), &req)
+	// Lấy role từ JWT context để service thực thi BR-FIL-002 (ẩn DRAFT với non-Admin).
+	userRole := utils.GetCurrentRole(c)
+
+	batches, err := hb.service.GetBatchList(c.Request.Context(), &req, userRole)
 
 	if err != nil {
 		apperror.HandleError(c, err)
