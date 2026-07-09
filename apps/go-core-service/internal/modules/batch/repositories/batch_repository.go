@@ -76,6 +76,12 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 		query = query.Where("b.origin_country = ?", req.OriginCountry)
 	}
 
+	// BR-FIL-001: ẩn DRAFT khi user không phải Admin và không filter status cụ thể.
+	// ExcludeDraft được service set dựa theo role.
+	if req.ExcludeDraft {
+		query = query.Where("b.status != ?", "DRAFT")
+	}
+
 	var stats response.BatchStatsDTO
 	// Calculate stats
 	statsQuery := r.db.WithContext(ctx).Table("batches b").Joins("JOIN product_variants pv ON pv.id = b.variant_id").Where("b.is_deleted = false")
@@ -85,6 +91,10 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 	}
 	if req.OriginCountry != "" && req.OriginCountry != "ALL" {
 		statsQuery = statsQuery.Where("b.origin_country = ?", req.OriginCountry)
+	}
+	// Áp dụng ExcludeDraft vào stats query để thống kê nhất quán với kết quả trả về.
+	if req.ExcludeDraft {
+		statsQuery = statsQuery.Where("b.status != ?", "DRAFT")
 	}
 
 	// We must use case when to calculate stats
