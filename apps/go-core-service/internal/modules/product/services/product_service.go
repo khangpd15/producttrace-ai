@@ -7,11 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	pkgResponse "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -20,7 +22,7 @@ type ProductService interface {
 	CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error)
 	UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error)
 	GetProductByID(ctx context.Context, id uuid.UUID) (*entities.Product, error)
-	GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error)
+	GetAllProducts(ctx context.Context, filter request.ListProductRequest) (*response.ProductListResponse, error)
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
 }
 
@@ -89,13 +91,13 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 		for _, v := range req.Variants {
 			imagesJSON, _ := json.Marshal(v.Images)
 			variant := variantEntities.ProductVariant{
-				ID:        uuid.New(),
-				ProductID: product.ID,
-				SKU:       v.SKU,
-				Name:      v.Name,
-				Barcode:   v.Barcode,
-				Price:     v.Price,
-				Currency:  v.Currency,
+				ID:         uuid.New(),
+				ProductID:  product.ID,
+				SKU:        v.SKU,
+				Name:       v.Name,
+				Barcode:    v.Barcode,
+				Price:      v.Price,
+				Currency:   v.Currency,
 				ImagesJSON: datatypes.JSON(imagesJSON),
 			}
 			if err := s.variantRepo.Create(txCtx, &variant); err != nil {
@@ -166,12 +168,12 @@ func (s *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*ent
 	return product, nil
 }
 
-func (s *productService) GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error) {
+func (s *productService) GetAllProducts(ctx context.Context, filter request.ListProductRequest) (*response.ProductListResponse, error) {
 	var categoryID *uuid.UUID
 	if filter.CategoryID != nil {
 		id, err := uuid.Parse(*filter.CategoryID)
 		if err != nil {
-			return nil, 0, apperror.NewBadRequest("Invalid category_id")
+			return nil, apperror.NewBadRequest("Invalid category_id")
 		}
 		categoryID = &id
 	}
@@ -186,7 +188,36 @@ func (s *productService) GetAllProducts(ctx context.Context, filter request.List
 		SortOrder:  filter.SortOrder,
 	}
 
-	return s.productRepo.FindAll(ctx, repoFilter)
+	items, total, err := s.productRepo.FindAllWithStats(ctx, repoFilter)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "products")
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	page := filter.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	if totalPages == 0 && total > 0 {
+		totalPages = 1
+	}
+
+	meta := pkgResponse.PaginationMeta{
+		CurrentPage: page,
+		PageSize:    limit,
+		TotalItems:  int(total),
+		TotalPages:  totalPages,
+	}
+
+	return &response.ProductListResponse{
+		Items: items,
+		Meta:  meta,
+	}, nil
 }
 
 func (s *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error {

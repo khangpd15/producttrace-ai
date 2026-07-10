@@ -2,31 +2,30 @@ package repositories
 
 import (
 	"context"
-	"database/sql"
-	"log"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	pkgResponse "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 	"gorm.io/gorm"
 )
 
 type ProductItemRepository interface {
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) ([]*entities.ProductItem, error)
-	Create(ctx context.Context, pi *entities.ProductItem) (*response.ProductItemCreateResponse, error)
+	FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error)
+	FindByItemCodeWithEvents(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error)
+	Create(ctx context.Context, items []entities.ProductItem) error
 }
 
 type productItemRepository struct {
-	db    *gorm.DB
-	sqlDB *sql.DB
+	db *gorm.DB
 }
 
-func NewProductItemRepository(db *gorm.DB, sqlDB *sql.DB) ProductItemRepository {
+func NewProductItemRepository(db *gorm.DB) ProductItemRepository {
 	return &productItemRepository{
-		db:    db,
-		sqlDB: sqlDB,
+		db: db,
 	}
 }
 
@@ -39,53 +38,101 @@ func (rp *productItemRepository) FindByBatchID(ctx context.Context, batchID uuid
 	return productItems, nil
 }
 
-// Create tạo một product item mới với 3 trường định danh được tự động sinh:
-//   - item_code:          PTA-{YYMM}-{8 ký tự HEX viết hoa}
-//   - serial_number:      SN{14 chữ số ngẫu nhiên}
-//   - verification_token: MD5 hex 32 ký tự thường
-//
-// Dùng raw SQL với RETURNING để tránh N+1 query và lấy ngay dữ liệu đã lưu.
-func (rp *productItemRepository) Create(ctx context.Context, pi *entities.ProductItem) (*response.ProductItemCreateResponse, error) {
+func (rp *productItemRepository) FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error) {
+	var items []response.ProductItemListItemDTO
+	var total int64
 
-	insertSQL := `
-		INSERT INTO product_items (
-			id, variant_id, batch_id,
-			item_code, serial_number, verification_token,
-			status,
-			created_at, updated_at, is_deleted
-		) VALUES (
-			$1, $2, $3,
-			$4, $5, $6,
-			'ACTIVE',
-			$7, $7, FALSE
-		)
-		RETURNING id, variant_id, batch_id, item_code, serial_number, verification_token, status, created_at`
+	query := rp.db.WithContext(ctx).
+		Table("product_items pi").
+		Select(`
+			pi.id, pi.item_code, 
+			p.name as product_name, pv.name as variant_name, 
+			b.batch_code, pi.status, pi.created_at
+		`).
+		Joins("JOIN batches b ON pi.batch_id = b.id").
+		Joins("JOIN product_variants pv ON b.variant_id = pv.id").
+		Joins("JOIN products p ON pv.product_id = p.id").
+		Where("pi.is_deleted = false")
 
-	row := rp.sqlDB.QueryRowContext(ctx, insertSQL,
-		pi.ID,
-		pi.VariantID,
-		pi.BatchID,
-		pi.ItemCode,
-		pi.SerialNumber,
-		pi.VerificationToken,
-		time.Now(),
-	)
+	if req.BatchID != nil {
+		query = query.Where("pi.batch_id = ?", req.BatchID)
+	}
+	if req.Status != nil {
+		query = query.Where("pi.status = ?", req.Status)
+	}
 
-	var result response.ProductItemCreateResponse
-	err := row.Scan(
-		&result.ID,
-		&result.VariantID,
-		&result.BatchID,
-		&result.ItemCode,
-		&result.SerialNumber,
-		&result.VerificationToken,
-		&result.Status,
-		&result.CreatedAt,
-	)
+	err := query.Count(&total).Error
 	if err != nil {
-		log.Println("[product_item] insert error:", err)
 		return nil, apperror.WrapDBError(err, "product_items")
 	}
 
-	return &result, nil
+	offset := (req.Page - 1) * req.Limit
+	err = query.
+		Order("pi.created_at DESC").
+		Offset(offset).
+		Limit(req.Limit).
+		Scan(&items).Error
+
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+
+	totalPages := int((total + int64(req.Limit) - 1) / int64(req.Limit))
+	if totalPages == 0 && total > 0 {
+		totalPages = 1
+	}
+
+	return &response.ProductItemListResponse{
+		Items: items,
+		Meta: pkgResponse.PaginationMeta{
+			CurrentPage: req.Page,
+			PageSize:    req.Limit,
+			TotalItems:  int(total),
+			TotalPages:  totalPages,
+		},
+	}, nil
+}
+
+func (rp *productItemRepository) FindByItemCodeWithEvents(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error) {
+	var detail response.ProductItemDetailDTO
+
+	err := rp.db.WithContext(ctx).
+		Table("product_items pi").
+		Select(`
+			pi.id, pi.item_code, 
+			p.name as product_name, pv.name as variant_name, 
+			b.batch_code, pi.status, pi.verification_token, pi.created_at
+		`).
+		Joins("JOIN batches b ON pi.batch_id = b.id").
+		Joins("JOIN product_variants pv ON b.variant_id = pv.id").
+		Joins("JOIN products p ON pv.product_id = p.id").
+		Where("pi.item_code = ? AND pi.is_deleted = false", itemCode).
+		First(&detail).Error
+
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+
+	var events []response.ProductItemEventDTO
+	err = rp.db.WithContext(ctx).
+		Table("events e").
+		Select("e.event_type as event_name, e.description as detail, e.created_at").
+		Where("e.product_item_id = ? AND e.is_deleted = false", detail.ID).
+		Order("e.created_at ASC").
+		Scan(&events).Error
+
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "events")
+	}
+
+	if events == nil {
+		events = []response.ProductItemEventDTO{}
+	}
+	detail.Events = events
+
+	return &detail, nil
+}
+
+func (rp *productItemRepository) Create(ctx context.Context, items []entities.ProductItem) error {
+	return rp.db.WithContext(ctx).Create(&items).Error
 }

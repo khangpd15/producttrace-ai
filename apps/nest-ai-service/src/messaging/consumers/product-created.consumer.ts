@@ -21,7 +21,7 @@ export class ProductCreatedPayload {
 @Injectable()
 export class ProductCreatedConsumer extends BaseConsumer<ProductCreatedPayload> {
   protected readonly logger = new Logger(ProductCreatedConsumer.name);
-  protected readonly queueName = RABBITMQ.QUEUES.PRODUCT_CREATED;
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
   protected readonly payloadClass = ProductCreatedPayload;
 
   /**

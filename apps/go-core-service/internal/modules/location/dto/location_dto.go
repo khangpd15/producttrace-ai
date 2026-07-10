@@ -7,7 +7,7 @@ import (
 )
 
 type CreateLocationReq struct {
-	OwnerUserID      string              `json:"owner_user_id" binding:"required"`
+	OwnerUserID      string              `json:"ownerUserId" binding:"required"`
 	Code             string              `json:"code" binding:"required"`
 	Name             string              `json:"name" binding:"required"`
 	Type             domain.LocationType `json:"type" binding:"required,oneof=WAREHOUSE STORE DEALER WARRANTY_CENTER"`
@@ -19,8 +19,7 @@ type CreateLocationReq struct {
 	City             string              `json:"city"`
 	Latitude         *float64            `json:"latitude" binding:"required"`
 	Longitude        *float64            `json:"longitude" binding:"required"`
-	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
-	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
+	OpeningHoursJSON domain.OpeningHours `json:"openingHoursJson"`
 }
 
 type UpdateLocationReq struct {
@@ -34,11 +33,9 @@ type UpdateLocationReq struct {
 	City             string              `json:"city"`
 	Latitude         *float64            `json:"latitude" binding:"required"`
 	Longitude        *float64            `json:"longitude" binding:"required"`
-	IsActive         *bool               `json:"is_active"`
-	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
-	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
+	IsActive         *bool               `json:"isActive"`
+	OpeningHoursJSON domain.OpeningHours `json:"openingHoursJson"`
 }
-
 
 // ListLocationsReq là query params cho GET /locations
 type ListLocationsReq struct {
@@ -56,12 +53,12 @@ type ListLocationsResponse struct {
 	Total      int64               `json:"total"`
 	Page       int                 `json:"page"`
 	Limit      int                 `json:"limit"`
-	TotalPages int                 `json:"total_pages"`
+	TotalPages int                 `json:"totalPages"`
 }
 
 type LocationResponse struct {
 	ID               string              `json:"id"`
-	OwnerUserID      string              `json:"owner_user_id"`
+	OwnerUserID      string              `json:"ownerUserId"`
 	Code             string              `json:"code"`
 	Name             string              `json:"name"`
 	Type             domain.LocationType `json:"type"`
@@ -74,15 +71,14 @@ type LocationResponse struct {
 	Country          string              `json:"country"`
 	Latitude         float64             `json:"latitude"`
 	Longitude        float64             `json:"longitude"`
-	OpeningHoursJSON domain.OpeningHours `json:"opening_hours_json"`
-	IsActive         bool                `json:"is_active"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
-	GeoLocation      *GeoLocationDTO     `json:"geo_location,omitempty"`
+	OpeningHoursJSON domain.OpeningHours `json:"openingHoursJson"`
+	IsActive         bool                `json:"isActive"`
+	CreatedAt        time.Time           `json:"createdAt"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
+	GeoLocation      *GeoLocationDTO     `json:"geoLocation,omitempty"`
 }
 
 type GeoLocationDTO struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
-

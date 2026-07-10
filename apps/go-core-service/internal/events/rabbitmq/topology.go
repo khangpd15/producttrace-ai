@@ -44,6 +44,105 @@ func SetupTopology(ch *amqp.Channel) error {
 	if err != nil {
 		return fmt.Errorf("declare queue: %w", err)
 	}
+	routingNestKeys := []string{
+		OTPRegisterUserRK,
+		OTPForgotRK,
+		OTPVerifiedRK,
+		ProductCreatedRK,
+		TraceExportedRK,
+	}
+
+	for _, rk := range routingNestKeys {
+		err = ch.QueueBind(
+			q.Name,
+			rk,
+			DefaultExchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("bind queue %s to exchange %s with rk %s: %w", q.Name, DefaultExchange, rk, err)
+		}
+	}
+
+	// Declare DLQ queue and bind it
+	dlq, err := ch.QueueDeclare(
+		"ai.events.failed", // name
+		true,               // durable
+		false,              // delete when unused
+		false,              // exclusive
+		false,              // no-wait
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("declare dlq: %w", err)
+	}
+
+	err = ch.QueueBind(
+		dlq.Name,
+		"ai.events.failed",
+		DLXExchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("bind dlq: %w", err)
+	}
+
+	// Declare notification.password.reset queue for NestJS PasswordResetConsumer
+
+	qOtp, err := ch.QueueDeclare(
+		"otp.events", // name
+		true,         // durable
+		false,        // delete when unused
+		false,        // exclusive
+		false,        // no-wait
+		amqp.Table{
+			"x-dead-letter-exchange":    DLXExchange,
+			"x-dead-letter-routing-key": "otp.events.failed",
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("declare queue: %w", err)
+	}
+
+	routingOTPKeys := []string{
+		UserRegisteredRK,
+		UserPasswordForgotRK,
+	}
+	for _, rk := range routingOTPKeys {
+		err = ch.QueueBind(
+			qOtp.Name,
+			rk,
+			DefaultExchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("bind queue %s to exchange %s with rk %s: %w", qOtp.Name, DefaultExchange, rk, err)
+		}
+	}
+	dlqOTP, err := ch.QueueDeclare(
+		"otp.events.failed", // name
+		true,                // durable
+		false,               // delete when unused
+		false,               // exclusive
+		false,               // no-wait
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("declare dlq: %w", err)
+	}
+	err = ch.QueueBind(
+		dlqOTP.Name,
+		"otp.events.failed",
+		DLXExchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("bind dlq: %w", err)
+	}
 
 	qBatch, err := ch.QueueDeclare(
 		"batch.events", // name
@@ -100,49 +199,6 @@ func SetupTopology(ch *amqp.Channel) error {
 	}
 
 	// Bind routing keys
-	routingNestKeys := []string{
-		UserRegisteredRK,
-		ProductCreatedRK,
-		UserPasswordResetRK,
-		UserVerifiedRK,
-	}
-
-	for _, rk := range routingNestKeys {
-		err = ch.QueueBind(
-			q.Name,
-			rk,
-			DefaultExchange,
-			false,
-			nil,
-		)
-		if err != nil {
-			return fmt.Errorf("bind queue %s to exchange %s with rk %s: %w", q.Name, DefaultExchange, rk, err)
-		}
-	}
-
-	// Declare DLQ queue and bind it
-	dlq, err := ch.QueueDeclare(
-		"ai.events.failed", // name
-		true,               // durable
-		false,              // delete when unused
-		false,              // exclusive
-		false,              // no-wait
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("declare dlq: %w", err)
-	}
-
-	err = ch.QueueBind(
-		dlq.Name,
-		"ai.events.failed",
-		DLXExchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("bind dlq: %w", err)
-	}
 
 	return nil
 }
