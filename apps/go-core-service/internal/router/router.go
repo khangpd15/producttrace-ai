@@ -3,7 +3,6 @@ package router
 import (
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
@@ -18,6 +17,7 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
 
 type RouterDependency struct {
@@ -32,6 +32,7 @@ type RouterDependency struct {
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
 	TraceHandler                 *traceHandler.TraceHandler
+	PublicHandler                *publicHandler.PublicHandler
 	RateLimiter                  *middleware.RateLimiter
 }
 
@@ -42,16 +43,15 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	_ = r.SetTrustedProxies(nil)
 
 	// CORS is handled centrally by Kong Gateway (see infra/kong/kong.yml).
-	// We disable Go's CORS middleware here to prevent duplicate CORS headers.
+	// // We disable Go's CORS middleware here to prevent duplicate CORS headers and 403 Forbidden on production origins.
 	// r.Use(middleware.CORSMiddleware())
-	// CORS middleware — must be registered before all routes
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	// r.Use(cors.New(cors.Config{
+	// 	AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+	// 	AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	// 	AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+	// 	AllowCredentials: true,
+	// 	MaxAge:           12 * time.Hour,
+	// }))
 
 	// Apply global Recovery, RequestID, and Logger middlewares
 	r.Use(middleware.RecoveryMiddleware())
@@ -73,7 +73,16 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
+	SetupPublicRouter(api, deps.PublicHandler)
 	return r
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
+	}
 }
 
 // AUTH
