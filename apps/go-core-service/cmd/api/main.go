@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/app"
@@ -23,6 +24,11 @@ type HealthResponse struct {
 }
 
 func main() {
+	// Load .env file for local development (ignored if vars already set)
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Println("No .env file found, using environment variables")
+	}
+
 	// 1. Connect to PostgreSQL (GORM client)
 	databasePostgres := database.ConnectPostgres()
 	log.Println("PostgreSQL GORM connected successfully")

@@ -756,3 +756,104 @@ func TestUpdateProfile_GetUserError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, res)
 }
+
+// ---------------------------------------------------------------------------
+// ChangePassword Tests
+// ---------------------------------------------------------------------------
+
+func TestChangePassword_Success(t *testing.T) {
+	userID := uuid.New()
+	hashedOldPassword, _ := utils.HashPassword("oldpassword")
+	existingUser := &entity.User{
+		ID:           userID,
+		PasswordHash: hashedOldPassword,
+		Status:       entity.StatusActive,
+	}
+
+	req := &request.ChangePasswordRequest{
+		CurrentPassword: "oldpassword",
+		NewPassword:     "newpassword123",
+		ConfirmPassword: "newpassword123",
+	}
+
+	var capturedUser *entity.User
+	mockRepo := &mockUserRepository{
+		getUserByIDFn: func(ctx context.Context, id string) (*entity.User, error) {
+			return existingUser, nil
+		},
+		updateUserFn: func(ctx context.Context, user *entity.User) (*entity.User, error) {
+			capturedUser = user
+			return user, nil
+		},
+		writeAuditLogFn: func(ctx context.Context, content string, logType string) error {
+			return nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	err := svc.ChangePassword(context.Background(), userID.String(), req)
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedUser)
+	assert.True(t, utils.ComparePassword(capturedUser.PasswordHash, req.NewPassword))
+}
+
+func TestChangePassword_WrongCurrentPassword(t *testing.T) {
+	userID := uuid.New()
+	hashedOldPassword, _ := utils.HashPassword("oldpassword")
+	existingUser := &entity.User{
+		ID:           userID,
+		PasswordHash: hashedOldPassword,
+		Status:       entity.StatusActive,
+	}
+
+	req := &request.ChangePasswordRequest{
+		CurrentPassword: "wrongpassword",
+		NewPassword:     "newpassword123",
+		ConfirmPassword: "newpassword123",
+	}
+
+	mockRepo := &mockUserRepository{
+		getUserByIDFn: func(ctx context.Context, id string) (*entity.User, error) {
+			return existingUser, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	err := svc.ChangePassword(context.Background(), userID.String(), req)
+
+	require.Error(t, err)
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeValidation, appErr.Code)
+}
+
+func TestChangePassword_SameAsCurrent(t *testing.T) {
+	userID := uuid.New()
+	hashedOldPassword, _ := utils.HashPassword("oldpassword")
+	existingUser := &entity.User{
+		ID:           userID,
+		PasswordHash: hashedOldPassword,
+		Status:       entity.StatusActive,
+	}
+
+	req := &request.ChangePasswordRequest{
+		CurrentPassword: "oldpassword",
+		NewPassword:     "oldpassword",
+		ConfirmPassword: "oldpassword",
+	}
+
+	mockRepo := &mockUserRepository{
+		getUserByIDFn: func(ctx context.Context, id string) (*entity.User, error) {
+			return existingUser, nil
+		},
+	}
+
+	svc := newTestUserService(mockRepo)
+	err := svc.ChangePassword(context.Background(), userID.String(), req)
+
+	require.Error(t, err)
+	var appErr *apperror.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperror.CodeValidation, appErr.Code)
+}

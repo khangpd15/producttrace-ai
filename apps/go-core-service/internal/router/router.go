@@ -10,15 +10,17 @@ import (
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
 type RouterDependency struct {
-	BatchHandler     *batchHandler.BatchHandler
-	AuthHandler      *authHandler.AuthenHandler
-	UserHandler      *userHandler.UserHandler
-	ProductHandler   *productHandler.ProductHandler
-	OwnershipHandler *ownershipHandler.OwnershipHandler
-	UserRepo         userRepo.UserRepositoryInterface
+	BatchHandler         *batchHandler.BatchHandler
+	AuthHandler          *authHandler.AuthenHandler
+	UserHandler          *userHandler.UserHandler
+	ProductHandler       *productHandler.ProductHandler
+	OwnershipHandler     *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler *warrantyClaimHandler.WarrantyClaimHandler
+	UserRepo             userRepo.UserRepositoryInterface
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -39,6 +41,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
 
 	return r
 }
@@ -65,6 +68,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
+		profileGroup.PUT("/change-password", uh.ChangePassword)
 	}
 
 	// Admin-only management routes (requires ADMIN role)
@@ -159,4 +163,13 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
 	ownerships.DELETE("/:id", oh.DeleteOwnership)
 	ownerships.GET("", oh.SearchOwnerships)
+}
+
+// WARRANTY CLAIM
+func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyClaims := api.Group("/warranty-claims")
+	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
+	{
+		warrantyClaims.POST("", wch.CreateWarrantyClaim)
+	}
 }

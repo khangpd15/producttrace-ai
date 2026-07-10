@@ -41,6 +41,11 @@ import (
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+
+	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
 )
 
 type App struct {
@@ -87,13 +92,24 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 
+	// Warranty Claim Module
+	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
+	wcOwnershipMock := &warrantyClaimAdapters.MockOwnershipPort{}
+	wcProductMock := &warrantyClaimAdapters.MockProductItemPort{}
+	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
+	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
+	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipMock, wcProductMock, wcEventMock, wcAuditMock, wcNotifMock)
+	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
+
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler:     batchHandler,
-		ProductHandler:   pHandler,
-		UserHandler:      uHandler,
-		AuthHandler:      aHandler,
-		OwnershipHandler: oHandler,
-		UserRepo:         uRepo,
+		BatchHandler:         batchHandler,
+		ProductHandler:       pHandler,
+		UserHandler:          uHandler,
+		AuthHandler:          aHandler,
+		OwnershipHandler:     oHandler,
+		WarrantyClaimHandler: wcHandler,
+		UserRepo:             uRepo,
 	})
 
 	return &App{
