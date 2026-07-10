@@ -3,102 +3,73 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 
 @Injectable()
 export class QdrantService implements OnModuleInit {
-  // Thêm hàm này vào bên trong class QdrantService của bạn
-  async findStoresByRadius(lat: number, lng: number, radiusInMeters: number = 5000) {
+  private client: QdrantClient;
+  private collectionName = 'producttrace_geo_collection';
+
+  constructor() {
+    // Kết nối tới Qdrant đang chạy trong Docker
+    this.client = new QdrantClient({ url: 'http://localhost:6333' });
+  }
+
+  async onModuleInit() {
     try {
-      const result = await this.client.scroll('stores_collection', {
+      const collections = await this.client.getCollections();
+      const hasCollection = collections.collections.some(c => c.name === this.collectionName);
+
+      if (!hasCollection) {
+        // Khởi tạo collection lưu trữ hình học
+        await this.client.createCollection(this.collectionName, {
+          vectors: {}, // Sử dụng cấu trúc lưu trữ không gian (Non-vector)
+        });
+        
+        // Kích hoạt Geo Index tăng tốc quét bán kính
+        await this.client.createPayloadIndex(this.collectionName, {
+          field_name: 'location',
+          field_schema: 'geo',
+        });
+        console.log(`[QdrantService] Geo collection initialized with geo index.`);
+      }
+    } catch (error) {
+      console.error('[QdrantService] Failed to initialize Qdrant collection:', error);
+    }
+  }
+
+  async findStoresByRadius(lat: number, lng: number, radiusMeters: number) {
+    return this.findLocationsByRadius(lat, lng, radiusMeters, 'store');
+  }
+
+  // CƠ CHẾ CORE DÙNG CHUNG (Lọc theo vị trí địa lý và loại thực thể)
+  async findLocationsByRadius(
+    lat: number,
+    lng: number,
+    radiusMeters: number,
+    type: 'store' | 'service_center',
+  ) {
+    try {
+      const result = await this.client.scroll(this.collectionName, {
         filter: {
           must: [
+            { key: 'type', match: { value: type } }, // Lọc store hoặc service_center
             {
+              key: 'location',
               geo_radius: {
-                key: 'location',
-                range: {
-                  radius: radiusInMeters,  
-                  center: { lat: lat, lon: lng }, // Tọa độ vị trí của người dùng
-                },
+                center: { lat, lon: lng },
+                radius: radiusMeters,
               },
             },
           ],
         },
-        limit: 10, 
         with_payload: true,
       });
 
-      // Trả ra danh sách payload chứa thông tin cửa hàng
-      return result.points.map(point => ({
-        id: point.id,
-        ...(point.payload as any)
+      // Map lại cấu trúc dữ liệu trả về mảng gọn gàng
+      return result.points.map(p => ({
+        id: p.id,
+        ...(p.payload as object),
       }));
     } catch (error) {
-      console.error('Error from Qdrant:', error);
+      console.error(`[QdrantService] Error in findLocationsByRadius for ${type}:`, error);
       throw error;
     }
   }
-  private client: QdrantClient;
-  private readonly collectionName = 'products_collection';
-  private readonly storeCollection = 'stores_collection';
-
-  constructor() {
-    this.client = new QdrantClient({
-      url: process.env.QDRANT_URL || 'http://localhost:6333',
-    });
-  }
-
-  async onModuleInit() {
-    const collections = await this.client.getCollections();
-    const exists = collections.collections.find(c => c.name === this.collectionName);
-
-    if (!exists) {
-      await this.client.createCollection(this.collectionName, {
-        vectors: { size: 768, distance: 'Cosine' }, // size 768 tùy thuộc vào model embedding 
-      });
-      console.log('Collection created:', this.collectionName);
-    }
-  }
-  async upsertProduct(productData: { id: number | string, vector: number[], metadata: any, name?: string }) {
-
-    const numericId = this.generateNumericId(productData.id);
-
-    await this.client.upsert('products_collection', {
-      wait: true,
-      points: [
-        {
-          id: numericId,
-          vector: productData.vector,
-          payload: {
-            name: productData.name,
-            originalId: productData.id
-          },
-        },
-      ],
-    });
-  }
-  private generateNumericId(input: string | number): number {
-    const str = String(input);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash); 
-  }
-  async upsertStoreToQdrant(store: { id: number; name: string; lat: number; lng: number; address?: string }) {
-  await this.client.upsert(this.storeCollection, {
-    wait: true,
-    points: [
-      {
-        id: store.id, 
-        vector: {},   
-        payload: {
-          name: store.name,
-          address: store.address || '',
-          location: { 
-            lat: Number(store.lat), 
-            lon: Number(store.lng) 
-          }
-        },
-      },
-    ],
-  });
-}
 }

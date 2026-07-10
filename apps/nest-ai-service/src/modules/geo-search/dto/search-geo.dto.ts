@@ -1,5 +1,5 @@
-import { IsNumber, IsOptional, IsPositive, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator';
 
 export class SearchGeoDto {
   @Type(() => Number)
@@ -18,5 +18,9 @@ export class SearchGeoDto {
   @Type(() => Number)
   @IsNumber()
   @IsPositive()
-  radius?: number; 
+  radius?: number; // Bán kính tính bằng mét (mặc định sẽ xử lý ở service)
+
+  @IsOptional()
+  @IsString()
+  productId?: string; // Dùng khi tìm sản phẩm cụ thể
 }
