@@ -51,6 +51,17 @@ import (
 
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
+
+	// Location Module
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	// Dashboard Module
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
+	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
+	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
 
@@ -107,6 +118,16 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
+ 
+	// Initialize Location Module
+	locRepo := locationRepo.NewLocationRepository(database)
+	locService := locationService.NewLocationService(locRepo)
+	locHandler := locationHandler.NewLocationHandler(locService)
+
+	// Initialize Dashboard Module
+	dbRepo := dashboardRepo.NewDashboardRepository(database)
+	dbService := dashboardService.NewDashboardService(dbRepo)
+	dbHandler := dashboardHandler.NewDashboardHandler(dbService)
 
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
@@ -126,6 +147,8 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductHandler:               pHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
+		LocationHandler:              locHandler,
+		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,

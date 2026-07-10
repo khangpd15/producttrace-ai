@@ -17,6 +17,7 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
 
@@ -27,6 +28,7 @@ type RouterDependency struct {
 	ProductHandler               *productHandler.ProductHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
+	DashboardHandler             *dashboardHandler.DashboardHandler
 	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
@@ -69,6 +71,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
 	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
+	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
@@ -215,6 +218,14 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
+	}
+}
+
+func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHandler, uRepo userRepo.UserRepositoryInterface) {
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+	{
+		dashboard.GET("/stats", dh.GetStats)
 	}
 }
 
