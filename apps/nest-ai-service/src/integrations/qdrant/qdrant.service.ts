@@ -72,4 +72,36 @@ export class QdrantService implements OnModuleInit {
       throw error;
     }
   }
+  //  Tìm địa điểm chứa sản phẩm cụ thể trong bán kính (km)
+async findProductsByRadius(lat: number, lng: number, radiusMeters: number, productId?: string) {
+  try {
+    const filters: any[] = [
+      {
+        key: 'location',
+        geo_radius: {
+          center: { lat, lon: lng },
+          radius: radiusMeters,
+        },
+      },
+    ];
+
+    // Nếu người dùng truyền mã sản phẩm, dùng bộ lọc match của Qdrant để quét trong mảng 'products'
+    if (productId) {
+      filters.push({ key: 'products', match: { value: productId } });
+    }
+
+    const result = await this.client.scroll(this.collectionName, {
+      filter: { must: filters },
+      with_payload: true,
+    });
+
+    return result.points.map(p => ({
+      id: p.id,
+      ...(p.payload as object),
+    }));
+  } catch (error) {
+    console.error('[QdrantService] Error in findProductsByRadius:', error);
+    throw error;
+  }
+}
 }

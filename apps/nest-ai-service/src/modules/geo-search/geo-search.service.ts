@@ -48,4 +48,23 @@ async searchServiceCenters(searchGeoDto: SearchGeoDto) {
     throw new InternalServerErrorException('Có lỗi xảy ra khi tìm trung tâm bảo hành.');
   }
 }
+// Tìm sản phẩm cùng loại trong bán kính (products/nearby)
+async searchProductsNearby(searchGeoDto: SearchGeoDto) {
+  try {
+    console.log('🚀 [GeoSearchService] Processing products nearby search:', searchGeoDto);
+    
+    const { lat, lng, radius = 5000, productId } = searchGeoDto;
+
+    const locations = await this.qdrantService.findProductsByRadius(lat, lng, radius, productId);
+
+    return {
+      success: true,
+      message: `Tìm được ${locations.length} địa điểm bán sản phẩm này trong bán kính ${radius}m`,
+      data: locations,
+    };
+  } catch (error) {
+    console.error('Error in searchProductsNearby:', error);
+    throw new InternalServerErrorException('Có lỗi xảy ra khi tìm sản phẩm xung quanh.');
+  }
+ }
 }
