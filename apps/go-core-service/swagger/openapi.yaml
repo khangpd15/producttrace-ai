@@ -1,0 +1,1282 @@
+openapi: 3.0.3
+info:
+  title: ProductTrace AI - Batch and Trace API
+  version: 1.0.0
+  description: API Specification for the Batch and Traceability (Trace) modules of the ProductTrace AI Monolith.
+servers:
+  - url: http://localhost:8080/api
+    description: Local development server
+tags:
+  - name: Auth
+    description: Authentication flow endpoints
+  - name: Batch
+    description: Batch management endpoints
+  - name: Trace
+    description: Product item trace search and document export endpoints
+paths:
+  /auth/login:
+    post:
+      summary: Login to system
+      description: Authenticates a user and returns access and refresh JWT tokens.
+      operationId: login
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid email or password format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Incorrect credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches:
+    get:
+      summary: Get batch list with filters
+      description: Retrieve a paginated list of batches. Excludes DRAFT batches automatically for non-admin roles unless status=DRAFT is explicitly requested (which yields 403 for non-admins).
+      operationId: getBatchList
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter batches by status. DRAFT is restricted to ADMIN users only.
+          schema:
+            type: string
+            enum: [ALL, DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED]
+            default: ALL
+          example: ACTIVE
+        - name: page
+          in: query
+          required: false
+          description: Page index for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          required: false
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: Batch list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchListResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - non-ADMIN user requesting DRAFT status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a new batch
+      description: Generates a new production batch with custom serial rules. Automatically runs advisory locks to prevent duplicates.
+      operationId: createBatch
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+      responses:
+        '201':
+          description: Batch created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResponse'
+        '400':
+          description: Invalid request parameters or constraint validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - role does not have permission (requires ADMIN or MANUFACTURER)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict - duplicate batch code prefix/sequence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Entity - manufacture date in future or expiry date before manufacture date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/search:
+    get:
+      summary: Search batches by keyword
+      description: Performs a fuzzy search on batch codes or product names.
+      operationId: searchBatches
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          required: true
+          description: "Fuzzy query keyword (Max: 100 characters)"
+          schema:
+            type: string
+            maxLength: 100
+          example: APL-2026
+        - name: sortField
+          in: query
+          required: false
+          description: Field name to sort results
+          schema:
+            type: string
+            default: created_at
+          example: created_at
+        - name: sortOrder
+          in: query
+          required: false
+          description: Order direction
+          schema:
+            type: string
+            enum: [ASC, DESC]
+            default: DESC
+          example: DESC
+      responses:
+        '200':
+          description: Search results returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchBatchResponse'
+        '400':
+          description: Keyword exceeds 100 characters limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}:
+    get:
+      summary: Get batch detail
+      description: Retrieve details of a single batch using its code or ID. Used for public scans.
+      operationId: getBatchDetail
+      tags:
+        - Batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch code or UUID string
+          schema:
+            type: string
+          example: APL-2026-0001
+      responses:
+        '200':
+          description: Batch details returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchDetailResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete a batch (Soft Delete)
+      description: Soft deletes a batch. Deletion is blocked if the batch has linked product items or events.
+      operationId: deleteBatch
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+      responses:
+        '204':
+          description: Batch deleted successfully (no content)
+        '400':
+          description: Deletion blocked due to linked items/events or batch already deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN or MANUFACTURER role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}/status:
+    patch:
+      summary: Update batch status
+      description: Modify the current status of a batch.
+      operationId: updateBatchStatus
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchStatusRequest'
+      responses:
+        '200':
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchStatusResponse'
+        '400':
+          description: Invalid request parameters, batch already soft-deleted, or invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN or MANUFACTURER role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}/events:
+    get:
+      summary: Get batch events
+      description: Retrieve timeline events registered for the batch.
+      operationId: getBatchEvents
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+      responses:
+        '200':
+          description: List of batch events returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchEvent'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}/products:
+    get:
+      summary: Get batch products
+      description: Retrieve product items associated with this batch. Requires staff/dealer level access.
+      operationId: getBatchProducts
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        - name: status
+          in: query
+          required: false
+          description: Optional status filter for product items
+          schema:
+            type: string
+          example: AVAILABLE
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          required: true
+          description: Items pagination limit (required)
+          schema:
+            type: integer
+          example: 10
+      responses:
+        '200':
+          description: Products retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetBatchProductsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN, STAFF, or DEALER roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}/history:
+    get:
+      summary: Get batch modification history
+      description: Retrieve audit logs of status modifications or actions performed on this batch.
+      operationId: getBatchHistory
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: History list returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetBatchHistoryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN or STAFF roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /batches/{id}/export:
+    post:
+      summary: Export batch logs
+      description: Triggers batch exports for warehouse or manager.
+      operationId: exportBatch
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+      responses:
+        '200':
+          description: Batch logs exported successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - requires ADMIN, MANAGER, or WAREHOUSE roles
+        '404':
+          description: Batch not found
+        '500':
+          description: Internal server error
+
+  /batches/export-qr/{id}:
+    get:
+      summary: Export batch QR code PDF
+      description: Generates A4 A-grade layout QR label verification sheets.
+      operationId: exportBatchQR
+      tags:
+        - Batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The batch UUID
+          schema:
+            type: string
+            format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+      responses:
+        '200':
+          description: Streams PDF binary file back
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - requires ADMIN or MANUFACTURER roles
+        '404':
+          description: Batch not found
+        '500':
+          description: Internal server error
+
+  /trace/search:
+    get:
+      summary: Trace search timeline
+      description: Search history timeline of a product item by item_code or serial_number. Applies IP rate limiting and context-based event shielding.
+      operationId: traceSearch
+      tags:
+        - Trace
+      parameters:
+        - name: code
+          in: query
+          required: true
+          description: "The item_code or serial_number (min: 3, max: 100 characters)"
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 100
+          example: PT-MILK-SN0001
+        - name: fromDate
+          in: query
+          required: false
+          description: ISO-8601 UTC start time filter
+          schema:
+            type: string
+            format: date-time
+          example: 2026-07-01T00:00:00Z
+        - name: toDate
+          in: query
+          required: false
+          description: ISO-8601 UTC end time filter
+          schema:
+            type: string
+            format: date-time
+          example: 2026-07-08T00:00:00Z
+        - name: eventTypes
+          in: query
+          required: false
+          description: Comma-separated event enums to filter
+          schema:
+            type: string
+          example: PRODUCED,SALE
+      responses:
+        '200':
+          description: Search results successfully fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceSearchResponse'
+        '400':
+          description: Invalid parameters or invalid date order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests - exceeded rate limit (30 requests/min/IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /trace/export/pdf:
+    post:
+      summary: Export product journey as PDF
+      description: Generates a beautiful PDF timeline. Initiates background async job if timeline size is 10 or more events.
+      operationId: exportTracePDF
+      tags:
+        - Trace
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportPdfRequest'
+      responses:
+        '200':
+          description: Streams the PDF file directly (for small timelines under 10 events)
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '202':
+          description: Asynchronous PDF generation job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJobResponse'
+        '400':
+          description: Invalid request parameters or empty timeline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN, STAFF, or DEALER roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /trace/export/excel:
+    post:
+      summary: Export product journey as multi-sheet Excel
+      description: Generates an Excel spreadsheet containing detailed timelines. Runs asynchronously for large datasets or batch-level exports.
+      operationId: exportTraceExcel
+      tags:
+        - Trace
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportExcelRequest'
+      responses:
+        '200':
+          description: Streams the Excel spreadsheet directly (for small single-item timelines under 10 events)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '202':
+          description: Asynchronous Excel generation job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJobResponse'
+        '400':
+          description: Invalid request parameters, empty timeline, or batch size exceeds 50,000 events limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - requires ADMIN, STAFF, or DEALER roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product or batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@producttrace.com
+        password:
+          type: string
+          example: Password123!
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Login successfully
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              example: eyJhbGciOi...
+            refreshToken:
+              type: string
+              example: eyJhbGciOi...
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+                email:
+                  type: string
+                  example: admin@producttrace.com
+                role:
+                  type: string
+                  enum: [ADMIN, STAFF, MANUFACTURER, DEALER, WAREHOUSE, MANAGER, CUSTOMER]
+                  example: ADMIN
+    Batch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        batchCode:
+          type: string
+          example: APL-2026-0001
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED, BLOCKED]
+          example: ACTIVE
+        quantity:
+          type: integer
+          example: 100
+        manufactureDate:
+          type: string
+          format: date-time
+          example: 2026-07-01T00:00:00Z
+        expiryDate:
+          type: string
+          format: date-time
+          example: 2027-07-01T00:00:00Z
+        productName:
+          type: string
+          example: Red Apple Premium
+    BatchDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        batchCode:
+          type: string
+          example: APL-2026-0001
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED, BLOCKED]
+          example: ACTIVE
+        quantity:
+          type: integer
+          example: 100
+        manufactureDate:
+          type: string
+          format: date-time
+          example: 2026-07-01T00:00:00Z
+        expiryDate:
+          type: string
+          format: date-time
+          example: 2027-07-01T00:00:00Z
+        productName:
+          type: string
+          example: Red Apple Premium
+    BatchDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/BatchDetail'
+    BatchListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Batch'
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+    SearchBatchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Batch'
+    BatchCreateRequest:
+      type: object
+      required:
+        - variantId
+        - prefix
+        - manufactureDate
+        - quantity
+      properties:
+        variantId:
+          type: string
+          format: uuid
+          example: 6c9e66b3-e5d8-4f10-bf91-b3b35520ee22
+        prefix:
+          type: string
+          example: APL
+        manufactureDate:
+          type: string
+          format: date-time
+          example: 2026-07-01T00:00:00Z
+        expiryDate:
+          type: string
+          format: date-time
+          example: 2027-07-01T00:00:00Z
+        quantity:
+          type: integer
+          minimum: 1
+          example: 100
+        manufacturerName:
+          type: string
+          example: Apple Farm Inc
+        supplierName:
+          type: string
+          example: Farm Distrib
+        originCountry:
+          type: string
+          example: Vietnam
+        productionPlace:
+          type: string
+          example: Lam Dong
+    BatchCreateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Batch'
+    BatchStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, EXPIRED, RECALLED, BLOCKED]
+          example: EXPIRED
+    BatchStatusResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        batchCode:
+          type: string
+          example: APL-2026-0001
+        status:
+          type: string
+          example: EXPIRED
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-07-10T01:59:00Z
+    BatchEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: e20befe6-e4b9-4f37-b514-e66233ef04a1
+        title:
+          type: string
+          example: Lô hàng đã xuất xưởng
+        description:
+          type: string
+          example: Đã kiểm tra chất lượng và dán nhãn
+        timestamp:
+          type: string
+          format: date-time
+          example: 2026-07-01T10:00:00Z
+    ProductItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c20befe6-e4b9-4f37-b514-e66233ef04a1
+        itemCode:
+          type: string
+          example: APL-2026-0001-SN0001
+        serialNumber:
+          type: string
+          example: SN0001
+        status:
+          type: string
+          example: AVAILABLE
+    GetBatchProductsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+    BatchHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 993fa1a0-1200-4b2e-a551-fb112aaee111
+        action:
+          type: string
+          example: UPDATE
+        entity:
+          type: string
+          example: Batch
+        oldData:
+          type: string
+          example: "{\"status\": \"ACTIVE\"}"
+        newData:
+          type: string
+          example: "{\"status\": \"EXPIRED\"}"
+        userEmail:
+          type: string
+          example: admin@producttrace.com
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-07-10T01:59:00Z
+    GetBatchHistoryResponse:
+      type: object
+      properties:
+        batchId:
+          type: string
+          format: uuid
+          example: 7c9e66b3-e5d8-4f10-bf91-b3b35520ee11
+        batchCode:
+          type: string
+          example: APL-2026-0001
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchHistoryItem'
+    TraceSearchResponse:
+      type: object
+      properties:
+        productItem:
+          type: object
+          properties:
+            itemId:
+              type: string
+              format: uuid
+              example: c20befe6-e4b9-4f37-b514-e66233ef04a1
+            itemCode:
+              type: string
+              example: PT-MILK-SN0001
+            serialNumber:
+              type: string
+              example: SN0001
+            status:
+              type: string
+              example: AVAILABLE
+            productName:
+              type: string
+              example: Fresh Milk 1L
+            thumbnailUrl:
+              type: string
+              example: http://localhost:8080/storage/temp/thumb.jpg
+        warning:
+          type: string
+          example: "WARNING: This product belongs to a recalled batch. Please do not consume."
+        filterApplied:
+          type: object
+          properties:
+            fromDate:
+              type: string
+              format: date-time
+              nullable: true
+              example: 2026-07-01T00:00:00Z
+            toDate:
+              type: string
+              format: date-time
+              nullable: true
+              example: 2026-07-08T00:00:00Z
+            eventTypes:
+              type: array
+              items:
+                type: string
+              example: [PRODUCED, SALE]
+        matchedEventsCount:
+          type: integer
+          example: 2
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              eventId:
+                type: string
+                format: uuid
+                example: e20befe6-e4b9-4f37-b514-e66233ef04a2
+              eventType:
+                type: string
+                enum: [PRODUCED, PACKED, WAREHOUSE_IN, WAREHOUSE_OUT, TRANSPORTED, SALE, REGISTERED, WARRANTY_ACTIVE, WARRANTY_CLAIM, WARRANTY_RESOLVED, RETURNED, RECALL, RECALLED]
+                example: PRODUCED
+              title:
+                type: string
+                example: Product Manufactured
+              description:
+                type: string
+                example: Milk was packaged and pasteurized.
+              location:
+                type: string
+                example: Lam Dong Plant
+              timestamp:
+                type: string
+                format: date-time
+                example: 2026-07-01T12:00:00Z
+    ExportPdfRequest:
+      type: object
+      required:
+        - productItemId
+      properties:
+        productItemId:
+          type: string
+          format: uuid
+          example: c20befe6-e4b9-4f37-b514-e66233ef04a1
+        theme:
+          type: string
+          enum: [CLASSIC_NAVY, WARM_MINIMAL]
+          default: CLASSIC_NAVY
+          example: CLASSIC_NAVY
+        includeAuditLogs:
+          type: boolean
+          default: false
+          example: true
+    ExportExcelRequest:
+      type: object
+      properties:
+        productItemId:
+          type: string
+          format: uuid
+          example: c20befe6-e4b9-4f37-b514-e66233ef04a1
+        batchId:
+          type: string
+          format: uuid
+          example: 6f2bc881-8b21-4f10-9111-a887b2210a12
+        fromDate:
+          type: string
+          format: date-time
+          example: 2026-07-01T00:00:00Z
+        toDate:
+          type: string
+          format: date-time
+          example: 2026-07-08T23:59:59Z
+    ExportJobResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          example: 993fa1a0-1200-4b2e-a551-fb112aaee111
+        status:
+          type: string
+          example: PROCESSING
+        estimatedTimeSeconds:
+          type: integer
+          example: 3
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Invalid input parameters
+        errors:
+          type: object
+          example: null
+    PaginationResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        totalPages:
+          type: integer
+          example: 10

@@ -551,18 +551,15 @@ func (r *batchRepository) ExportBatch(ctx context.Context, batchID uuid.UUID, ex
 		// (without selecting specific items), and there's no batch_events table.
 		// We insert an audit_log record for the export action.
 
-		// Wait, user says "Create history/event. Create audit log."
-		// Since we don't have batch_id in events and user said status is just reference and event might not be strictly needed for batch,
-		// we will just insert an audit_log to represent the history.
-		// "audit_logs" schema from migration: id, action, entity_type, entity_id, user_id, old_values, new_values, ip_address, created_at
+		// "audit_logs" schema from migration: id, action, entity, entity_id, user_id, old_data, new_data, ip_address, created_at
 		auditLog := map[string]interface{}{
-			"id":          uuid.New(),
-			"action":      "EXPORT_BATCH",
-			"entity_type": "BATCH",
-			"entity_id":   batch.ID.String(),
-			"user_id":     currentUserID.String(),
-			"new_values":  fmt.Sprintf(`{"exported_quantity": %d, "destination": "%s", "operator": "%s", "notes": "%s"}`, exportReq.Quantity, exportReq.DestinationLocation, exportReq.OperatorName, exportReq.Notes),
-			"created_at":  time.Now(),
+			"id":         uuid.New(),
+			"action":     "EXPORT_BATCH",
+			"entity":     "BATCH",
+			"entity_id":  batch.ID.String(),
+			"user_id":    currentUserID.String(),
+			"new_data":   fmt.Sprintf(`{"exported_quantity": %d, "destination": "%s", "operator": "%s", "notes": "%s"}`, exportReq.Quantity, exportReq.DestinationLocation, exportReq.OperatorName, exportReq.Notes),
+			"created_at": time.Now(),
 		}
 
 		if err := tx.Table("audit_logs").Create(auditLog).Error; err != nil {
