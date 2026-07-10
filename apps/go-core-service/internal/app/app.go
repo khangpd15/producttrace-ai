@@ -22,12 +22,16 @@ import (
 	attributeValueRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
 	attributeValueService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/services"
 	categoryRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
-	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
+	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	variantService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/services"
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
+	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
+	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -89,7 +93,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	vService := variantService.NewProductVariantService(pVariantRepo)
 	vHandler := variantHandler.NewProductVariantHandler(vService)
 
-	batchService := services.NewbatchService(batchRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub)
+	batchService := services.NewbatchService(bRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub, auditService)
 	batchHandler := batchHandler.NewBatchHandler(batchService)
 
 	// Initialize Auth Module
@@ -103,15 +107,24 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
+	// Initialize Trace Module
+	tRepo := traceRepo.NewTraceRepository(database)
+	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
+	tHandler := traceHandler.NewTraceHandler(tService)
+	rateLimiter := middleware.NewRateLimiter(redisClient)
+
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
 		UserRepo:                     uRepo,
-		ProductVariantHandler:        vHandler, 
+		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
+		ProductItemHandler:           piHandler,
+		TraceHandler:                 tHandler,
+		RateLimiter:                  rateLimiter,
 	})
 
 	return &App{
