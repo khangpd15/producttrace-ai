@@ -63,5 +63,5 @@ func ConnectPostgresSQL() (*sql.DB, error) {
 		cfg.SSLMode,
 	)
 
-	return sql.Open("pgx", dsn)
+	return sql.Open("rpx", dsn)
 }
