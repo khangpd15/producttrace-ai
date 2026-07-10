@@ -328,6 +328,15 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 	}
 }
 
+// PRODUCT ITEM
+func SetupProductItemRouter(api *gin.RouterGroup, ph *productItemHandler.ProductItemHandler, uRepo userRepo.UserRepositoryInterface) {
+	items := api.Group("/product-items")
+	{
+		// Public: dùng để scan QR
+		items.GET("", ph.GetProductItemList)
+		items.GET("/:item_code", ph.GetProductItemDetail)
+	}
+}
 // TRACE
 func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
 

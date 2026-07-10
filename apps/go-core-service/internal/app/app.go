@@ -13,6 +13,9 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
@@ -132,6 +135,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -145,11 +152,13 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
+		ProductItemHandler:           piHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
 		LocationHandler:              locHandler,
 		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
+		LocationHandler:              lHandler,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,

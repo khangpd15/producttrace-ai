@@ -37,8 +37,17 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// Mock user ID tạm thời
-	createdBy := uuid.New()
+	// Lấy user ID từ JWT token (được set bởi AuthMiddleware)
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, response.ResponseError("unauthorized", nil))
+		return
+	}
+	createdBy, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, response.ResponseError("invalid user id in token", nil))
+		return
+	}
 
 	product, err := h.productService.CreateProduct(c.Request.Context(), req, createdBy)
 	if err != nil {
