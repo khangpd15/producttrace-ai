@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
@@ -31,7 +32,6 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
 	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -44,6 +44,10 @@ import (
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
+
+	// Public Module
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
 
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
@@ -81,7 +85,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	uService := userService.NewUserService(uRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
-	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
+	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("FRONTEND_URL"))
 
 	bRepo := batchRepo.NewBatchRepository(database)
 
@@ -134,6 +138,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	tHandler := traceHandler.NewTraceHandler(tService)
 	rateLimiter := middleware.NewRateLimiter(redisClient)
 
+	// Initialize Public Module
+	pubService := publicService.NewPublicService(productItemsRepo)
+	pubHandler := publicHandler.NewPublicHandler(pubService)
+
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
@@ -147,6 +155,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductAttributeValueHandler: pAttrValHandler,
 		ProductItemHandler:           piHandler,
 		TraceHandler:                 tHandler,
+		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
 	})
 
