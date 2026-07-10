@@ -1,8 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, KafkaContext } from '@nestjs/microservices';
-
+import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
 import { EmbeddingService } from './embedding.service';
-import { KAFKA } from '../../kafka/kafka.constants';
+import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
 
 @Controller()
 export class EmbeddingConsumer {
@@ -10,22 +9,19 @@ export class EmbeddingConsumer {
 
   constructor(private readonly embeddingService: EmbeddingService) { }
 
-  @EventPattern(KAFKA.TOPICS.PRODUCT_EVENTS)
-  async consumeProductEvent(@Payload() payload: unknown, @Ctx() context: KafkaContext) {
+  @EventPattern(RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED)
+  async consumeProductEvent(@Payload() payload: unknown, @Ctx() context: RmqContext) {
     return this.handleEvent(payload, context);
   }
 
-  @EventPattern(KAFKA.TOPICS.TRACE_EVENTS)
-  async consumeTraceEvent(@Payload() payload: unknown, @Ctx() context: KafkaContext) {
+  @EventPattern(RABBITMQ.ROUTING_KEYS.TRACE_EVENTS)
+  async consumeTraceEvent(@Payload() payload: unknown, @Ctx() context: RmqContext) {
     return this.handleEvent(payload, context);
   }
 
-  private async handleEvent(payload: unknown, context: KafkaContext) {
+  private async handleEvent(payload: unknown, context: RmqContext) {
     const event = this.normalizeEvent(payload);
-    const topic = context.getTopic();
-    const partition = context.getPartition();
     const message = context.getMessage();
-    const offset = message?.offset ?? 'unknown';
 
     this.logger.debug(
       `EVENT PAYLOAD = ${JSON.stringify(event)}`
@@ -41,7 +37,9 @@ export class EmbeddingConsumer {
       return;
     }
 
-    this.logger.log(`Received kafka event topic=${topic} partition=${partition} offset=${offset} id=${event.eventId} type=${event.eventType}`);
+    this.logger.log(
+      `Received rabbitmq event id=${event.eventId} type=${event.eventType}`
+    );
 
     try {
       await this.embeddingService.processEvent(event);
@@ -54,11 +52,6 @@ export class EmbeddingConsumer {
 
   private normalizeEvent(payload: any): any {
     let data = payload;
-
-    // KafkaJS message wrapper
-    if (data?.value) {
-      data = data.value;
-    }
 
     // Buffer -> string
     if (Buffer.isBuffer(data)) {

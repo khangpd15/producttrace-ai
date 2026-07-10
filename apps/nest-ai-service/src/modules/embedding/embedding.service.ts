@@ -4,8 +4,8 @@ import { v5 as uuidv5 } from 'uuid';
 
 import { BuildTextUtil } from '../../utils/build-text.util';
 import { Event } from '../../messaging/types/event.interface';
-import { KafkaProducerService } from '../../kafka/kafka-producer.service';
-import { KAFKA } from '../../kafka/kafka.constants';
+import { RabbitMQProducerService } from '../../integrations/rabbitmq/rabbitmq-producer.service';
+import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
 
 interface EmbeddingResponse {
   vector: number[];
@@ -23,7 +23,7 @@ export class EmbeddingService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {
     this.apiUrl =
       this.configService.get('EMBEDDING_SERVICE_URL') ??
@@ -89,8 +89,8 @@ export class EmbeddingService {
       });
 
       // 5. PUBLISH EMBEDDING GENERATED EVENT
-      await this.kafkaProducer.emit(
-        KAFKA.TOPICS.EMBEDDING_GENERATED,
+      await this.rabbitmqProducer.emit(
+        RABBITMQ.ROUTING_KEYS.EMBEDDING_GENERATED,
         embeddingGeneratedEvent,
       );
 

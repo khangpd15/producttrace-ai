@@ -11,7 +11,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { MockController } from './mock.controller';
 import { AuthModule } from './auth/auth.module';
 import { SyncModule } from './modules/sync/sync.module';
-import { KafkaModule } from './kafka/kafka.module';
+import { RabbitMQModule } from './integrations/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
@@ -19,11 +19,11 @@ import { KafkaModule } from './kafka/kafka.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    KafkaModule,
     EmbeddingModule,
     SyncModule,
     MailModule,
     AuthModule,
+    RabbitMQModule,
   ],
   controllers: [
     MockController,

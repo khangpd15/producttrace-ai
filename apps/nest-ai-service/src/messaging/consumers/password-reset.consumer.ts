@@ -1,9 +1,9 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 
-import { RABBITMQ } from '../rabbitmq/rabbitmq.constants';
 import { MailService } from '../../modules/mail/mail.service';
 import { ConfigService } from '@nestjs/config';
+import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
 
 export interface PasswordResetRequestedEvent {
   email: string;

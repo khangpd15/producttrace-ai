@@ -2,7 +2,7 @@ import { Controller, Logger } from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
 
 import { ReindexService } from './reindex.service';
-import { KAFKA } from '../../kafka/kafka.constants';
+import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
 
 @Controller()
 export class ReindexConsumer {
@@ -14,17 +14,29 @@ export class ReindexConsumer {
   ) {}
 
   @EventPattern(
-    KAFKA.TOPICS.EMBEDDING_REINDEX_REQUESTED,
+    RABBITMQ.ROUTING_KEYS.EMBEDDING_REINDEX_REQUESTED,
   )
   async handleReindex(): Promise<void> {
     this.logger.log(
-      '[REINDEX] Request received',
+      '[REINDEX] RabbitMQ request received',
     );
 
-    await this.reindexService.reindexAll();
+    try {
+      await this.reindexService.reindexAll();
 
-    this.logger.log(
-      '[REINDEX] Completed',
-    );
+      this.logger.log(
+        '[REINDEX] Completed',
+      );
+    } catch (error) {
+      this.logger.error(
+        `[REINDEX] Failed: ${
+          error instanceof Error
+            ? error.message
+            : JSON.stringify(error)
+        }`,
+      );
+
+      throw error;
+    }
   }
 }

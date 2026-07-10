@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-
 import { EmbeddingService } from './embedding.service';
 import { ProductClientService } from '../../integrations/go-core/product-client.service';
 

@@ -7,25 +7,6 @@ services:
     ports:
       - "2181:2181"
 
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
   qdrant:
     image: qdrant/qdrant:v1.7.4
     ports:
@@ -45,12 +26,9 @@ services:
       context: .
       dockerfile: Dockerfile
     depends_on:
-      - kafka
       - qdrant
       - embedding-service
     environment:
-      KAFKA_BROKER: "kafka:9092"
-      KAFKA_GROUP_ID: "nest-ai-service-group"
       EMBEDDING_SERVICE_URL: "http://embedding-service:8000"
       QDRANT_URL: "http://qdrant:6333"
     ports:

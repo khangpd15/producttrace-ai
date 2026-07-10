@@ -15,10 +15,26 @@ export const RABBITMQ = {
 
   DLQ_ROUTING_KEYS: {
     AI_EVENTS: 'ai.events.failed',
-    EMBEDDING: 'embedding_dlq',
+    EMBEDDING: 'embedding.failed',
   },
 
   ROUTING_KEYS: {
+    // Core events
     PRODUCT_CREATED: 'product.created',
+    TRACE_EVENTS: 'trace.events',
+
+    USER_REGISTERED: 'user.registered',
+    PASSWORD_RESET_REQUESTED:
+      'auth.password_reset_requested',
+
+    // Embedding pipeline
+    EMBEDDING_GENERATED:
+      'embedding.generated',
+
+    EMBEDDING_COMPLETED:
+      'embedding.completed',
+
+    EMBEDDING_REINDEX_REQUESTED:
+      'embedding.reindex.requested',
   },
 };

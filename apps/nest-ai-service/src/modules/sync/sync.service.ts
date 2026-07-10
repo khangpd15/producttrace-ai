@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { QdrantService } from "../../integrations/qdrant/qdrant.service";
-import { KafkaProducerService } from "../../kafka/kafka-producer.service";
-import { KAFKA } from "../../kafka/kafka.constants";
+import { RabbitMQProducerService } from "../../integrations/rabbitmq/rabbitmq-producer.service";
+import { RABBITMQ } from "../../integrations/rabbitmq/rabbitmq.constants";
+
 
 @Injectable()
 export class SyncService {
@@ -10,7 +11,7 @@ export class SyncService {
 
     constructor(
         private readonly qdrantService: QdrantService,
-        private readonly kafkaProducer: KafkaProducerService,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) {}
 
     async process(event: any): Promise<void> {
@@ -29,8 +30,8 @@ export class SyncService {
                 `[SYNC] Qdrant synced point=${event.pointId}`,
             );
 
-            await this.kafkaProducer.emit(
-                KAFKA.TOPICS.EMBEDDING_COMPLETED,
+            await this.rabbitmqProducer.emit(
+                RABBITMQ.ROUTING_KEYS.EMBEDDING_COMPLETED,
                 {
                     eventId: event.eventId,
                     pointId: event.pointId,

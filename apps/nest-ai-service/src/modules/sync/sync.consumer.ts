@@ -3,39 +3,38 @@ import {
   Ctx,
   EventPattern,
   Payload,
-  KafkaContext,
+  RmqContext,
 } from "@nestjs/microservices";
 
 import { SyncService } from "./sync.service";
-import { KAFKA } from "../../kafka/kafka.constants";
+import { RABBITMQ } from "../../integrations/rabbitmq/rabbitmq.constants";
 
 @Controller()
 export class SyncConsumer {
   private readonly logger = new Logger(SyncConsumer.name);
 
-  constructor(private readonly syncService: SyncService) {}
+  constructor(
+    private readonly syncService: SyncService,
+  ) {}
 
-  @EventPattern(KAFKA.TOPICS.EMBEDDING_GENERATED)
+  @EventPattern(RABBITMQ.ROUTING_KEYS.EMBEDDING_GENERATED)
   async consumeEmbeddingGenerated(
     @Payload() payload: unknown,
-    @Ctx() context: KafkaContext,
+    @Ctx() context: RmqContext,
   ) {
-    const topic = context.getTopic();
-    const partition = context.getPartition();
     const message = context.getMessage();
-    const offset = message?.offset ?? "unknown";
 
     const event = this.normalizeEvent(payload);
 
     if (!event) {
       this.logger.error(
-        `Empty event received topic=${topic} partition=${partition} offset=${offset}`,
+        "Empty event received",
       );
       return;
     }
 
     this.logger.log(
-      `Received kafka event topic=${topic} partition=${partition} offset=${offset}`,
+      `Received rabbitmq event id=${event?.eventId ?? "unknown"} type=${event?.eventType ?? "unknown"}`,
     );
 
     try {
@@ -44,30 +43,28 @@ export class SyncConsumer {
       this.logger.log(
         `[SYNC] SUCCESS point=${event?.pointId ?? "unknown"}`,
       );
+
+      // xác nhận xử lý thành công
+      const channel = context.getChannelRef();
+      channel.ack(message);
+
     } catch (error) {
       const errMsg =
-        error instanceof Error ? error.message : JSON.stringify(error);
+        error instanceof Error
+          ? error.message
+          : JSON.stringify(error);
 
       this.logger.error(
-        `[SYNC] FAILED topic=${topic} partition=${partition} offset=${offset} error=${errMsg}`,
+        `[SYNC] FAILED id=${event?.eventId ?? "unknown"} error=${errMsg}`,
       );
 
-      /**
-       * IMPORTANT FIX:
-       * ❌ KHÔNG throw lại error -> tránh KafkaJS crash loop
-       * ✔ log + swallow hoặc send to DLQ (nếu sau này bạn có)
-       */
+
       return;
     }
   }
 
   private normalizeEvent(payload: any): any {
     let data = payload;
-
-    // Kafka wrapper
-    if (data?.value) {
-      data = data.value;
-    }
 
     // Buffer -> string
     if (Buffer.isBuffer(data)) {
@@ -79,7 +76,9 @@ export class SyncConsumer {
       try {
         data = JSON.parse(data);
       } catch (e) {
-        this.logger.error("Invalid JSON payload");
+        this.logger.error(
+          "Invalid JSON payload",
+        );
         return null;
       }
     }

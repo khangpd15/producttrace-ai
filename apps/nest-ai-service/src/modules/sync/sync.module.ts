@@ -4,10 +4,11 @@ import { ConfigModule } from '@nestjs/config';
 import { SyncConsumer } from './sync.consumer';
 import { SyncService } from './sync.service';
 import { QdrantService } from '../../integrations/qdrant/qdrant.service';
-import { KafkaModule } from '../../kafka/kafka.module';
+import { RabbitMQModule } from '../../integrations/rabbitmq/rabbitmq.module';
+
 
 @Module({
-  imports: [ConfigModule, KafkaModule],
+  imports: [ConfigModule, RabbitMQModule],
   controllers: [SyncConsumer],
   providers: [
     SyncService,
