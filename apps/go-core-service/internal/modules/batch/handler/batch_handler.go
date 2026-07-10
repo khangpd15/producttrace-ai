@@ -43,6 +43,25 @@ func (hb *BatchHandler) GetBatchList(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("get batch list successfully", batches))
 }
 
+// SearchBatch xử lý GET /api/v1/batches/search theo UC-P2-BATCH-03.
+// Handler chịu trách nhiệm: parse query params → validate → gọi service → trả response.
+// Không chứa business logic.
+func (hb *BatchHandler) SearchBatch(c *gin.Context) {
+	var req request.SearchBatchRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	result, err := hb.service.SearchBatches(c.Request.Context(), &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("search batches successfully", result))
+}
+
 func (hb *BatchHandler) GetBatchDetail(c *gin.Context) {
 	batchCode := c.Param("id")
 	if batchCode == "" {
@@ -246,3 +265,62 @@ func (hb *BatchHandler) DeleteBatch(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response.ResponseSuccess("batch deleted successfully", nil))
 }
+
+// GetBatchHistory xử lý GET /api/v1/batches/:id/history theo UC-P2-BATCH-06.
+// Handler chịu trách nhiệm: parse batchId (UUID), bind query params → gọi service → trả response.
+func (hb *BatchHandler) GetBatchHistory(c *gin.Context) {
+	batchIDStr := c.Param("id")
+	batchID, err := uuid.Parse(batchIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewBadRequest("ID lô sản xuất không đúng cấu trúc UUID"))
+		return
+	}
+
+	var req request.GetBatchHistoryRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	// Lấy userID để service truyền vào event payload (non-blocking).
+	var userID *uuid.UUID
+	if idStr := utils.GetCurrentUserID(c); idStr != "" {
+		if parsed, parseErr := uuid.Parse(idStr); parseErr == nil {
+			userID = &parsed
+		}
+	}
+
+	result, svcErr := hb.service.GetBatchHistory(c.Request.Context(), batchID, &req, userID)
+	if svcErr != nil {
+		apperror.HandleError(c, svcErr)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("get batch history successfully", result))
+}
+
+// GetBatchProducts xử lý GET /api/v1/batches/:id/products theo UC-P2-BATCH-05.
+// Handler chịu trách nhiệm: parse batchId (UUID), bind query params → gọi service → trả response.
+func (hb *BatchHandler) GetBatchProducts(c *gin.Context) {
+	batchIDStr := c.Param("id")
+	batchID, err := uuid.Parse(batchIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewBadRequest("invalid batch_id: must be a valid UUID"))
+		return
+	}
+
+	var req request.GetBatchProductsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	result, svcErr := hb.service.GetBatchProducts(c.Request.Context(), batchID, &req)
+	if svcErr != nil {
+		apperror.HandleError(c, svcErr)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("get batch products successfully", result))
+}
+

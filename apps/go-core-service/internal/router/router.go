@@ -3,7 +3,6 @@ package router
 import (
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
@@ -13,23 +12,30 @@ import (
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
-	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
+	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
 
 type RouterDependency struct {
-	BatchHandler          *batchHandler.BatchHandler
-	AuthHandler           *authHandler.AuthenHandler
-	UserHandler           *userHandler.UserHandler
-	ProductHandler        *productHandler.ProductHandler
-	ProductItemHandler    *productItemHandler.ProductItemHandler
-	UserRepo              userRepo.UserRepositoryInterface
-	LocationHandler       *locationHandler.LocationHandler
-	ProductVariantHandler *variantHandler.ProductVariantHandler // new
-	ProductAttributeHandler *attributeHandler.AttributeHandler // new
+	BatchHandler                 *batchHandler.BatchHandler
+	AuthHandler                  *authHandler.AuthenHandler
+	UserHandler                  *userHandler.UserHandler
+	ProductHandler               *productHandler.ProductHandler
+	UserRepo                     userRepo.UserRepositoryInterface
+	LocationHandler              *locationHandler.LocationHandler
+	DashboardHandler             *dashboardHandler.DashboardHandler
+	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
+	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
+	ProductItemHandler           *productItemHandler.ProductItemHandler
+	TraceHandler                 *traceHandler.TraceHandler
+	PublicHandler                *publicHandler.PublicHandler
+	RateLimiter                  *middleware.RateLimiter
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -38,19 +44,24 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// CORS middleware — must be registered before all routes
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	// CORS is handled centrally by Kong Gateway (see infra/kong/kong.yml).
+	// // We disable Go's CORS middleware here to prevent duplicate CORS headers and 403 Forbidden on production origins.
+	// r.Use(middleware.CORSMiddleware())
+	// r.Use(cors.New(cors.Config{
+	// 	AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+	// 	AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	// 	AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+	// 	AllowCredentials: true,
+	// 	MaxAge:           12 * time.Hour,
+	// }))
 
 	// Apply global Recovery, RequestID, and Logger middlewares
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())
+
+	// Static serving of exported certificates/files
+	r.Static("/storage", "./storage")
 
 	api := r.Group("/api")
 
@@ -58,12 +69,23 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
+	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
-	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo) // new
-	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo) // new
+	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
+	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
+	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
+	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
+	SetupPublicRouter(api, deps.PublicHandler)
 	return r
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
+	}
 }
 
 // AUTH
@@ -76,6 +98,8 @@ func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 		auth.POST("/resend-otp", ah.ResendOTP)
 		auth.POST("/refresh", ah.RefreshToken)
 		auth.POST("/logout", ah.Logout)
+		auth.POST("/forgot-password", ah.ForgotPassword)
+		auth.POST("/reset-password", ah.ResetPassword)
 	}
 }
 
@@ -116,7 +140,19 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 	{
 		// ALL AUTHENTICATED USERS can view list and events
 		protectedBatches.GET("", bh.GetBatchList)
+		// Search batches — UC-P2-BATCH-03: GET /api/v1/batches/search
+		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
+		protectedBatches.GET("/search", bh.SearchBatch)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
+		// UC-P2-BATCH-05: Xem sản phẩm trong lô — Admin, Staff, Dealer
+		protectedBatches.GET("/:id/products", bh.GetBatchProducts)
+
+		// UC-P2-BATCH-06: Xem lịch sử thay đổi lô — chỉ Admin và Staff (không có Dealer/Customer)
+		historyGroup := protectedBatches.Group("")
+		historyGroup.Use(middleware.RoleMiddleware("ADMIN", "STAFF"))
+		{
+			historyGroup.GET("/:id/history", bh.GetBatchHistory)
+		}
 
 		// MANAGER and WAREHOUSE can export batch
 		exportGroup := protectedBatches.Group("")
@@ -182,6 +218,14 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
+	}
+}
+
+func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHandler, uRepo userRepo.UserRepositoryInterface) {
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+	{
+		dashboard.GET("/stats", dh.GetStats)
 	}
 }
 
@@ -270,7 +314,7 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 
 	variants := api.Group("/variants")
 	{
-		variants.GET("/:variant_id/attributes", ah.GetAttributeValuesByVariantID)
+		variants.GET("/:id/attributes", ah.GetAttributeValuesByVariantID)
 
 		protectedVariants := variants.Group("")
 		protectedVariants.Use(middleware.AuthMiddleware(uRepo))
@@ -278,7 +322,7 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 			staffGroup := protectedVariants.Group("")
 			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
 			{
-				staffGroup.POST("/:variant_id/attributes", ah.AssignAttributes)
+				staffGroup.POST("/:id/attributes", ah.AssignAttributes)
 			}
 		}
 	}
@@ -292,4 +336,21 @@ func SetupProductItemRouter(api *gin.RouterGroup, ph *productItemHandler.Product
 		items.GET("", ph.GetProductItemList)
 		items.GET("/:item_code", ph.GetProductItemDetail)
 	}
+}
+// TRACE
+func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
+
+	legacy := api.Group("/trace")
+
+	// Public search with rate limiting
+	legacy.GET("/search", rl.Limit(30, time.Minute), th.Search)
+
+	// Protected export endpoints
+	protected := legacy.Group("")
+	protected.Use(middleware.AuthMiddleware(uRepo))
+	{
+		protected.POST("/export/pdf", th.ExportPDF)
+		protected.POST("/export/excel", th.ExportExcel)
+	}
+
 }

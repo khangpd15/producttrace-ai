@@ -177,12 +177,14 @@ export class MailService {
 
   async sendPasswordReset(to: string, fullName: string, otpCode: string): Promise<void> {
     const templateId = this.configService.get<string>('RESET_PASSWORD_TEMPLATE_ID');
-    if (templateId && !templateId.includes('your_')) {
+    if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
       const resetUrl = `${frontendUrl}/reset-password?email=${encodeURIComponent(to)}&code=${otpCode}`;
-      
+
       const dynamicTemplateData = {
-        name: fullName,
+        fullName,
+        name: fullName,         // alias for templates using {{name}}
+        otpCode,
         resetLink: resetUrl,
         year: new Date().getFullYear().toString(),
       };
@@ -194,14 +196,24 @@ export class MailService {
           <h2 style="color: #333;">Yêu cầu đặt lại mật khẩu</h2>
           <p>Xin chào <strong>${fullName}</strong>,</p>
           <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
-          <p>Vui lòng sử dụng mã OTP bên dưới để hoàn tất việc đặt lại mật khẩu:</p>
+          <p>Vui lòng sử dụng mã OTP bên dưới để hoàn tất việc đặt lại mật khẩu (có hiệu lực trong 5 phút):</p>
           <div style="background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #d32f2f; border-radius: 4px; margin: 20px 0;">
             ${otpCode}
           </div>
-          <p>Mã này có hiệu lực trong vòng 5 phút. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+          <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
         </div>
       `;
       await this.sendMail(to, subject, subject, html);
     }
+  }
+
+  async sendPasswordResetEmail(to: string, resetUrl: string, name: string): Promise<void> {
+    const templateId = this.configService.get<string>('RESET_PASSWORD_TEMPLATE_ID') || 'd-76dced8ef3f6486aa296d2b25899b24e';
+    const dynamicTemplateData = {
+      name: name,
+      resetLink: resetUrl,
+      year: new Date().getFullYear().toString(),
+    };
+    await this.sendEmailWithTemplate(to, templateId, dynamicTemplateData);
   }
 }

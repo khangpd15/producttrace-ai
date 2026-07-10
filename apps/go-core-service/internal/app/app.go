@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
@@ -31,6 +32,9 @@ import (
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	variantService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/services"
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
+	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
+	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -44,8 +48,23 @@ import (
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
+	// Public Module
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
+
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
+
+	// Location Module
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	// Dashboard Module
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
+	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
+	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
 
@@ -69,7 +88,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	uService := userService.NewUserService(uRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
-	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
+	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("FRONTEND_URL"))
 
 	bRepo := batchRepo.NewBatchRepository(database)
 
@@ -102,6 +121,16 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
+ 
+	// Initialize Location Module
+	locRepo := locationRepo.NewLocationRepository(database)
+	locService := locationService.NewLocationService(locRepo)
+	locHandler := locationHandler.NewLocationHandler(locService)
+
+	// Initialize Dashboard Module
+	dbRepo := dashboardRepo.NewDashboardRepository(database)
+	dbService := dashboardService.NewDashboardService(dbRepo)
+	dbHandler := dashboardHandler.NewDashboardHandler(dbService)
 
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
@@ -110,6 +139,15 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	lRepo := locationRepo.NewLocationRepository(database)
 	lService := locationService.NewLocationService(lRepo)
 	lHandler := locationHandler.NewLocationHandler(lService)
+	// Initialize Trace Module
+	tRepo := traceRepo.NewTraceRepository(database)
+	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
+	tHandler := traceHandler.NewTraceHandler(tService)
+	rateLimiter := middleware.NewRateLimiter(redisClient)
+
+	// Initialize Public Module
+	pubService := publicService.NewPublicService(productItemsRepo)
+	pubHandler := publicHandler.NewPublicHandler(pubService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
@@ -117,11 +155,17 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductItemHandler:           piHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
+		LocationHandler:              locHandler,
+		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
 		LocationHandler:              lHandler,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
+		ProductItemHandler:           piHandler,
+		TraceHandler:                 tHandler,
+		PublicHandler:                pubHandler,
+		RateLimiter:                  rateLimiter,
 	})
 
 	return &App{

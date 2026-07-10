@@ -32,7 +32,7 @@ func handleError(c *gin.Context, err error) {
 }
 
 func (h *AttributeValueHandler) AssignAttributes(c *gin.Context) {
-	variantIDStr := c.Param("variant_id")
+	variantIDStr := c.Param("id")
 	variantID, err := uuid.Parse(variantIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, response.ResponseError("Invalid variant id", nil))
@@ -60,7 +60,7 @@ func (h *AttributeValueHandler) AssignAttributes(c *gin.Context) {
 }
 
 func (h *AttributeValueHandler) GetAttributeValuesByVariantID(c *gin.Context) {
-	variantIDStr := c.Param("variant_id")
+	variantIDStr := c.Param("id")
 	variantID, err := uuid.Parse(variantIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, response.ResponseError("Invalid variant id", nil))
