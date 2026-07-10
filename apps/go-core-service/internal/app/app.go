@@ -33,6 +33,16 @@ import (
 	// Cache pkg
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
+
+	// Location Module
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	// Dashboard Module
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
+	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
+	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
 )
 
 type App struct {
@@ -73,13 +83,25 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo)
 	pHandler := productHandler.NewProductHandler(pService)
+ 
+	// Initialize Location Module
+	locRepo := locationRepo.NewLocationRepository(database)
+	locService := locationService.NewLocationService(locRepo)
+	locHandler := locationHandler.NewLocationHandler(locService)
+
+	// Initialize Dashboard Module
+	dbRepo := dashboardRepo.NewDashboardRepository(database)
+	dbService := dashboardService.NewDashboardService(dbRepo)
+	dbHandler := dashboardHandler.NewDashboardHandler(dbService)
 
 	r := router.SetupRouter(router.RouterDependency{
-		BatchHandler:   batchHandler,
-		ProductHandler: pHandler,
-		UserHandler:    uHandler,
-		AuthHandler:    aHandler,
-		UserRepo:       uRepo,
+		BatchHandler:     batchHandler,
+		ProductHandler:   pHandler,
+		UserHandler:      uHandler,
+		AuthHandler:      aHandler,
+		LocationHandler:  locHandler,
+		DashboardHandler: dbHandler,
+		UserRepo:         uRepo,
 	})
 
 	return &App{

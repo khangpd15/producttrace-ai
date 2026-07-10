@@ -1,0 +1,9 @@
+# Ngăn file .env local bị copy vào Docker image
+# Trong Docker, các biến môi trường được inject bởi docker-compose.yml
+.env
+.env.*
+
+# Không cần copy các file này vào image
+.gotemp/
+test/
+*.md

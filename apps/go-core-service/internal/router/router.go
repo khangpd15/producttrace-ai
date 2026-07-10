@@ -13,15 +13,17 @@ import (
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 )
 
 type RouterDependency struct {
-	BatchHandler    *batchHandler.BatchHandler
-	AuthHandler     *authHandler.AuthenHandler
-	UserHandler     *userHandler.UserHandler
-	ProductHandler  *productHandler.ProductHandler
-	UserRepo        userRepo.UserRepositoryInterface
-	LocationHandler *locationHandler.LocationHandler
+	BatchHandler     *batchHandler.BatchHandler
+	AuthHandler      *authHandler.AuthenHandler
+	UserHandler      *userHandler.UserHandler
+	ProductHandler   *productHandler.ProductHandler
+	UserRepo         userRepo.UserRepositoryInterface
+	LocationHandler  *locationHandler.LocationHandler
+	DashboardHandler *dashboardHandler.DashboardHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -51,6 +53,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
+	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	return r
 }
 
@@ -159,5 +162,13 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
+	}
+}
+
+func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHandler, uRepo userRepo.UserRepositoryInterface) {
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+	{
+		dashboard.GET("/stats", dh.GetStats)
 	}
 }
