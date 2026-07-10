@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/domain"
-	
 )
 
 // LocationRepository định nghĩa interface cho tầng data access.
@@ -16,4 +15,3 @@ type LocationRepository interface {
 	Update(ctx context.Context, loc *domain.Location) error
 	HardDelete(ctx context.Context, id string) error
 }
-

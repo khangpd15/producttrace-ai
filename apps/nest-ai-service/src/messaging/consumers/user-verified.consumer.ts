@@ -18,7 +18,7 @@ export class UserVerifiedPayload {
 @Injectable()
 export class UserVerifiedConsumer extends BaseConsumer<UserVerifiedPayload> {
   protected readonly logger = new Logger(UserVerifiedConsumer.name);
-  protected readonly queueName = RABBITMQ.QUEUES.USER_VERIFIED;
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
   protected readonly payloadClass = UserVerifiedPayload;
 
   constructor(private readonly emailService: MailService) {

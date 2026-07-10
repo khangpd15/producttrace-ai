@@ -63,4 +63,3 @@ func ValidateToken(tokenStr string) (*JWTClaims, error) {
 func ValidateAccessToken(tokenStr string) (*JWTClaims, error) {
 	return ValidateToken(tokenStr)
 }
-

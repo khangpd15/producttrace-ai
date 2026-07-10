@@ -21,7 +21,7 @@ import (
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 )
 
-// validBatchStatuses là tập hợp các status hợp lệ của Batch.
+// validBatchStatuses là tập hợp các status hợp lệ khi cập nhật (UpdateBatchStatus).
 var validBatchStatuses = map[string]struct{}{
 	"ACTIVE":   {},
 	"EXPIRED":  {},
@@ -29,15 +29,33 @@ var validBatchStatuses = map[string]struct{}{
 	"BLOCKED":  {},
 }
 
+// validFilterStatuses là tập hợp các status hợp lệ khi lọc danh sách batch (Filter API).
+// Bao gồm DRAFT và LOCKED theo UC-P2-BATCH-04.
+var validFilterStatuses = map[string]struct{}{
+	"DRAFT":    {},
+	"ACTIVE":   {},
+	"EXPIRED":  {},
+	"RECALLED": {},
+	"LOCKED":   {},
+}
+
 type BatchService interface {
-	GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error)
+	GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error)
+	// SearchBatches thực hiện tìm kiếm gần đúng theo UC-P2-BATCH-03.
+	SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error)
 	GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
+	ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error
+	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
 	// UpdateBatchStatus cập nhật duy nhất field status của một Batch.
 	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
 	// DeleteBatch thực hiện soft-delete một Batch nếu không có product items hoặc events liên kết.
 	DeleteBatch(ctx context.Context, batchID uuid.UUID, userID *uuid.UUID) error
+	// GetBatchHistory trả về lịch sử thay đổi của lô theo UC-P2-BATCH-06.
+	GetBatchHistory(ctx context.Context, batchID uuid.UUID, req *request.GetBatchHistoryRequest, userID *uuid.UUID) (*response.GetBatchHistoryResponse, error)
+	// GetBatchProducts trả về danh sách sản phẩm trong lô theo UC-P2-BATCH-05.
+	GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error)
 }
 
 type batchService struct {
@@ -67,8 +85,56 @@ func NewbatchService(
 	}
 }
 
-func (sb *batchService) GetBatchList(ctx context.Context) ([]*response.BatchListResponse, error) {
-	return sb.repo.FindAll(ctx)
+// GetBatchList thực thi validation enum + business rules phân quyền DRAFT trước khi query.
+//
+// BR-FIL-001: Bỏ tham số status → trả tất cả statuses.
+//
+//	Non-Admin tự động bị loại trừ DRAFT bằng ExcludeDraft=true.
+//
+// BR-FIL-002: Non-Admin gửi status=DRAFT → 403 Forbidden.
+func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchListRequest, userRole string) (*response.BatchListResponse, error) {
+	// Normalize status để so sánh không phân biệt hoa thường.
+	req.Status = strings.ToUpper(strings.TrimSpace(req.Status))
+
+	// Validate enum nếu status được cung cấp.
+	if req.Status != "" && req.Status != "ALL" {
+		if _, ok := validFilterStatuses[req.Status]; !ok {
+			return nil, apperror.NewValidation(
+				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED",
+			)
+		}
+
+		// BR-FIL-002: Non-Admin không được lọc DRAFT.
+		if req.Status == "DRAFT" && userRole != "ADMIN" {
+			return nil, apperror.NewForbidden(
+				"Bạn không có quyền xem các lô hàng ở trạng thái DRAFT",
+			)
+		}
+	}
+
+	// BR-FIL-001: Khi xem tất cả (status rỗng hoặc ALL), non-Admin
+	// không được thấy DRAFT. Service set ExcludeDraft để repository lọc.
+	if (req.Status == "" || req.Status == "ALL") && userRole != "ADMIN" {
+		req.ExcludeDraft = true
+	}
+
+	return sb.repo.FindAllWithFilter(ctx, req)
+}
+
+// SearchBatches validate input rồi delegate xuống repository.
+// Business rules:
+//   - keyword tối đa 100 ký tự (ERR-001)
+//   - sortOrder được normalize thành uppercase trước khi truyền xuống repo
+func (sb *batchService) SearchBatches(ctx context.Context, req *request.SearchBatchRequest) (*response.SearchBatchResponse, error) {
+	// Validate keyword length (ERR-001)
+	if len(req.Keyword) > 100 {
+		return nil, apperror.NewBadRequest("Search keyword is too long. Max limit is 100 characters.")
+	}
+
+	// Normalize sortOrder để đảm bảo whitelist check trong repo hoạt động chính xác
+	req.SortOrder = strings.ToUpper(strings.TrimSpace(req.SortOrder))
+
+	return sb.repo.SearchBatches(ctx, req)
 }
 
 func (sb *batchService) GetBatchDetail(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error) {
@@ -201,6 +267,19 @@ func (sb *batchService) ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([
 	)
 }
 
+func (sb *batchService) ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error {
+	return sb.repo.ExportBatch(ctx, batchID, exportReq, currentUserID)
+}
+
+func (sb *batchService) GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error) {
+	// First check if batch exists
+	_, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	return sb.repo.GetBatchEvents(ctx, batchID)
+}
+
 // UpdateBatchStatus cập nhật duy nhất field status của Batch.
 // Business rules:
 //   - Batch phải tồn tại
@@ -310,4 +389,74 @@ func (sb *batchService) DeleteBatch(
 	}
 
 	return nil
+}
+
+// GetBatchHistory trả về lịch sử thay đổi của một lô từ bảng audit_logs.
+// Business rules:
+//   - Batch phải tồn tại (ERR-001).
+//   - Publish event batch.history_viewed lên RabbitMQ (non-blocking, không block response).
+func (sb *batchService) GetBatchHistory(
+	ctx context.Context,
+	batchID uuid.UUID,
+	req *request.GetBatchHistoryRequest,
+	userID *uuid.UUID,
+) (*response.GetBatchHistoryResponse, error) {
+	// 1. Kiểm tra Batch tồn tại (ERR-001: 404 nếu không tìm thấy).
+	batch, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Lấy lịch sử từ repository.
+	history, err := sb.repo.GetBatchHistory(ctx, batchID, req.Page, req.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Publish event batch.history_viewed (non-blocking — lỗi publish không ảnh hưởng response).
+	viewerID := ""
+	if userID != nil {
+		viewerID = userID.String()
+	}
+	event := types.Event{
+		EventID:      uuid.NewString(),
+		EventType:    rabbitmq.BatchHistoryViewedRK,
+		EventVersion: "1.0",
+		Timestamp:    time.Now().UTC(),
+		Producer:     "go-core-service",
+		Payload: map[string]string{
+			"batchId":  batchID.String(),
+			"viewedBy": viewerID,
+		},
+	}
+	_ = sb.publisher.Publish(event) // fire-and-forget
+
+	return &response.GetBatchHistoryResponse{
+		BatchID:   batch.ID,
+		BatchCode: batch.BatchCode,
+		History:   history,
+	}, nil
+}
+
+// GetBatchProducts trả về danh sách sản phẩm đơn lả trong lô với pagination bắt buộc.
+// Business rules:
+//   - Batch phải tồn tại (ERR-001).
+//   - Lô trống rỗng trả mảng rỗng HTTP 200 (ERR-002).
+//   - Pagination bắt buộc (BR-BPR-001) — GORM Limit luôn được set qua DTO binding.
+func (sb *batchService) GetBatchProducts(
+	ctx context.Context,
+	batchID uuid.UUID,
+	req *request.GetBatchProductsRequest,
+) (*response.GetBatchProductsResponse, error) {
+	// 1. Kiểm tra Batch tồn tại trước khi query sản phẩm.
+	_, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Normalize status trước khi truyền xuống repo.
+	req.Status = strings.ToUpper(strings.TrimSpace(req.Status))
+
+	// 3. Delegate xuống repository — repo tự validate status whitelist.
+	return sb.repo.GetBatchProducts(ctx, batchID, req)
 }

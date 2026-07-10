@@ -37,7 +37,6 @@ type UpdateLocationReq struct {
 	OpeningHoursJSON domain.OpeningHours `json:"openingHoursJson"`
 }
 
-
 // ListLocationsReq là query params cho GET /locations
 type ListLocationsReq struct {
 	Page    int    `form:"page"      binding:"omitempty,min=1"`
@@ -83,4 +82,3 @@ type GeoLocationDTO struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
-
