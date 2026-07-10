@@ -3,6 +3,7 @@ package qr
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/go-pdf/fpdf"
 )
@@ -17,6 +18,10 @@ type pdfGenerator struct {
 }
 
 func NewPDFGenerator(qr Generator, baseURL string) PDFGenerator {
+	if baseURL == "" {
+		baseURL = "https://your-frontend-domain.vercel.app"
+	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &pdfGenerator{
 		qr:      qr,
 		baseURL: baseURL,
@@ -67,7 +72,8 @@ func (p *pdfGenerator) GenerateLabels(input BatchPDFInput) ([]byte, error) {
 	for i, item := range input.Items {
 
 		verifyURL := fmt.Sprintf(
-			"https://your-frontend-domain.vercel.app/verify?item_code=%s&token=%s",
+			"%s/verify?item_code=%s&token=%s",
+			p.baseURL,
 			item.ItemCode,
 			item.Token,
 		)
