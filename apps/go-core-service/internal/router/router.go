@@ -8,6 +8,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
@@ -17,6 +18,17 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+)
+
+type RouterDependency struct {
+	BatchHandler         *batchHandler.BatchHandler
+	AuthHandler          *authHandler.AuthenHandler
+	UserHandler          *userHandler.UserHandler
+	ProductHandler       *productHandler.ProductHandler
+	OwnershipHandler     *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler *warrantyClaimHandler.WarrantyClaimHandler
+	UserRepo             userRepo.UserRepositoryInterface
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
@@ -69,6 +81,9 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
+	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
+
 	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
@@ -113,6 +128,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
+		profileGroup.PUT("/change-password", uh.ChangePassword)
 	}
 
 	// Admin-only management routes (requires ADMIN role)
@@ -203,6 +219,43 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 	}
 }
 
+// OWNERSHIP
+func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHandler, uRepo userRepo.UserRepositoryInterface) {
+	ownerships := api.Group("/ownership")
+	ownerships.Use(middleware.AuthMiddleware(uRepo))
+
+	// Customer routes: chỉ cần QR code, thông tin lấy từ profile JWT
+	customerGroup := ownerships.Group("")
+	customerGroup.Use(middleware.RoleMiddleware("CUSTOMER"))
+	{
+		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
+		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+	}
+
+	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
+	adminGroup := ownerships.Group("/admin")
+	adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+	{
+		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
+		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+	}
+
+	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
+	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
+	
+	// CRUD Extensions
+	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
+	ownerships.DELETE("/:id", oh.DeleteOwnership)
+	ownerships.GET("", oh.SearchOwnerships)
+}
+
+// WARRANTY CLAIM
+func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyClaims := api.Group("/warranty-claims")
+	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
+	{
+		warrantyClaims.POST("", wch.CreateWarrantyClaim)
+	}
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{

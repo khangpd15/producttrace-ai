@@ -60,6 +60,18 @@ import (
 	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
 	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
+	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
+	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
+	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
+	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
+
+	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -148,6 +160,24 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Initialize Public Module
 	pubService := publicService.NewPublicService(productItemsRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
+
+	// Ownership Module
+	oRepo := ownershipRepo.NewOwnershipRepository(database)
+	oProductAdapter := ownershipAdapters.NewDummyProductAdapter()
+	oEmailAdapter := ownershipAdapters.NewDummyEmailAdapter()
+	oUserAdapter := ownershipAdapters.NewDummyUserAdapter()
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
+	oHandler := ownershipHandler.NewOwnershipHandler(oService)
+
+	// Warranty Claim Module
+	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
+	wcOwnershipMock := &warrantyClaimAdapters.MockOwnershipPort{}
+	wcProductMock := &warrantyClaimAdapters.MockProductItemPort{}
+	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
+	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
+	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipMock, wcProductMock, wcEventMock, wcAuditMock, wcNotifMock)
+	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
