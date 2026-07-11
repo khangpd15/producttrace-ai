@@ -6,15 +6,17 @@ import { ConfigService } from '@nestjs/config';
 export class SendgridService {
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
-    if (apiKey) {
+    if (apiKey && !apiKey.includes('your_')) {
       sgMail.setApiKey(apiKey);
     } else {
-      console.warn('SendGrid API key is not configured.');
+      console.warn('SendGrid API key is not configured or using placeholder. Running in MOCK mode.');
     }
   }
 
   async sendEmail(to: string, subject: string, html: string): Promise<void> {
-    const from = this.configService.get<string>('FROM_EMAIL') || 'noreply@domain.com';
+    const from = this.configService.get<string>('SENDGRID_FROM_EMAIL') || 
+                 this.configService.get<string>('FROM_EMAIL') || 
+                 'noreply@producttrace-ai.com';
     const msg = {
       to,
       from,
@@ -23,10 +25,11 @@ export class SendgridService {
     };
 
     try {
-      if (this.configService.get<string>('SENDGRID_API_KEY')) {
+      const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+      if (apiKey && !apiKey.includes('your_')) {
         await sgMail.send(msg);
       } else {
-        console.log('Mock email send:', msg);
+        console.log('[MOCK EMAIL SENT]', msg);
       }
     } catch (error: any) {
       console.error('Error sending email via SendGrid', error);
@@ -37,7 +40,9 @@ export class SendgridService {
   }
 
   async sendEmailWithTemplate(to: string, templateId: string, dynamicTemplateData: any): Promise<void> {
-    const from = this.configService.get<string>('FROM_EMAIL') || 'noreply@domain.com';
+    const from = this.configService.get<string>('SENDGRID_FROM_EMAIL') || 
+                 this.configService.get<string>('FROM_EMAIL') || 
+                 'noreply@producttrace-ai.com';
     const msg = {
       to,
       from,
@@ -46,10 +51,11 @@ export class SendgridService {
     };
 
     try {
-      if (this.configService.get<string>('SENDGRID_API_KEY')) {
+      const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+      if (apiKey && !apiKey.includes('your_') && templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
         await sgMail.send(msg);
       } else {
-        console.log('Mock email send with template:', msg);
+        console.log('[MOCK TEMPLATE EMAIL SENT]', msg);
       }
     } catch (error: any) {
       console.error('Error sending email via SendGrid Template', error);

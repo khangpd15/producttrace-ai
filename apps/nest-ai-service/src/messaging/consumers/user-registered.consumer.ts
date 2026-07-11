@@ -1,50 +1,40 @@
-import { Controller, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
-
+import { Injectable, Logger } from '@nestjs/common';
+import { BaseConsumer } from './base.consumer';
+import { RABBITMQ } from '../rabbitmq/rabbitmq.constants';
 import { MailService } from '../../modules/mail/mail.service';
-import { ConfigService } from '@nestjs/config';
-import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
+import { Event } from '../types/event.interface';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
-export interface UserRegisteredEvent {
-  email: string;
-  name: string;
-  [key: string]: any;
+export class UserRegisteredPayload {
+  @IsEmail({}, { message: 'email must be a valid email address' })
+  @IsNotEmpty({ message: 'email is required' })
+  email!: string;
+
+  @IsString({ message: 'full_name must be a string' })
+  @IsNotEmpty({ message: 'full_name is required' })
+  full_name!: string;
+
+  @IsString({ message: 'otp_code must be a string' })
+  @IsNotEmpty({ message: 'otp_code is required' })
+  otp_code!: string;
 }
 
-@Controller()
-export class UserRegisteredConsumer {
-  private readonly logger = new Logger(UserRegisteredConsumer.name);
+@Injectable()
+export class UserRegisteredConsumer extends BaseConsumer<UserRegisteredPayload> {
+  protected readonly logger = new Logger(UserRegisteredConsumer.name);
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
+  protected readonly payloadClass = UserRegisteredPayload;
 
-  constructor(
-    private readonly mailService: MailService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly emailService: MailService) {
+    super();
+  }
 
-  @EventPattern(RABBITMQ.ROUTING_KEYS.USER_REGISTERED)
-  async handle(
-    @Payload() event: UserRegisteredEvent,
-    @Ctx() context: RmqContext,
-  ) {
-    const channel = context.getChannelRef();
-    const message = context.getMessage();
-
-    try {
-      this.logger.log(`Received user.registered event for: ${event.email}`);
-      
-      const templateId = this.configService.get<string>('WELCOME_TEMPLATE_ID') || '';
-      
-      // We will send a template email
-      // The template may need the user's name
-      await this.mailService.sendTemplateMail(event.email, templateId, {
-        name: event.name,
-      });
-
-      // Acknowledge message processing is successful
-      channel.ack(message);
-    } catch (error) {
-      this.logger.error('Error processing user.registered event', error);
-      // Negative acknowledgement - optionally requeue
-      channel.nack(message, false, false);
-    }
+  /**
+   * Business logic implementation for user.registered event.
+   * Calls the email service to send an OTP code.
+   */
+  protected async processPayload(payload: UserRegisteredPayload, event: Event<UserRegisteredPayload>): Promise<void> {
+    this.logger.log(`Processing user registration event for email: ${payload.email}`);
+    await this.emailService.sendOTP(payload.email, payload.full_name, payload.otp_code);
   }
 }

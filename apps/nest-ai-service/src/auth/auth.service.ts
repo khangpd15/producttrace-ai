@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
-import { MailService } from '../mail/mail.service';
+import { MailService } from '../modules/mail/mail.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Inject } from '@nestjs/common';
