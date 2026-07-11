@@ -20,7 +20,7 @@ async function bootstrap() {
   rabbitmqUrl = String(rabbitmqUrl);
 
   if (rabbitmqUrl.includes('@rabbitmq:')) {
-    console.log('🔄 [RabbitMQ] Đang chạy app ở local máy thật, tự động chuyển host sang localhost để test...');
+    console.log('[RabbitMQ] Đang chạy app ở local máy thật, tự động chuyển host sang localhost để tránh lỗi kết nối RabbitMQ');
     rabbitmqUrl = rabbitmqUrl.replace('@rabbitmq:', '@localhost:');
   } else if (rabbitmqUrl.includes('//rabbitmq:')) {
     rabbitmqUrl = rabbitmqUrl.replace('//rabbitmq:', '//localhost:');
@@ -45,7 +45,7 @@ async function bootstrap() {
 
   await app.startAllMicroservices();
   
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT || 3000;
   await app.listen(port);
 
   console.log(`Nest AI Service is running on HTTP port ${port}`);
