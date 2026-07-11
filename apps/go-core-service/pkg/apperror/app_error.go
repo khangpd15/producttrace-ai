@@ -9,13 +9,13 @@ import (
 type ErrorCode string
 
 const (
-	CodeBadRequest   ErrorCode = "BAD_REQUEST"
-	CodeUnauthorized ErrorCode = "UNAUTHORIZED"
-	CodeForbidden    ErrorCode = "FORBIDDEN"
-	CodeNotFound     ErrorCode = "NOT_FOUND"
-	CodeConflict     ErrorCode = "CONFLICT"
-	CodeValidation   ErrorCode = "VALIDATION_ERROR"
-	CodeInternal     ErrorCode = "INTERNAL_ERROR"
+	CodeBadRequest      ErrorCode = "BAD_REQUEST"
+	CodeUnauthorized    ErrorCode = "UNAUTHORIZED"
+	CodeForbidden       ErrorCode = "FORBIDDEN"
+	CodeNotFound        ErrorCode = "NOT_FOUND"
+	CodeConflict        ErrorCode = "CONFLICT"
+	CodeValidation      ErrorCode = "VALIDATION_ERROR"
+	CodeInternal        ErrorCode = "INTERNAL_ERROR"
 	CodeTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 )
 

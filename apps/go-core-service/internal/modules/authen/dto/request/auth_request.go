@@ -20,3 +20,17 @@ type VerifyOTPRequest struct {
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+type ResendOTPRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ResetPasswordRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	OTPCode     string `json:"otp_code" binding:"required,len=6"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}

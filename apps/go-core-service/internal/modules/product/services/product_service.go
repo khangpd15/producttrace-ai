@@ -1,184 +1,270 @@
 package services
 
 import (
-    "context"
-    "errors"
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
-    variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
-    variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
-    "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
-    "gorm.io/gorm"
+	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/response"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
+	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
+	variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	pkgResponse "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type ProductService interface {
-    CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error)
-    UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error)
-    GetProductByID(ctx context.Context, id uuid.UUID) (*entities.Product, error)
-    GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error)
-    DeleteProduct(ctx context.Context, id uuid.UUID) error
+	CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error)
+	UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error)
+	GetProductByID(ctx context.Context, id uuid.UUID) (*entities.Product, error)
+	GetAllProducts(ctx context.Context, filter request.ListProductRequest) (*response.ProductListResponse, error)
+	DeleteProduct(ctx context.Context, id uuid.UUID) error
 }
 
 type productService struct {
-    db          *gorm.DB
-    productRepo repositories.ProductRepository
-    variantRepo variantRepos.ProductVariantRepository
+	db          *gorm.DB
+	productRepo repositories.ProductRepository
+	variantRepo variantRepos.ProductVariantRepository
+	pub         *publisher.Publisher
 }
 
 func NewProductService(
-    db *gorm.DB,
-    productRepo repositories.ProductRepository,
-    variantRepo variantRepos.ProductVariantRepository,
+	db *gorm.DB,
+	productRepo repositories.ProductRepository,
+	variantRepo variantRepos.ProductVariantRepository,
+	pub *publisher.Publisher,
 ) ProductService {
-    return &productService{
-        db:          db,
-        productRepo: productRepo,
-        variantRepo: variantRepo,
-    }
+	return &productService{
+		db:          db,
+		productRepo: productRepo,
+		variantRepo: variantRepo,
+		pub:         pub,
+	}
 }
 
 func (s *productService) CreateProduct(ctx context.Context, req request.CreateProductRequest, createdBy uuid.UUID) (*entities.Product, error) {
-    for _, v := range req.Variants {
-        exists, err := s.variantRepo.ExistsBySKU(ctx, v.SKU)
-        if err != nil {
-            return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check SKU"))
-        }
-        if exists {
-            return nil, apperror.NewConflict("SKU already exists: " + v.SKU)
-        }
+	for _, v := range req.Variants {
+		exists, err := s.variantRepo.ExistsBySKU(ctx, v.SKU)
+		if err != nil {
+			return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check SKU"))
+		}
+		if exists {
+			return nil, apperror.NewConflict("SKU already exists: " + v.SKU)
+		}
 
-        if v.Barcode != nil {
-            exists, err = s.variantRepo.ExistsByBarcode(ctx, *v.Barcode)
-            if err != nil {
-                return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check barcode"))
-            }
-            if exists {
-                return nil, apperror.NewConflict("Barcode already exists: " + *v.Barcode)
-            }
-        }
-    }
+		if v.Barcode != nil {
+			exists, err = s.variantRepo.ExistsByBarcode(ctx, *v.Barcode)
+			if err != nil {
+				return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check barcode"))
+			}
+			if exists {
+				return nil, apperror.NewConflict("Barcode already exists: " + *v.Barcode)
+			}
+		}
+	}
 
-    var product entities.Product
-    err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-        product = entities.Product{
-            ID:           uuid.New(),
-            CategoryID:   &req.CategoryID,
-            Name:         req.Name,
-            Description:  req.Description,
-            ThumbnailURL: req.ThumbnailURL,
-            Status:       &req.Status,
-            CreatedBy:    &createdBy,
-        }
-        txCtx := variantRepos.InjectTx(ctx, tx)
-        if err := s.productRepo.Create(txCtx, &product); err != nil {
-            return apperror.Wrap(err, apperror.NewInternal("Failed to create product"))
-        }
+	// Convert tags và metadata sang JSON
+	tagsJSON, _ := json.Marshal(req.Tags)
+	metadataJSON, _ := json.Marshal(req.Metadata)
 
-        for _, v := range req.Variants {
-            variant := variantEntities.ProductVariant{
-                ID:        uuid.New(),
-                ProductID: product.ID,
-                SKU:       v.SKU,
-                Name:      v.Name,
-                Barcode:   v.Barcode,
-                Price:     v.Price,
-                Currency:  v.Currency,
-            }
-            if err := s.variantRepo.Create(txCtx, &variant); err != nil {
-                return apperror.Wrap(err, apperror.NewInternal("Failed to create variant"))
-            }
-        }
-        return nil
-    })
+	var product entities.Product
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		product = entities.Product{
+			ID:           uuid.New(),
+			CategoryID:   &req.CategoryID,
+			Name:         req.Name,
+			Slug:         &req.Slug,
+			Description:  req.Description,
+			ThumbnailURL: req.ThumbnailURL,
+			Tags:         datatypes.JSON(tagsJSON),
+			MetadataJSON: datatypes.JSON(metadataJSON),
+			Status:       &req.Status,
+			CreatedBy:    &createdBy,
+		}
+		txCtx := variantRepos.InjectTx(ctx, tx)
+		if err := s.productRepo.Create(txCtx, &product); err != nil {
+			return apperror.Wrap(err, apperror.NewInternal("Failed to create product"))
+		}
 
-    if err != nil {
-        return nil, err
-    }
+		for _, v := range req.Variants {
+			imagesJSON, _ := json.Marshal(v.Images)
+			variant := variantEntities.ProductVariant{
+				ID:         uuid.New(),
+				ProductID:  product.ID,
+				SKU:        v.SKU,
+				Name:       v.Name,
+				Barcode:    v.Barcode,
+				Price:      v.Price,
+				Currency:   v.Currency,
+				ImagesJSON: datatypes.JSON(imagesJSON),
+			}
+			if err := s.variantRepo.Create(txCtx, &variant); err != nil {
+				return apperror.Wrap(err, apperror.NewInternal("Failed to create variant"))
+			}
+		}
+		return nil
+	})
 
-    return &product, nil
+	if err != nil {
+		return nil, err
+	}
+
+	eventPayload := map[string]any{
+		"id":          product.ID.String(),
+		"productId":   product.ID.String(),
+		"name":        product.Name,
+		"description": product.Description,
+		"slug":        product.Slug,
+		"status":      product.Status,
+		"createdBy":   product.CreatedBy,
+		"tags":        product.Tags,
+		"metadata":    product.MetadataJSON,
+	}
+
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     rabbitmq.ProductCreatedRK,
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       eventPayload,
+	}
+
+	if err := s.pub.Publish(event); err != nil {
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to publish product.created event"))
+	}
+
+	return &product, nil
 }
 
 func (s *productService) UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error) {
-    product, err := s.productRepo.FindByID(ctx, id)
-    if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, apperror.NewNotFound("product")
-        }
-        return nil, apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
-    }
+	product, err := s.productRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.NewNotFound("product")
+		}
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
+	}
 
-    if req.Name != nil {
-        product.Name = *req.Name
-    }
-    if req.CategoryID != nil {
-        product.CategoryID = req.CategoryID
-    }
-    if req.Description != nil {
-        product.Description = req.Description
-    }
-    if req.ThumbnailURL != nil {
-        product.ThumbnailURL = req.ThumbnailURL
-    }
-    if req.Status != nil {
-        product.Status = req.Status
-    }
+	if req.Name != nil {
+		product.Name = *req.Name
+	}
+	if req.CategoryID != nil {
+		product.CategoryID = req.CategoryID
+	}
+	if req.Description != nil {
+		product.Description = req.Description
+	}
+	if req.Slug != nil {
+		product.Slug = req.Slug
+	}
+	if req.ThumbnailURL != nil {
+		product.ThumbnailURL = req.ThumbnailURL
+	}
+	if req.Status != nil {
+		product.Status = req.Status
+	}
+	if req.Tags != nil {
+		tagsJSON, _ := json.Marshal(req.Tags)
+		product.Tags = datatypes.JSON(tagsJSON)
+	}
+	if req.Metadata != nil {
+		metadataJSON, _ := json.Marshal(req.Metadata)
+		product.MetadataJSON = datatypes.JSON(metadataJSON)
+	}
 
-    if err := s.productRepo.Update(ctx, product); err != nil {
-        return nil, apperror.Wrap(err, apperror.NewInternal("Failed to update product"))
-    }
+	if err := s.productRepo.Update(ctx, product); err != nil {
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to update product"))
+	}
 
-    return product, nil
+	return product, nil
 }
 
 func (s *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*entities.Product, error) {
-    product, err := s.productRepo.FindByID(ctx, id)
-    if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, apperror.NewNotFound("product")
-        }
-        return nil, apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
-    }
-    return product, nil
+	product, err := s.productRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.NewNotFound("product")
+		}
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
+	}
+	return product, nil
 }
 
-func (s *productService) GetAllProducts(ctx context.Context, filter request.ListProductRequest) ([]entities.Product, int64, error) {
-    var categoryID *uuid.UUID
-    if filter.CategoryID != nil {
-        id, err := uuid.Parse(*filter.CategoryID)
-        if err != nil {
-            return nil, 0, apperror.NewBadRequest("Invalid category_id")
-        }
-        categoryID = &id
-    }
+func (s *productService) GetAllProducts(ctx context.Context, filter request.ListProductRequest) (*response.ProductListResponse, error) {
+	var categoryID *uuid.UUID
+	if filter.CategoryID != nil {
+		id, err := uuid.Parse(*filter.CategoryID)
+		if err != nil {
+			return nil, apperror.NewBadRequest("Invalid category_id")
+		}
+		categoryID = &id
+	}
 
-    repoFilter := repositories.ProductFilter{
-        Search:     filter.Search,
-        CategoryID: categoryID,
-        Status:     filter.Status,
-        Page:       filter.Page,
-        Limit:      filter.Limit,
-        SortBy:     filter.SortBy,
-        SortOrder:  filter.SortOrder,
-    }
+	repoFilter := repositories.ProductFilter{
+		Search:     filter.Search,
+		CategoryID: categoryID,
+		Status:     filter.Status,
+		Page:       filter.Page,
+		Limit:      filter.Limit,
+		SortBy:     filter.SortBy,
+		SortOrder:  filter.SortOrder,
+	}
 
-    return s.productRepo.FindAll(ctx, repoFilter)
+	items, total, err := s.productRepo.FindAllWithStats(ctx, repoFilter)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "products")
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	page := filter.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	if totalPages == 0 && total > 0 {
+		totalPages = 1
+	}
+
+	meta := pkgResponse.PaginationMeta{
+		CurrentPage: page,
+		PageSize:    limit,
+		TotalItems:  int(total),
+		TotalPages:  totalPages,
+	}
+
+	return &response.ProductListResponse{
+		Items: items,
+		Meta:  meta,
+	}, nil
 }
 
 func (s *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
-    _, err := s.productRepo.FindByID(ctx, id)
-    if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return apperror.NewNotFound("product")
-        }
-        return apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
-    }
+	_, err := s.productRepo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperror.NewNotFound("product")
+		}
+		return apperror.Wrap(err, apperror.NewInternal("Failed to find product"))
+	}
 
-    if err := s.productRepo.SoftDelete(ctx, id); err != nil {
-        return apperror.Wrap(err, apperror.NewInternal("Failed to delete product"))
-    }
+	if err := s.productRepo.SoftDelete(ctx, id); err != nil {
+		return apperror.Wrap(err, apperror.NewInternal("Failed to delete product"))
+	}
 
-    return nil
+	return nil
 }

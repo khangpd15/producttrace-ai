@@ -59,6 +59,21 @@ func (h *AuthenHandler) Login(c *gin.Context) {
 		RefreshToken: refreshToken,
 	}))
 }
+func (h *AuthenHandler) ResendOTP(c *gin.Context) {
+	var req request.ResendOTPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	err := h.authService.ReSendOTP(c.Request.Context(), req.Email)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("OTP resent successfully. Please check your email.", nil))
+}
 
 func (h *AuthenHandler) VerifyOTP(c *gin.Context) {
 	var req request.VerifyOTPRequest
@@ -109,4 +124,32 @@ func (h *AuthenHandler) Logout(c *gin.Context) {
 	}
 
 	c.JSON(200, response.ResponseSuccess("Logged out successfully", nil))
+}
+
+func (h *AuthenHandler) ForgotPassword(c *gin.Context) {
+	var req request.ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	// Always return 200 OK for security (do not reveal if email exists)
+	_ = h.authService.ForgotPassword(c.Request.Context(), req.Email)
+
+	c.JSON(200, response.ResponseSuccess("If your email is registered, you will receive a password reset OTP shortly.", nil))
+}
+
+func (h *AuthenHandler) ResetPassword(c *gin.Context) {
+	var req request.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	if err := h.authService.ResetPassword(c.Request.Context(), req.Email, req.OTPCode, req.NewPassword); err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("Password has been reset successfully. Please log in with your new password.", nil))
 }

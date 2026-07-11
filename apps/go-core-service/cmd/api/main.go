@@ -106,4 +106,5 @@ func main() {
 	if err := appli.Router.Run(":" + port); err != nil {
 		log.Fatalf("failed to start server: %v \n", err)
 	}
+
 }
