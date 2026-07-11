@@ -119,7 +119,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	aService := authService.NewAuthenService(uRepo, redisCache, pub)
 	aHandler := authHandler.NewAuthenHandler(aService)
 
-	pService := productService.NewProductService(database, pRepo, pVariantRepo)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pub)
 	pHandler := productHandler.NewProductHandler(pService)
  
 	// Initialize Location Module

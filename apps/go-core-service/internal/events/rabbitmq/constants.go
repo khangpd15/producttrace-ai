@@ -5,6 +5,10 @@ const (
 	DefaultExchange = "product-trace.events"
 	DLXExchange     = "product-trace.dlx"
 
+	EmbeddingQueueName   = "embedding_queue"
+	EmbeddingDLXExchange = "embedding.dlx"
+	EmbeddingDLQName     = "embedding.failed"
+
 	// Alias for compatibility/readability
 	EventExchange = DefaultExchange
 
