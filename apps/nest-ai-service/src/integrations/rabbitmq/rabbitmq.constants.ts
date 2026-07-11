@@ -4,13 +4,19 @@ export const RABBITMQ = {
     'amqp://guest:guest@localhost:5672',
 
   QUEUES: {
+    // Queue của Email (không đụng)
     AI_EVENTS: 'ai.events',
+
+    // Queue riêng cho Embedding
     EMBEDDING: 'embedding_queue',
   },
 
+  EXCHANGE: 'product-trace.events',
+  EXCHANGE_TYPE: 'topic',
+
   DLX: {
     AI_EVENTS: 'product-trace.dlx',
-    EMBEDDING: 'embedding_dlx',
+    EMBEDDING: 'embedding.dlx',
   },
 
   DLQ_ROUTING_KEYS: {

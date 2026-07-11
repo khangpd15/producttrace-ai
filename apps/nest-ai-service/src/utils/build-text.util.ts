@@ -2,7 +2,7 @@ import { Event } from '../messaging/types/event.interface';
 
 export class BuildTextUtil {
   static buildText(event: Event): string {
-    const eventType = (event.eventType ?? '').toLowerCase();
+    const eventType = (event.event_type ?? '').toLowerCase();
     if (eventType.includes('trace')) {
       return this.buildTraceText(event.payload as Record<string, unknown>);
     }

@@ -12,7 +12,7 @@ export class RabbitMQProducerService implements OnModuleInit {
     await this.client.connect();
   }
 
-  emit(pattern: string, message: any) {
+  emit<T>(pattern: string, message: T) {
     return this.client.emit(pattern, message);
   }
 }

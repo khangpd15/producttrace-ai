@@ -3,7 +3,6 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQProducerService } from './rabbitmq-producer.service';
 import { RABBITMQ } from './rabbitmq.constants';
 
-
 @Module({
   imports: [
     ClientsModule.register([
@@ -12,19 +11,31 @@ import { RABBITMQ } from './rabbitmq.constants';
         transport: Transport.RMQ,
         options: {
           urls: [RABBITMQ.URL],
-          queue: RABBITMQ.QUEUES.AI_EVENTS,
+          exchange: RABBITMQ.EXCHANGE,
+          exchangeType: RABBITMQ.EXCHANGE_TYPE,
+          queue: RABBITMQ.QUEUES.EMBEDDING,
+
           queueOptions: {
             durable: true,
+            arguments: {
+              'x-dead-letter-exchange':
+                RABBITMQ.DLX.EMBEDDING,
+
+              'x-dead-letter-routing-key':
+                RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
+            },
           },
         },
       },
     ]),
   ],
+
   providers: [
     RabbitMQProducerService,
   ],
+
   exports: [
     RabbitMQProducerService,
   ],
 })
-export class RabbitMQModule {}
+export class EmbeddingRabbitMQModule { }

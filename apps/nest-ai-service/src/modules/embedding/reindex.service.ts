@@ -25,11 +25,11 @@ export class ReindexService {
 
       for (const product of result.data) {
         await this.embeddingService.processEvent({
-          eventId: `reindex-${product.id}`,
-          eventType: 'product.reindexed',
-          eventVersion: '1.0',
+          event_id: `reindex-${product.id}`,
+          event_type: 'product.reindexed',
+          event_version: '1.0',
           producer: 'nest-ai-service',
-          correlationId: `reindex-${product.id}`,
+          correlation_id: `reindex-${product.id}`,
           timestamp: new Date().toISOString(),
           payload: {
             productId: product.id,

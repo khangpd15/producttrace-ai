@@ -34,7 +34,7 @@ export class SyncConsumer {
     }
 
     this.logger.log(
-      `Received rabbitmq event id=${event?.eventId ?? "unknown"} type=${event?.eventType ?? "unknown"}`,
+      `Received rabbitmq event id=${event?.event_id ?? "unknown"} type=${event?.event_type ?? "unknown"}`,
     );
 
     try {

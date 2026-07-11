@@ -31,12 +31,12 @@ export class EmbeddingService {
   }
 
   async processEvent(event: Event): Promise<void> {
-    if (this.processedEvents.has(event.eventId)) {
-      this.logger.warn(`[EMBED][SKIP_DUPLICATE] ${event.eventId}`);
+    if (this.processedEvents.has(event.event_id)) {
+      this.logger.warn(`[EMBED][SKIP_DUPLICATE] ${event.event_id}`);
       return;
     }
 
-    this.processedEvents.add(event.eventId);
+    this.processedEvents.add(event.event_id);
 
     if (this.processedEvents.size > this.MAX_CACHE) {
       this.processedEvents.clear();
@@ -45,8 +45,8 @@ export class EmbeddingService {
     try {
       // 1. RECEIVED EVENT
       this.logger.log(`[EMBED][RECEIVED]`, {
-        eventType: event.eventType,
-        eventId: event.eventId,
+        eventType: event.event_type,
+        eventId: event.event_id,
       });
 
       const text = BuildTextUtil.buildText(event);
@@ -74,7 +74,7 @@ export class EmbeddingService {
       const payload = this.buildPayload(event);
 
       const embeddingGeneratedEvent = {
-        eventId: event.eventId,
+        eventId: event.event_id,
         productId: this.extractProductId(event),
         pointId,
         vector,
@@ -84,7 +84,7 @@ export class EmbeddingService {
 
       this.logger.log(`[EMBED][PIPELINE]`, {
         step: 'PUBLISH_EMBEDDING_GENERATED',
-        eventId: event.eventId,
+        eventId: event.event_id,
         pointId,
       });
 
@@ -95,13 +95,13 @@ export class EmbeddingService {
       );
 
       this.logger.log(`[EMBED][EMBEDDING_GENERATED]`, {
-        eventId: event.eventId,
+        eventId: event.event_id,
         pointId,
       });
 
     } catch (error) {
       this.logger.error(
-        `Failed processing event ${event.eventId}: ${error instanceof Error
+        `Failed processing event ${event.event_id}: ${error instanceof Error
           ? error.message
           : JSON.stringify(error)
         }`,
@@ -162,7 +162,7 @@ export class EmbeddingService {
   private buildPayload(event: Event): Record<string, unknown> {
     return {
       productId: this.extractProductId(event),
-      eventType: event.eventType,
+      eventType: event.event_type,
       timestamp: event.timestamp,
     };
   }

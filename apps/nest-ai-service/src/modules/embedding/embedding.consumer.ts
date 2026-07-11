@@ -32,20 +32,20 @@ export class EmbeddingConsumer {
       return;
     }
 
-    if (!event.eventType) {
+    if (!event.event_type) {
       this.logger.error(`Invalid event format: ${JSON.stringify(event)}`);
       return;
     }
 
     this.logger.log(
-      `Received rabbitmq event id=${event.eventId} type=${event.eventType}`
+      `Received rabbitmq event id=${event.event_id} type=${event.event_type}`
     );
 
     try {
       await this.embeddingService.processEvent(event);
-      this.logger.log(`Processed event ${event.eventId} type=${event.eventType}`);
+      this.logger.log(`Processed event ${event.event_id} type=${event.event_type}`);
     } catch (error) {
-      this.logger.error(`Failed processing event ${event.eventId}: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
+      this.logger.error(`Failed processing event ${event.event_id}: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
       throw error;
     }
   }
@@ -65,6 +65,13 @@ export class EmbeddingConsumer {
       } catch (e) {
         this.logger.error('Invalid JSON payload');
         throw e;
+      }
+    }
+
+    if (data && typeof data === 'object' && 'data' in data && 'pattern' in data) {
+      const envelope = data as { data?: unknown; pattern?: unknown };
+      if (envelope.data && typeof envelope.data === 'object') {
+        return envelope.data;
       }
     }
 

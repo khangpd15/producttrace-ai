@@ -1,11 +1,12 @@
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+  rabbitmq:
+    image: rabbitmq:3-management
     ports:
-      - "2181:2181"
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
 
   qdrant:
     image: qdrant/qdrant:v1.7.4
@@ -15,25 +16,6 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-     - "5672:5672"
-     - "15672:15672"
-
-  nest-ai-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - qdrant
-      - embedding-service
-    environment:
-      EMBEDDING_SERVICE_URL: "http://embedding-service:8000"
-      QDRANT_URL: "http://qdrant:6333"
-    ports:
-      - "3000:3000"
-
   embedding-service:
     build:
       context: ./embedding-service
@@ -42,6 +24,21 @@ services:
       - "8000:8000"
     environment:
       MODEL_NAME: "bge-m3"
+
+  nest-ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - rabbitmq
+      - qdrant
+      - embedding-service
+    environment:
+      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672"
+      EMBEDDING_SERVICE_URL: "http://embedding-service:8000"
+      QDRANT_URL: "http://qdrant:6333"
+    ports:
+      - "3002:3000"
 
 volumes:
   qdrant_data:

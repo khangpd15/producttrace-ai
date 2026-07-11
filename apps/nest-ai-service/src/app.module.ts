@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 
 // RabbitMQ của Email
 import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
+import { EmbeddingRabbitMQModule } from './integrations/rabbitmq/ai-rabbitmq.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
     MailModule,
     AuthModule,
     RabbitMQModule,
+    EmbeddingRabbitMQModule,
   ],
   controllers: [MockController],
 })

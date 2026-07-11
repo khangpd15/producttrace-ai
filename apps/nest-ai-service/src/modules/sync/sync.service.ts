@@ -33,7 +33,7 @@ export class SyncService {
             await this.rabbitmqProducer.emit(
                 RABBITMQ.ROUTING_KEYS.EMBEDDING_COMPLETED,
                 {
-                    eventId: event.eventId,
+                    eventId: event.event_id,
                     pointId: event.pointId,
                     timestamp: new Date().toISOString(),
                 },
