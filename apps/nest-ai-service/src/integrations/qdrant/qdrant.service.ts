@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config/dist/config.service';
 import { QdrantClient } from '@qdrant/js-client-rest';
 
 @Injectable()
@@ -6,9 +7,10 @@ export class QdrantService implements OnModuleInit {
   private client: QdrantClient;
   private collectionName = 'producttrace_geo_collection';
 
-  constructor() {
-    // Kết nối tới Qdrant đang chạy trong Docker
-    this.client = new QdrantClient({ url: 'http://localhost:6333' });
+  constructor(private configService: ConfigService) {
+    const qdrantUrl = this.configService.get<string>('QDRANT_URL') || 'http://localhost:6333';
+    this.collectionName = 'producttrace_geo_collection'; 
+    this.client = new QdrantClient({ url: qdrantUrl });
   }
 
   async onModuleInit() {
@@ -26,6 +28,7 @@ export class QdrantService implements OnModuleInit {
         await this.client.createPayloadIndex(this.collectionName, {
           field_name: 'location',
           field_schema: 'geo',
+          wait: true,
         });
         console.log(`[QdrantService] Geo collection initialized with geo index.`);
       }
@@ -72,36 +75,73 @@ export class QdrantService implements OnModuleInit {
       throw error;
     }
   }
-  //  Tìm địa điểm chứa sản phẩm cụ thể trong bán kính (km)
-async findProductsByRadius(lat: number, lng: number, radiusMeters: number, productId?: string) {
-  try {
-    const filters: any[] = [
-      {
-        key: 'location',
-        geo_radius: {
-          center: { lat, lon: lng },
-          radius: radiusMeters,
+
+  // Tìm địa điểm chứa sản phẩm cụ thể trong bán kính (km)
+  async findProductsByRadius(lat: number, lng: number, radiusMeters: number, productId?: string) {
+    try {
+      const filters: any[] = [
+        {
+          key: 'location',
+          geo_radius: {
+            center: { lat, lon: lng },
+            radius: radiusMeters,
+          },
         },
-      },
-    ];
+      ];
 
-    // Nếu người dùng truyền mã sản phẩm, dùng bộ lọc match của Qdrant để quét trong mảng 'products'
-    if (productId) {
-      filters.push({ key: 'products', match: { value: productId } });
+      // Nếu người dùng truyền mã sản phẩm, dùng bộ lọc match của Qdrant để quét trong mảng 'products'
+      if (productId) {
+        filters.push({ key: 'products', match: { value: productId } });
+      }
+
+      const result = await this.client.scroll(this.collectionName, {
+        filter: { must: filters },
+        with_payload: true,
+      });
+
+      return result.points.map(p => ({
+        id: p.id,
+        ...(p.payload as object),
+      }));
+    } catch (error) {
+      console.error('[QdrantService] Error in findProductsByRadius:', error);
+      throw error;
     }
-
-    const result = await this.client.scroll(this.collectionName, {
-      filter: { must: filters },
-      with_payload: true,
-    });
-
-    return result.points.map(p => ({
-      id: p.id,
-      ...(p.payload as object),
-    }));
-  } catch (error) {
-    console.error('[QdrantService] Error in findProductsByRadius:', error);
-    throw error;
   }
-}
+
+
+  // Hàm bọc lưu/cập nhật thông tin Store 
+  async upsertStoreToQdrant(data: any) {
+    return this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{
+        id: data.id,
+        payload: {
+          name: data.name,
+          type: data.type || 'store',
+          location: { lat: data.latitude, lon: data.longitude },
+          address: data.address,
+          products: data.products || [],
+        },
+        vector: {},
+      }],
+    });
+  }
+
+  // Hàm bọc lưu/cập nhật thông tin Product 
+  async upsertProduct(data: any) {
+    return this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{
+        id: data.id,
+        payload: {
+          name: data.name,
+          type: 'product',
+          productId: data.productId,
+          metadata: data.metadata || {},
+        },
+        vector: {},
+      }],
+    });
+  }
 }
