@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
@@ -30,17 +34,20 @@ type productService struct {
 	db          *gorm.DB
 	productRepo repositories.ProductRepository
 	variantRepo variantRepos.ProductVariantRepository
+	pub         *publisher.Publisher
 }
 
 func NewProductService(
 	db *gorm.DB,
 	productRepo repositories.ProductRepository,
 	variantRepo variantRepos.ProductVariantRepository,
+	pub *publisher.Publisher,
 ) ProductService {
 	return &productService{
 		db:          db,
 		productRepo: productRepo,
 		variantRepo: variantRepo,
+		pub:         pub,
 	}
 }
 
@@ -109,6 +116,32 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 
 	if err != nil {
 		return nil, err
+	}
+
+	eventPayload := map[string]any{
+		"id":          product.ID.String(),
+		"productId":   product.ID.String(),
+		"name":        product.Name,
+		"description": product.Description,
+		"slug":        product.Slug,
+		"status":      product.Status,
+		"createdBy":   product.CreatedBy,
+		"tags":        product.Tags,
+		"metadata":    product.MetadataJSON,
+	}
+
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     rabbitmq.ProductCreatedRK,
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       eventPayload,
+	}
+
+	if err := s.pub.Publish(event); err != nil {
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to publish product.created event"))
 	}
 
 	return &product, nil

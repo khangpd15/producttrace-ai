@@ -67,8 +67,7 @@ func (p *pdfGenerator) GenerateLabels(input BatchPDFInput) ([]byte, error) {
 	for i, item := range input.Items {
 
 		verifyURL := fmt.Sprintf(
-			"%s/verify?item_code=%s&token=%s",
-			p.baseURL,
+			"https://your-frontend-domain.vercel.app/verify?item_code=%s&token=%s",
 			item.ItemCode,
 			item.Token,
 		)
