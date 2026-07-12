@@ -51,7 +51,6 @@ export class GeoSearchService {
         type: payload.type || 'unknown',
         address: payload.address || 'Không có địa chỉ',
         products: payload.products || undefined,
-        distanceMeters: distanceInMeters,
         note: distanceNote,
       };
     })
