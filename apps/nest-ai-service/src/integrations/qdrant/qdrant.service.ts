@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SearchResult } from '../../modules/search/interfaces/search-result.interface';
 
 @Injectable()
 export class QdrantService {
@@ -68,6 +69,55 @@ export class QdrantService {
     );
   }
 
+  // =========================
+  // VECTOR SEARCH
+  // =========================
+  async vectorSearch(
+    vector: number[],
+    filter?: Record<string, unknown>,
+    limit = 10,
+  ): Promise<SearchResult[]> {
+    // validate vector
+    if (!vector || vector.length !== this.vectorSize) {
+      throw new Error(
+        `Invalid vector size: expected ${this.vectorSize}, got ${vector?.length}`,
+      );
+    }
+
+    // ensure collection exists
+    await this.ensureCollection();
+
+    const response = await fetch(
+      `${this.baseUrl}/collections/${this.collectionName}/points/search`,
+      {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify({
+          vector,
+          filter,
+          limit,
+          with_payload: true,
+          with_vector: false,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+
+      this.logger.error(
+        `Qdrant search failed: ${response.status} ${body}`,
+      );
+
+      throw new Error(
+        `Qdrant search failed: ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+
+    return body.result as SearchResult [];
+  }
   // =========================
   // ENSURE COLLECTION
   // =========================
