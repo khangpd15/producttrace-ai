@@ -55,18 +55,10 @@ import (
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
-	// Location Module
-	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
-	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
-	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
-
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
-	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 
 	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
@@ -133,7 +125,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo, pub)
 	pHandler := productHandler.NewProductHandler(pService)
- 
+
 	// Initialize Location Module
 	locRepo := locationRepo.NewLocationRepository(database)
 	locService := locationService.NewLocationService(locRepo)
@@ -147,10 +139,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
-	// Location module
-	lRepo := locationRepo.NewLocationRepository(database)
-	lService := locationService.NewLocationService(lRepo)
-	lHandler := locationHandler.NewLocationHandler(lService)
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -188,14 +176,14 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		LocationHandler:              locHandler,
 		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
-		LocationHandler:              lHandler,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
-		ProductItemHandler:           piHandler,
 		TraceHandler:                 tHandler,
 		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
+		OwnershipHandler:             oHandler,
+		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{

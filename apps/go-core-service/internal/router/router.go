@@ -8,13 +8,15 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
-	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
@@ -22,22 +24,12 @@ import (
 )
 
 type RouterDependency struct {
-	BatchHandler         *batchHandler.BatchHandler
-	AuthHandler          *authHandler.AuthenHandler
-	UserHandler          *userHandler.UserHandler
-	ProductHandler       *productHandler.ProductHandler
-	OwnershipHandler     *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler *warrantyClaimHandler.WarrantyClaimHandler
-	UserRepo             userRepo.UserRepositoryInterface
-	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
-	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
-)
-
-type RouterDependency struct {
 	BatchHandler                 *batchHandler.BatchHandler
 	AuthHandler                  *authHandler.AuthenHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
+	OwnershipHandler             *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
@@ -242,7 +234,7 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 
 	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
 	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
-	
+
 	// CRUD Extensions
 	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
 	ownerships.DELETE("/:id", oh.DeleteOwnership)
@@ -256,6 +248,9 @@ func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.Wa
 	{
 		warrantyClaims.POST("", wch.CreateWarrantyClaim)
 	}
+}
+
+// LOCATION
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
@@ -393,6 +388,7 @@ func SetupProductItemRouter(api *gin.RouterGroup, ph *productItemHandler.Product
 		items.GET("/:item_code", ph.GetProductItemDetail)
 	}
 }
+
 // TRACE
 func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
 
