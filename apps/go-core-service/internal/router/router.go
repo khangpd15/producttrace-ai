@@ -279,6 +279,9 @@ func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHa
 	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
 	{
 		dashboard.GET("/stats", dh.GetStats)
+		dashboard.GET("/activities", dh.GetActivities)
+		dashboard.GET("/alerts", dh.GetAlerts)
+		dashboard.GET("/charts/production-sales", dh.GetProductionSalesChart)
 	}
 }
 

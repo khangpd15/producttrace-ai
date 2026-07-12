@@ -31,8 +31,9 @@ export default function ResetPasswordPage() {
       }
 
       try {
+        const apiUrl = import.meta.env.VITE_NEST_AI_API_URL || 'http://localhost:3000';
         const response = await fetch(
-          `http://localhost:3000/auth/validate-reset-token?token=${token}&email=${encodeURIComponent(email)}`,
+          `${apiUrl}/auth/validate-reset-token?token=${token}&email=${encodeURIComponent(email)}`,
           { cache: 'no-store' }
         );
         const data = await response.json();
@@ -65,7 +66,8 @@ export default function ResetPasswordPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`http://localhost:3000/auth/reset-password?email=${encodeURIComponent(email || '')}`, {
+      const apiUrl = import.meta.env.VITE_NEST_AI_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${apiUrl}/auth/reset-password?email=${encodeURIComponent(email || '')}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password, confirmPassword }),
