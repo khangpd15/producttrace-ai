@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
@@ -35,4 +36,40 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response.ResponseSuccess("Get dashboard stats successfully", stats))
+}
+
+func (h *DashboardHandler) GetActivities(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 10
+	}
+
+	activities, err := h.dashboardService.GetActivities(c.Request.Context(), limit)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("Get dashboard activities successfully", activities))
+}
+
+func (h *DashboardHandler) GetAlerts(c *gin.Context) {
+	alerts, err := h.dashboardService.GetAlerts(c.Request.Context())
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("Get dashboard alerts successfully", alerts))
+}
+
+func (h *DashboardHandler) GetProductionSalesChart(c *gin.Context) {
+	chartData, err := h.dashboardService.GetProductionSalesChart(c.Request.Context())
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("Get production and sales chart data successfully", chartData))
 }
