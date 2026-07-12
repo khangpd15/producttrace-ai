@@ -122,7 +122,7 @@ export class EmbeddingService {
     return uuidv5(productId, this.NAMESPACE);
   }
 
-  private async generateEmbedding(text: string): Promise<number[]> {
+  async generateEmbedding(text: string): Promise<number[]> {
     const response = await fetch(`${this.apiUrl}/embed`, {
       method: 'POST',
       headers: {
