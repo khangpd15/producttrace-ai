@@ -22,11 +22,11 @@ export class GeoSearchController {
     return await this.geoSearchService.searchServiceCenters(query);
   }
 
-  // Tìm sản phẩm cùng loại trong bán kính R km
-  @Get('products/nearby')
+  // Tìm sản phẩm cùng loại trong bán kính R (mét) 
+  @Get('geo-search/products-nearby')
   @UsePipes(new ValidationPipe({ transform: true }))
   async getProductsNearby(@Query() query: SearchGeoDto) {
-    console.log(`[GET] Request products nearby received at Controller: Lat ${query.lat}, Lng ${query.lng}, Product ${query.productId}`);
+    console.log(`[GET] Request products nearby received at Controller: Lat ${query.lat}, Lng ${query.lng}, Product ${query.keyword}, Radius ${query.radius}`);
     return await this.geoSearchService.searchProductsNearby(query);
   }
 }

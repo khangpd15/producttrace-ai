@@ -19,12 +19,10 @@ export class QdrantService implements OnModuleInit {
       const hasCollection = collections.collections.some(c => c.name === this.collectionName);
 
       if (!hasCollection) {
-        // Khởi tạo collection lưu trữ hình học
         await this.client.createCollection(this.collectionName, {
-          vectors: {}, // Sử dụng cấu trúc lưu trữ không gian (Non-vector)
+          vectors: {}, 
         });
         
-        // Kích hoạt Geo Index tăng tốc quét bán kính
         await this.client.createPayloadIndex(this.collectionName, {
           field_name: 'location',
           field_schema: 'geo',
@@ -41,7 +39,7 @@ export class QdrantService implements OnModuleInit {
     return this.findLocationsByRadius(lat, lng, radiusMeters, 'store');
   }
 
-  // CƠ CHẾ CORE DÙNG CHUNG (Lọc theo vị trí địa lý và loại thực thể)
+  // Tìm địa điểm theo vị trí địa lý và loại thực thể
   async findLocationsByRadius(
     lat: number,
     lng: number,
@@ -52,11 +50,11 @@ export class QdrantService implements OnModuleInit {
       const result = await this.client.scroll(this.collectionName, {
         filter: {
           must: [
-            { key: 'type', match: { value: type } }, // Lọc store hoặc service_center
+            { key: 'type', match: { value: type } }, 
             {
               key: 'location',
               geo_radius: {
-                center: { lat, lon: lng },
+                center: { lat, lon: lng }, 
                 radius: radiusMeters,
               },
             },
@@ -64,32 +62,26 @@ export class QdrantService implements OnModuleInit {
         },
         with_payload: true,
       });
-
-      // Map lại cấu trúc dữ liệu trả về mảng gọn gàng
-      return result.points.map(p => ({
-        id: p.id,
-        ...(p.payload as object),
-      }));
+      return result.points; 
     } catch (error) {
       console.error(`[QdrantService] Error in findLocationsByRadius for ${type}:`, error);
       throw error;
     }
   }
 
-  // Tìm địa điểm chứa sản phẩm cụ thể trong bán kính (km)
+  // Tìm địa điểm chứa sản phẩm cụ thể
   async findProductsByRadius(lat: number, lng: number, radiusMeters: number, productId?: string) {
     try {
       const filters: any[] = [
         {
           key: 'location',
           geo_radius: {
-            center: { lat, lon: lng },
+            center: { lat, lon: lng }, 
             radius: radiusMeters,
           },
         },
       ];
 
-      // Nếu người dùng truyền mã sản phẩm, dùng bộ lọc match của Qdrant để quét trong mảng 'products'
       if (productId) {
         filters.push({ key: 'products', match: { value: productId } });
       }
@@ -99,17 +91,12 @@ export class QdrantService implements OnModuleInit {
         with_payload: true,
       });
 
-      return result.points.map(p => ({
-        id: p.id,
-        ...(p.payload as object),
-      }));
+      return result.points;
     } catch (error) {
       console.error('[QdrantService] Error in findProductsByRadius:', error);
       throw error;
     }
   }
-
-
   // Hàm bọc lưu/cập nhật thông tin Store 
   async upsertStoreToQdrant(data: any) {
     return this.client.upsert(this.collectionName, {

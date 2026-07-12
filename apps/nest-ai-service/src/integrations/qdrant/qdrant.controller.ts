@@ -6,88 +6,125 @@ export class QdrantController {
   constructor(private readonly qdrantService: QdrantService) {}
 
   // =========================================================================
-  // SEED DỮ LIỆU CỬA HÀNG (GỒM THỰC TẾ + GIẢ LẬP )
+  // SEED DỮ LIỆU CỬA HÀNG
   // =========================================================================
   @Post('seed-stores')
   async seedStores() {
     const client = (this.qdrantService as any).client;
     const collectionName = (this.qdrantService as any).collectionName;
 
-    // 1. Mảng dữ liệu thực tế 
-    const realStores = [
+    // Danh sách 5 sản phẩm 
+    const productPool = [
+      'iPhone 15 Pro',
+      'MacBook Air M3',
+      'Chuột Logitech G304',
+      'Bàn phím Cơ Keychron',
+      'Tai nghe Sony WH-1000XM5'
+    ];
+
+    // Mảng chứa toàn bộ 10 cửa hàng 
+    const mixedStores = [
       {
-        id: 101,
+        id: 101, 
         name: 'Cửa hàng FPT Shop Cần Thơ',
         type: 'store',
         location: { lat: 10.0226, lon: 105.7314 },
         address: '95-97-99 Hùng Vương, Thới Bình, Ninh Kiều, Cần Thơ',
+        products: [productPool[0], productPool[1], productPool[4]], // iPhone 15 Pro, MacBook Air M3, Tai nghe Sony
       },
       {
-        id: 102,
+        id: 1001, 
+        name: 'Cửa hàng Giả Lập Mẫu Số 1',
+        type: 'store',
+        location: { lat: 10.95, lon: 105.85 },
+        address: 'Địa chỉ giả lập tự động cấp số 1, Khu vực ĐBSCL',
+        products: [productPool[2], productPool[3]], // Chuột, Bàn phím
+      },
+      {
+        id: 102, 
         name: 'Đại lý Ủy quyền ProductTrace Vĩnh Long',
         type: 'store',
         location: { lat: 10.1350, lon: 105.9620 },
         address: 'Ba Càng, Song Phú, Tam Bình, Vĩnh Long',
+        products: [productPool[0], productPool[2]], // iPhone 15 Pro, Chuột
       },
       {
-        id: 103,
+        id: 1002, 
+        name: 'Cửa hàng Giả Lập Mẫu Số 2',
+        type: 'store',
+        location: { lat: 11.20, lon: 106.10 },
+        address: 'Địa chỉ giả lập tự động cấp số 2, Khu vực ĐBSCL',
+        products: [productPool[1], productPool[4]], // MacBook Air M3, Tai nghe Sony
+      },
+      {
+        id: 103, 
         name: 'Thế Giới Di Động Phường 1 Vĩnh Long',
         type: 'store',
         location: { lat: 10.2524, lon: 105.9612 },
         address: 'Trần Hưng Đạo, Phường 1, TP. Vĩnh Long',
+        products: [productPool[0], productPool[1], productPool[3]], // iPhone 15 Pro, MacBook Air M3, Bàn phím
       },
       {
-        id: 104,
+        id: 1003, 
+        name: 'Cửa hàng Giả Lập Mẫu Số 3',
+        type: 'store',
+        location: { lat: 10.55, lon: 105.45 },
+        address: 'Địa chỉ giả lập tự động cấp số 3, Khu vực ĐBSCL',
+        products: [productPool[2], productPool[3], productPool[4]], // Chuột, Bàn phím, Tai nghe Sony
+      },
+      {
+        id: 104, 
         name: 'Showroom ProductTrace Landmark 81',
         type: 'store',
         location: { lat: 10.7948, lon: 106.7218 },
         address: 'Vinhomes Central Park, Bình Thạnh, TP. Hồ Chí Minh',
+        products: [productPool[1], productPool[3]], // MacBook Air M3, Bàn phím
       },
+      {
+        id: 1004, 
+        name: 'Cửa hàng Giả Lập Mẫu Số 4',
+        type: 'store',
+        location: { lat: 9.95, lon: 106.35 },
+        address: 'Địa chỉ giả lập tự động cấp số 4, Khu vực ĐBSCL',
+        products: [productPool[0], productPool[4]], // iPhone 15 Pro, Tai nghe Sony
+      },
+      {
+        id: 1005, 
+        name: 'Cửa hàng Giả Lập Mẫu Số 5',
+        type: 'store',
+        location: { lat: 10.35, lon: 105.75 },
+        address: 'Địa chỉ giả lập tự động cấp số 5, Khu vực ĐBSCL',
+        products: [productPool[0], productPool[1], productPool[2]], // iPhone 15 Pro, MacBook Air M3, Chuột
+      },
+      {
+        id: 1006,
+        name: 'Cửa hàng Giả Lập Mẫu Số 6',
+        type: 'store',
+        location: { lat: 10.18, lon: 106.25 },
+        address: 'Địa chỉ giả lập tự động cấp số 6, Khu vực ĐBSCL',
+        products: [productPool[3], productPool[4]], // Bàn phím, Tai nghe Sony
+      }
     ];
 
+    // Đẩy nguyên cụm mảng này lên Qdrant
     await client.upsert(collectionName, {
       wait: true,
-      points: realStores.map(store => ({
+      points: mixedStores.map(store => ({
         id: store.id,
         payload: {
           name: store.name,
           type: store.type,
           location: store.location,
           address: store.address,
+          products: store.products, // 
         },
         vector: {},
       })),
     });
 
-    // 2. Thuật toán giả lập tự động tăng tọa độ để tạo ra 10 cửa hàng giả lập(không trùng với thực tế)
-    const mockStoresOld: any[] = [];
-    const baseLat = 10.0;
-    const baseLng = 105.0;
-
-    for (let i = 1; i <= 10; i++) {
-      mockStoresOld.push({
-        id: 1000 + i,
-        payload: {
-          name: `Cửa hàng Giả Lập Mẫu Số ${i}`,
-          type: 'store',
-          location: {
-            lat: baseLat + i * 0.01,
-            lon: baseLng + i * 0.01,
-          },
-          address: `Địa chỉ giả lập tự động cấp số ${i}, Khu vực ĐBSCL`,
-        },
-        vector: {},
-      });
-    }
-
-    await client.upsert(collectionName, {
-      wait: true,
-      points: mockStoresOld,
-    });
-
     return {
       success: true,
-      message: `Đã nạp thành công ${realStores.length} cửa hàng thực tế và ${mockStoresOld.length} cửa hàng giả lập cũ vào Qdrant!`,
+      message: `Đã nạp thành công 10 cửa hàng (Thực tế + Giả lập) với thứ tự lộn xộn và sẵn sàng để test thuật toán sắp xếp!`,
     };
   }
 
@@ -132,7 +169,7 @@ export class QdrantController {
 
     return {
       success: true,
-      message: ` Đã nạp thành công ${mockCenters.length} trung tâm bảo hành thực tế vào Qdrant!`,
+      message: `Đã nạp thành công ${mockCenters.length} trung tâm bảo hành thực tế vào Qdrant!`,
     };
   }
 }
