@@ -2,7 +2,7 @@ import { Controller, Logger } from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
 
 import { ReindexService } from './reindex.service';
-import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
+import { RABBITMQ } from '../../messaging/rabbitmq/rabbitmq.constants';
 
 @Controller()
 export class ReindexConsumer {

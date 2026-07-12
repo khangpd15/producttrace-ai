@@ -8,6 +8,12 @@ services:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin123
 
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   qdrant:
     image: qdrant/qdrant:v1.7.4
     ports:
@@ -29,14 +35,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+
     depends_on:
-      - rabbitmq
-      - qdrant
-      - embedding-service
+      rabbitmq:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      embedding-service:
+        condition: service_started
+
     environment:
       RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672"
       EMBEDDING_SERVICE_URL: "http://embedding-service:8000"
       QDRANT_URL: "http://qdrant:6333"
+
     ports:
       - "3002:3000"
 
