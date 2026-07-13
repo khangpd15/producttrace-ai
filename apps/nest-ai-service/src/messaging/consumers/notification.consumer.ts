@@ -26,6 +26,18 @@ export class NotificationPayload {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  product_name?: string;
+
+  @IsOptional()
+  @IsString()
+  warranty_status?: string;
+
+  @IsOptional()
+  @IsString()
+  warranty_end_date?: string;
 }
 
 @Injectable()
@@ -108,6 +120,9 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         await this.mailService.sendWarrantyUpdateEmail(
           payload.email,
           payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+          payload.warranty_status || 'Đã cập nhật',
+          payload.warranty_end_date || 'Không xác định'
         );
         this.logger.log(`[NotificationConsumer] Warranty update email sent to ${payload.email}`);
         break;

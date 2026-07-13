@@ -217,13 +217,16 @@ export class MailService {
     await this.sendEmailWithTemplate(to, templateId, dynamicTemplateData);
   }
 
-  async sendWarrantyUpdateEmail(to: string, fullName: string): Promise<void> {
+  async sendWarrantyUpdateEmail(to: string, fullName: string, productName: string, status: string, endDate: string): Promise<void> {
     const templateId = this.configService.get<string>('WARRANTY_UPDATE_TEMPLATE_ID');
     if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
       
       const dynamicTemplateData = {
         fullName,
+        productName,
+        status,
+        endDate,
         frontendUrl,
         year: new Date().getFullYear().toString(),
       };
@@ -235,6 +238,11 @@ export class MailService {
           <h2 style="color: #1976d2;">Thông báo cập nhật bảo hành</h2>
           <p>Xin chào <strong>${fullName}</strong>,</p>
           <p>Trạng thái bảo hành cho sản phẩm của bạn vừa được cập nhật trên hệ thống ProductTrace AI.</p>
+          <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #1976d2; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Sản phẩm:</strong> ${productName}</p>
+            <p style="margin: 5px 0;"><strong>Trạng thái:</strong> ${status}</p>
+            <p style="margin: 5px 0;"><strong>Hạn bảo hành:</strong> ${endDate}</p>
+          </div>
           <p>Vui lòng đăng nhập vào hệ thống để xem chi tiết thông tin bảo hành mới nhất.</p>
           <p>Trân trọng,</p>
           <p>Đội ngũ ProductTrace AI</p>
