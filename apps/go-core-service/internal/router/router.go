@@ -7,6 +7,7 @@ import (
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
+	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
@@ -24,6 +25,7 @@ import (
 type RouterDependency struct {
 	BatchHandler                 *batchHandler.BatchHandler
 	AuthHandler                  *authHandler.AuthenHandler
+	AuditHandler                 *auditHandler.AuditHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
 	UserRepo                     userRepo.UserRepositoryInterface
@@ -69,13 +71,14 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
+	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
+	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
 	return r
 }
@@ -354,4 +357,13 @@ func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *m
 		protected.POST("/export/excel", th.ExportExcel)
 	}
 
+}
+
+// AUDIT
+func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo userRepo.UserRepositoryInterface) {
+	audits := api.Group("/audits")
+	audits.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
+	{
+		audits.GET("", ah.GetLogs)
+	}
 }
