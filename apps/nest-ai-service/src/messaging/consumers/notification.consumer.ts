@@ -103,6 +103,15 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         );
         break;
 
+      // ── Warranty Update ───────────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.NOTIFICATION_SENT: // "notification.sent"
+        await this.mailService.sendWarrantyUpdateEmail(
+          payload.email,
+          payload.full_name || 'User',
+        );
+        this.logger.log(`[NotificationConsumer] Warranty update email sent to ${payload.email}`);
+        break;
+
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:
         this.logger.warn(

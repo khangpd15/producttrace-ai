@@ -33,6 +33,7 @@ export const RABBITMQ = {
     PASSWORD_RESET:  'otp.forgot',        // Go: OTPForgotRK
     USER_VERIFIED:   'otp.verified',      // Go: OTPVerifiedRK
     PRODUCT_CREATED: 'product.created',   // Go: ProductCreatedRK
+    NOTIFICATION_SENT: 'notification.sent', // Warranty update notification
   },
 
   /**
@@ -44,6 +45,7 @@ export const RABBITMQ = {
     PASSWORD_RESET:  'otp.forgot',
     USER_VERIFIED:   'otp.verified',
     PRODUCT_CREATED: 'product.created',
+    NOTIFICATION_SENT: 'notification.sent',
   },
 
 };

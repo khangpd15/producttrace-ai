@@ -154,4 +154,36 @@ export class MailService {
       await this.sendgridService.sendEmail(to, subject, html);
     }
   }
+
+  async sendWarrantyUpdateEmail(to: string, fullName: string): Promise<void> {
+    const templateId = this.configService.get<string>('WARRANTY_UPDATE_TEMPLATE_ID');
+    if (templateId && !templateId.includes('your_')) {
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+      
+      const dynamicTemplateData = {
+        fullName,
+        frontendUrl,
+        year: new Date().getFullYear().toString(),
+      };
+
+      await this.sendgridService.sendEmailWithTemplate(
+        to,
+        templateId,
+        dynamicTemplateData
+      );
+    } else {
+      const subject = 'Cập nhật bảo hành sản phẩm - ProductTrace AI';
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+          <h2 style="color: #1976d2;">Thông báo cập nhật bảo hành</h2>
+          <p>Xin chào <strong>${fullName}</strong>,</p>
+          <p>Trạng thái bảo hành cho sản phẩm của bạn vừa được cập nhật trên hệ thống ProductTrace AI.</p>
+          <p>Vui lòng đăng nhập vào hệ thống để xem chi tiết thông tin bảo hành mới nhất.</p>
+          <p>Trân trọng,</p>
+          <p>Đội ngũ ProductTrace AI</p>
+        </div>
+      `;
+      await this.sendgridService.sendEmail(to, subject, html);
+    }
+  }
 }
