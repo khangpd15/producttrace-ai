@@ -218,7 +218,7 @@ export class MailService {
   }
 
   async sendWarrantyUpdateEmail(to: string, fullName: string, productName: string, status: string, endDate: string): Promise<void> {
-    const templateId = this.configService.get<string>('WARRANTY_UPDATE_TEMPLATE_ID');
+    const templateId = this.configService.get<string>('WARRANTY_UPDATE_TEMPLATE_ID') || 'd-aa9b56ba4bf64b54a72eddc7ba33ba03';
     if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
       
