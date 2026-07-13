@@ -6,20 +6,20 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
-	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
+	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
-	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
-	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
 
 type RouterDependency struct {
@@ -128,6 +128,8 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 		adminGroup.DELETE("/:id", uh.DeleteUser)
 		adminGroup.GET("", uh.ListUsers)
 		adminGroup.GET("/:id", uh.GetUserDetail)
+		adminGroup.PUT("/:id/lock", uh.LockAccount)
+		adminGroup.PUT("/:id/unlock", uh.UnlockAccount)
 	}
 }
 
@@ -341,6 +343,7 @@ func SetupProductItemRouter(api *gin.RouterGroup, ph *productItemHandler.Product
 		items.GET("/:item_code", ph.GetProductItemDetail)
 	}
 }
+
 // TRACE
 func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
 

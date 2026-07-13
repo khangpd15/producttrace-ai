@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/entity"
@@ -27,17 +28,21 @@ type UserServiceInterface interface {
 	SearchUsers(ctx context.Context, req *request.SearchUserRequest) (*response.UserListResponse, error)
 	GetProfile(ctx context.Context, id string) (*response.UserResponse, error)
 	UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
+	LockAccount(ctx context.Context, id string) (*response.UserResponse, error)
+	UnlockAccount(ctx context.Context, id string) (*response.UserResponse, error)
 }
 
 type UserService struct {
-	userRepo repository.UserRepositoryInterface
-	pub      *publisher.Publisher
+	userRepo    repository.UserRepositoryInterface
+	productRepo repositories.ProductRepository
+	pub         *publisher.Publisher
 }
 
-func NewUserService(userRepo repository.UserRepositoryInterface, pub *publisher.Publisher) UserServiceInterface {
+func NewUserService(userRepo repository.UserRepositoryInterface, productRepo repositories.ProductRepository, pub *publisher.Publisher) UserServiceInterface {
 	return &UserService{
-		userRepo: userRepo,
-		pub:      pub,
+		userRepo:    userRepo,
+		productRepo: productRepo,
+		pub:         pub,
 	}
 }
 
@@ -324,5 +329,48 @@ func (s *UserService) UpdateProfile(ctx context.Context, actorID string, targetU
 		}
 	}
 
+	return mapToUserResponse(updatedUser), nil
+}
+
+func (s *UserService) LockAccount(ctx context.Context, id string) (*response.UserResponse, error) {
+	user, err := s.userRepo.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, apperror.NewNotFound("User")
+	}
+
+	hasProducts, err := s.productRepo.HasProductsByOwner(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if hasProducts {
+		return nil, apperror.NewBadRequest("Cannot lock account while user owns products")
+	}
+
+	user.Status = entity.StatusBanned
+	user.UpdatedAt = time.Now()
+	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	return mapToUserResponse(updatedUser), nil
+}
+
+func (s *UserService) UnlockAccount(ctx context.Context, id string) (*response.UserResponse, error) {
+	user, err := s.userRepo.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, apperror.NewNotFound("User")
+	}
+	user.Status = entity.StatusActive
+	user.UpdatedAt = time.Now()
+	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
+	if err != nil {
+		return nil, err
+	}
 	return mapToUserResponse(updatedUser), nil
 }

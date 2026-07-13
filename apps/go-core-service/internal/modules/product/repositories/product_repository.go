@@ -16,6 +16,7 @@ type ProductRepository interface {
 	FindAll(ctx context.Context, filter ProductFilter) ([]entities.Product, int64, error)
 	FindAllWithStats(ctx context.Context, filter ProductFilter) ([]response.ProductListItemDTO, int64, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
+	HasProductsByOwner(ctx context.Context, ownerID uuid.UUID) (bool, error)
 }
 
 type ProductFilter struct {
@@ -153,4 +154,16 @@ func (r *productRepository) SoftDelete(ctx context.Context, id uuid.UUID) error 
 		Model(&entities.Product{}).
 		Where("id = ?", id).
 		Update("is_deleted", true).Error
+}
+
+func (r *productRepository) HasProductsByOwner(ctx context.Context, ownerID uuid.UUID) (bool, error) {
+	var count int64
+	err := GetDB(ctx, r.db).
+		Model(&entities.Product{}).
+		Where("created_by = ? AND is_deleted = false", ownerID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

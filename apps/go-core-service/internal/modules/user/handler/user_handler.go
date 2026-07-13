@@ -183,3 +183,30 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 
 	c.JSON(200, response.ResponseSuccess("Profile updated successfully", res))
 }
+
+func (h *UserHandler) LockAccount(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		apperror.HandleError(c, apperror.NewBadRequest("user ID is required"))
+		return
+	}
+	res, err := h.userService.LockAccount(c.Request.Context(), id)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+	c.JSON(200, response.ResponseSuccess("Account locked successfully", res))
+}
+func (h *UserHandler) UnlockAccount(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		apperror.HandleError(c, apperror.NewBadRequest("user ID is required"))
+		return
+	}
+	res, err := h.userService.UnlockAccount(c.Request.Context(), id)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+	c.JSON(200, response.ResponseSuccess("Account unlocked successfully", res))
+}

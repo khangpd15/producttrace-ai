@@ -56,7 +56,6 @@ import (
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
-
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -83,7 +82,8 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
-	uService := userService.NewUserService(uRepo, pub)
+	pRepo := productRepo.NewProductRepository(database)
+	uService := userService.NewUserService(uRepo, pRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("FRONTEND_URL"))
@@ -91,7 +91,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	bRepo := batchRepo.NewBatchRepository(database)
 
 	// Product module
-	pRepo := productRepo.NewProductRepository(database)
 	pVariantRepo := variantRepo.NewProductVariantRepository(database)
 
 	// Product category & attribute modules
