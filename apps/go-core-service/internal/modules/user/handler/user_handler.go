@@ -167,25 +167,3 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 
 	c.JSON(200, response.ResponseSuccess("Profile updated successfully", res))
 }
-
-func (h *UserHandler) ChangePassword(c *gin.Context) {
-	actorID := c.GetHeader("X-User-Id")
-	if actorID == "" {
-		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
-		return
-	}
-
-	var req request.ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		apperror.HandleError(c, apperror.NewValidation(err.Error()))
-		return
-	}
-
-	err := h.userService.ChangePassword(c.Request.Context(), actorID, &req)
-	if err != nil {
-		apperror.HandleError(c, err)
-		return
-	}
-
-	c.JSON(200, response.ResponseSuccess("Đổi mật khẩu thành công", nil))
-}

@@ -26,7 +26,6 @@ type UserServiceInterface interface {
 	ListUsers(ctx context.Context, page, limit int, role, status, search string) (*response.UserListResponse, error)
 	GetProfile(ctx context.Context, id string) (*response.UserResponse, error)
 	UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
-	ChangePassword(ctx context.Context, userID string, req *request.ChangePasswordRequest) error
 }
 
 type UserService struct {
@@ -134,49 +133,6 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *request.Up
 	}
 
 	return mapToUserResponse(updatedUser), nil
-}
-
-func (s *UserService) ChangePassword(ctx context.Context, userID string, req *request.ChangePasswordRequest) error {
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		return apperror.WrapDBError(err, "User")
-	}
-	if user == nil {
-		return apperror.NewNotFound("User")
-	}
-
-	if user.Status != entity.StatusActive {
-		return apperror.NewForbidden("Account is not active")
-	}
-
-	if !utils.ComparePassword(user.PasswordHash, req.CurrentPassword) {
-		return apperror.NewValidation("Sai mật khẩu hiện tại")
-	}
-
-	if utils.ComparePassword(user.PasswordHash, req.NewPassword) {
-		return apperror.NewValidation("Mật khẩu mới không được trùng với mật khẩu hiện tại")
-	}
-
-	hashedPassword, err := utils.HashPassword(req.NewPassword)
-	if err != nil {
-		return err
-	}
-
-	user.PasswordHash = hashedPassword
-	user.UpdatedAt = time.Now()
-
-	_, err = s.userRepo.UpdateUser(ctx, user)
-	if err != nil {
-		return apperror.WrapDBError(err, "User")
-	}
-
-	auditContent := fmt.Sprintf("User %s changed password", userID)
-	err = s.userRepo.WriteAuditLog(ctx, auditContent, "PASSWORD_UPDATE")
-	if err != nil {
-		fmt.Printf("failed to write audit log: %v\n", err)
-	}
-
-	return nil
 }
 
 func (s *UserService) DeleteUser(ctx context.Context, id string) error {

@@ -32,7 +32,7 @@ func handleError(c *gin.Context, err error) {
 }
 
 func (h *AttributeValueHandler) AssignAttributes(c *gin.Context) {
-	variantIDStr := c.Param("id")
+	variantIDStr := c.Param("variant_id")
 	variantID, err := uuid.Parse(variantIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, response.ResponseError("Invalid variant id", nil))

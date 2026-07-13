@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	attrValEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/entities"
 	"gorm.io/datatypes"
 )
 
@@ -20,6 +21,9 @@ type ProductVariant struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	IsDeleted  bool `gorm:"default:false"`
+
+	
+	AttributeValues []attrValEntities.AttributeValue `gorm:"-"`
 }
 
 func (ProductVariant) TableName() string {
