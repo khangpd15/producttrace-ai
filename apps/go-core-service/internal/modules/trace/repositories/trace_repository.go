@@ -71,7 +71,7 @@ func (r *traceRepository) FindProductItemByCode(ctx context.Context, code string
 		Joins("JOIN product_variants pv ON pi.variant_id = pv.id").
 		Joins("JOIN products p ON pv.product_id = p.id").
 		Where("(pi.item_code = ? OR pi.serial_number = ?) AND pi.is_deleted = false", code, code).
-		First(&detail).Error
+		Take(&detail).Error
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -101,7 +101,7 @@ func (r *traceRepository) FindEvents(ctx context.Context, itemID uuid.UUID, batc
 		Joins("LEFT JOIN users u ON e.actor_id = u.id")
 
 	if batchID != nil {
-		query = query.Where("e.product_item_id = ? OR e.batch_id = ?", itemID, *batchID)
+		query = query.Where("e.product_item_id = ? OR (e.batch_id = ? AND e.product_item_id IS NULL)", itemID, *batchID)
 	} else {
 		query = query.Where("e.product_item_id = ?", itemID)
 	}
