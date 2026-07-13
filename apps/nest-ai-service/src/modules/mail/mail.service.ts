@@ -17,9 +17,9 @@ export class MailService {
   }
 
   async sendMail(to: string, subject: string, text: string, html?: string): Promise<boolean> {
-    const from = this.configService.get<string>('FROM_EMAIL') || 
-                 this.configService.get<string>('SENDGRID_FROM_EMAIL') || 
-                 'noreply@producttrace-ai.com';
+    const from = this.configService.get<string>('FROM_EMAIL') ||
+      this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+      'noreply@producttrace-ai.com';
 
     const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
     const isMock = !apiKey || apiKey.includes('your_') || from.includes('example.com');
@@ -54,11 +54,11 @@ export class MailService {
       return false;
     }
   }
-  
+
   async sendEmailWithTemplate(to: string, templateId: string, dynamicTemplateData?: any): Promise<boolean> {
-    const from = this.configService.get<string>('SENDGRID_FROM_EMAIL') || 
-                 this.configService.get<string>('FROM_EMAIL') || 
-                 'noreply@producttrace-ai.com';
+    const from = this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+      this.configService.get<string>('FROM_EMAIL') ||
+      'noreply@producttrace-ai.com';
 
     if (!templateId) {
       this.logger.error('templateId is required but was not provided');
@@ -102,9 +102,9 @@ export class MailService {
   }
 
   async sendVerificationOtpEmail(to: string, fullName: string, otpCode: string): Promise<boolean> {
-    const templateId = this.configService.get<string>('VERIFY_EMAIL_TEMPLATE_ID') || 
-                       this.configService.get<string>('WELCOME_TEMPLATE_ID') || 
-                       '';
+    const templateId = this.configService.get<string>('VERIFY_EMAIL_TEMPLATE_ID') ||
+      this.configService.get<string>('WELCOME_TEMPLATE_ID') ||
+      '';
 
     const dynamicTemplateData = {
       fullName,
@@ -116,9 +116,9 @@ export class MailService {
   }
 
   async sendWelcomeEmail(to: string, fullName: string): Promise<boolean> {
-    const templateId = this.configService.get<string>('WELCOME_EMAIL_TEMPLATE_ID') || 
-                       this.configService.get<string>('WELCOME_TEMPLATE_ID') || 
-                       '';
+    const templateId = this.configService.get<string>('WELCOME_EMAIL_TEMPLATE_ID') ||
+      this.configService.get<string>('WELCOME_TEMPLATE_ID') ||
+      '';
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
     const loginUrl = `${frontendUrl}/login`;
 
