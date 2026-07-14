@@ -44,6 +44,25 @@ export class MailService {
     );
   }
 
+  async sendOTPOwnerShipEmail(to: string, productId: string, otpCode: string): Promise<void> {
+    const templateId = this.configService.get<string>('VERIFY_EMAIL_TEMPLATE_ID') ||
+      this.configService.get<string>('WELCOME_TEMPLATE_ID') ||
+      '';
+
+    const dynamicTemplateData = {
+      productId,
+      otpCode,
+      year: new Date().getFullYear().toString(),
+    };
+
+    await this.sendgridService.sendEmailWithTemplate(
+      to,
+      templateId,
+      dynamicTemplateData
+    );
+  }
+
+
   async sendOTPRegister(to: string, fullName: string, otpCode: string): Promise<void> {
     const templateId = this.configService.get<string>('VERIFY_EMAIL_TEMPLATE_ID');
     if (templateId && !templateId.includes('your_')) {
@@ -65,6 +84,30 @@ export class MailService {
       await this.sendgridService.sendEmail(to, subject, html);
     }
   }
+
+
+  async sendOTPOwnerShip(to: string, productId: string, otpCode: string): Promise<void> {
+    const templateId = this.configService.get<string>('OWNERSHIP_REGISTER');
+    if (templateId && !templateId.includes('your_')) {
+      await this.sendOTPOwnerShipEmail(to, productId, otpCode);
+    } else {
+      // Fallback plain email if template is not available
+      const subject = 'You have been assigned a product: ' + productId;
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+          <h2 style="color: #333;">Welcome to ProductTrace AI!</h2>
+          <p>Thank you for registering, <strong>${productId}</strong>.</p>
+          <p>Please use the following One-Time Password (OTP) to verify your account. This code is valid for 5 minutes:</p>
+          <div style="background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #007bff; border-radius: 4px; margin: 20px 0;">
+            ${otpCode}
+          </div>
+          <p>If you did not request this code, please ignore this email.</p>
+        </div>
+      `;
+      await this.sendgridService.sendEmail(to, subject, html);
+    }
+  }
+
 
   async sendOTPPasswordReset(to: string, fullName: string, otpCode: string): Promise<void> {
     const templateId = this.configService.get<string>('SEND_EMAIL_FORGOTPASSWORD');

@@ -40,6 +40,9 @@ type AuditLogService interface {
 	// LogDelete records a DELETE action.
 	// oldData is the entity that was deleted; newData is always NULL.
 	LogDelete(ctx context.Context, userID *uuid.UUID, entity string, entityID uuid.UUID, oldData any) error
+
+	// GetLogs retrieves audit logs based on filters.
+	GetLogs(ctx context.Context, action, entity string, fromDate, toDate *time.Time, page, limit int) ([]*AuditLog, int64, error)
 }
 
 type auditLogService struct {
@@ -145,4 +148,8 @@ func marshalJSON(v any) (datatypes.JSON, error) {
 	}
 
 	return datatypes.JSON(b), nil
+}
+
+func (s *auditLogService) GetLogs(ctx context.Context, action, entity string, fromDate, toDate *time.Time, page, limit int) ([]*AuditLog, int64, error) {
+	return s.repo.Find(ctx, action, entity, fromDate, toDate, page, limit)
 }

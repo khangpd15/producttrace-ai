@@ -24,6 +24,7 @@ type NotificationPort interface {
 // OwnershipPort checks the ownership logic.
 type OwnershipPort interface {
 	VerifyOwnership(ctx context.Context, userID uuid.UUID, productItemID uuid.UUID) (bool, error)
+	GetActiveOwner(ctx context.Context, productItemID uuid.UUID) (uuid.UUID, error)
 }
 
 // ProductItemPort retrieves product metadata/status to verify warranty validity.

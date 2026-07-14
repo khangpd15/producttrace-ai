@@ -1,9 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import {
-  MicroserviceOptions,
-  Transport,
-} from '@nestjs/microservices';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as amqp from 'amqplib';
@@ -14,7 +10,8 @@ dotenv.config({
 console.log('ENV URL =', process.env.RABBITMQ_URL);
 
 import { AppModule } from './app.module';
-import { RABBITMQ } from './integrations/rabbitmq/rabbitmq.constants';
+import { RABBITMQ } from './messaging/rabbitmq/rabbitmq.constants';
+
 console.log('CONST URL =', RABBITMQ.URL);
 
 async function ensureEmbeddingTopology() {
@@ -48,9 +45,18 @@ async function ensureEmbeddingTopology() {
       RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
     );
 
+    await channel.assertQueue(RABBITMQ.QUEUES.EMBEDDING_SYNC, {
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ.DLX.EMBEDDING,
+        'x-dead-letter-routing-key': RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
+      },
+    });
+
     for (const routingKey of [
       RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED,
-      RABBITMQ.ROUTING_KEYS.TRACE_EVENTS,
+      RABBITMQ.ROUTING_KEYS.TRACE_CREATED,
+      RABBITMQ.ROUTING_KEYS.TRACE_EXPORTED,
     ]) {
       await channel.bindQueue(
         RABBITMQ.QUEUES.EMBEDDING,
@@ -61,6 +67,15 @@ async function ensureEmbeddingTopology() {
         `Bound ${RABBITMQ.QUEUES.EMBEDDING} ← [${RABBITMQ.EXCHANGE}] ${routingKey}`,
       );
     }
+
+    await channel.bindQueue(
+      RABBITMQ.QUEUES.EMBEDDING_SYNC,
+      RABBITMQ.EXCHANGE,
+      RABBITMQ.ROUTING_KEYS.EMBEDDING_GENERATED,
+    );
+    console.log(
+      `Bound ${RABBITMQ.QUEUES.EMBEDDING_SYNC} ← [${RABBITMQ.EXCHANGE}] ${RABBITMQ.ROUTING_KEYS.EMBEDDING_GENERATED}`,
+    );
   } finally {
     await channel.close();
     await connection.close();
@@ -74,32 +89,6 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
 
   await ensureEmbeddingTopology();
-
-  // RabbitMQ consumer for Embedding (@EventPattern)
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [RABBITMQ.URL],
-      exchange: RABBITMQ.EXCHANGE,
-      exchangeType: RABBITMQ.EXCHANGE_TYPE,
-      queue: RABBITMQ.QUEUES.EMBEDDING,
-
-      queueOptions: {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange':
-            RABBITMQ.DLX.EMBEDDING,
-
-          'x-dead-letter-routing-key':
-            RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
-        },
-      },
-
-      noAck: false,
-    },
-  });
-
-  await app.startAllMicroservices();
 
   const port = Number(process.env.PORT) || 3000;
 

@@ -1,80 +1,139 @@
-import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { Controller, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import * as amqp from 'amqplib';
 import { EmbeddingService } from './embedding.service';
-import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
+import { RABBITMQ } from '../../messaging/rabbitmq/rabbitmq.constants';
+import { Event } from '../../messaging/types/event.interface';
 
 @Controller()
-export class EmbeddingConsumer {
+export class EmbeddingConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EmbeddingConsumer.name);
+  private connection: amqp.ChannelModel | null = null;
+  private channel: amqp.Channel | null = null;
 
-  constructor(private readonly embeddingService: EmbeddingService) { }
+  constructor(private readonly embeddingService: EmbeddingService) {}
 
-  @EventPattern(RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED)
-  async consumeProductEvent(@Payload() payload: unknown, @Ctx() context: RmqContext) {
-    return this.handleEvent(payload, context);
+  async onModuleInit(): Promise<void> {
+    await this.connectAndConsume();
   }
 
-  @EventPattern(RABBITMQ.ROUTING_KEYS.TRACE_EVENTS)
-  async consumeTraceEvent(@Payload() payload: unknown, @Ctx() context: RmqContext) {
-    return this.handleEvent(payload, context);
+  async onModuleDestroy(): Promise<void> {
+    await this.channel?.close();
+    await this.connection?.close();
   }
 
-  private async handleEvent(payload: unknown, context: RmqContext) {
-    const event = this.normalizeEvent(payload);
-    const message = context.getMessage();
+  private async connectAndConsume(): Promise<void> {
+    this.connection = await amqp.connect(RABBITMQ.URL);
+    this.channel = await this.connection.createChannel();
 
-    this.logger.debug(
-      `EVENT PAYLOAD = ${JSON.stringify(event)}`
+    await this.channel.assertExchange(RABBITMQ.EXCHANGE, RABBITMQ.EXCHANGE_TYPE, {
+      durable: true,
+    });
+
+    await this.channel.assertQueue(RABBITMQ.QUEUES.EMBEDDING, {
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ.DLX.EMBEDDING,
+        'x-dead-letter-routing-key': RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
+      },
+    });
+
+    for (const routingKey of [
+      RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED,
+      RABBITMQ.ROUTING_KEYS.TRACE_CREATED,
+      RABBITMQ.ROUTING_KEYS.TRACE_EXPORTED,
+    ]) {
+      await this.channel.bindQueue(RABBITMQ.QUEUES.EMBEDDING, RABBITMQ.EXCHANGE, routingKey);
+    }
+
+    await this.channel.consume(
+      RABBITMQ.QUEUES.EMBEDDING,
+      async (message) => {
+        if (!message) {
+          return;
+        }
+
+        try {
+          const event = this.normalizeEvent(message.content);
+          if (!event) {
+            this.logger.error('Invalid event payload received');
+            this.channel?.nack(message, false, false);
+            return;
+          }
+
+          this.logger.log(
+            `Received event id=${event.event_id ?? 'unknown'} type=${event.event_type ?? 'unknown'}`,
+          );
+
+          await this.embeddingService.processEvent(event);
+          this.channel?.ack(message);
+        } catch (error) {
+          this.logger.error(
+            `Embedding consumer failed: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
+          );
+          this.channel?.nack(message, false, true);
+        }
+      },
+      { noAck: false },
     );
 
-    if (!event) {
-      this.logger.error('Empty event received');
-      return;
-    }
-
-    if (!event.event_type) {
-      this.logger.error(`Invalid event format: ${JSON.stringify(event)}`);
-      return;
-    }
-
-    this.logger.log(
-      `Received rabbitmq event id=${event.event_id} type=${event.event_type}`
-    );
-
-    try {
-      await this.embeddingService.processEvent(event);
-      this.logger.log(`Processed event ${event.event_id} type=${event.event_type}`);
-    } catch (error) {
-      this.logger.error(`Failed processing event ${event.event_id}: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
-      throw error;
-    }
+    this.logger.log(`Embedding consumer listening on ${RABBITMQ.QUEUES.EMBEDDING}`);
   }
 
-  private normalizeEvent(payload: any): any {
-    let data = payload;
+  private normalizeEvent(payload: unknown): Event | null {
+    let parsed: unknown = payload;
 
-    // Buffer -> string
-    if (Buffer.isBuffer(data)) {
-      data = data.toString('utf8');
+    if (Buffer.isBuffer(parsed)) {
+      parsed = parsed.toString('utf8');
     }
 
-    // string -> JSON
-    if (typeof data === 'string') {
+    if (typeof parsed === 'string') {
+      const stripped = parsed.trim();
+      if (!stripped) {
+        this.logger.error('Empty payload received');
+        return null;
+      }
+
       try {
-        data = JSON.parse(data);
-      } catch (e) {
-        this.logger.error('Invalid JSON payload');
-        throw e;
+        parsed = JSON.parse(stripped);
+      } catch (error) {
+        this.logger.warn(`Treating payload as plain text: ${stripped}`);
+        try {
+          parsed = this.parseLooseObject(stripped);
+        } catch (looseError) {
+          this.logger.error(`Invalid JSON payload: ${stripped}`);
+          return null;
+        }
       }
     }
 
-    if (data && typeof data === 'object' && 'data' in data && 'pattern' in data) {
-      const envelope = data as { data?: unknown; pattern?: unknown };
-      if (envelope.data && typeof envelope.data === 'object') {
-        return envelope.data;
-      }
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'pattern' in parsed &&
+      'data' in parsed &&
+      typeof (parsed as { data?: unknown }).data === 'object'
+    ) {
+      parsed = (parsed as { data: unknown }).data;
     }
 
-    return data;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'event_id' in parsed &&
+      'event_type' in parsed
+    ) {
+      return parsed as Event;
+    }
+
+    this.logger.warn(`Unsupported event payload shape: ${JSON.stringify(parsed)}`);
+    return null;
+  }
+
+  private parseLooseObject(input: string): Record<string, unknown> {
+    const normalized = input
+      .replace(/([{,]\s*)([A-Za-z0-9_.$-]+)(\s*:)/g, '$1"$2"$3')
+      .replace(/'([^']*)'/g, '"$1"');
+
+    return JSON.parse(normalized);
   }
 }

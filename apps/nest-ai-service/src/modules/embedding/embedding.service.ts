@@ -1,11 +1,12 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 import { v5 as uuidv5 } from 'uuid';
 
 import { BuildTextUtil } from '../../utils/build-text.util';
 import { Event } from '../../messaging/types/event.interface';
-import { RabbitMQProducerService } from '../../integrations/rabbitmq/rabbitmq-producer.service';
-import { RABBITMQ } from '../../integrations/rabbitmq/rabbitmq.constants';
+import { RabbitMQProducerService } from '../../messaging/rabbitmq/rabbitmq-producer.service';
+import { RABBITMQ } from '../../messaging/rabbitmq/rabbitmq.constants';
 
 interface EmbeddingResponse {
   vector: number[];
@@ -25,9 +26,13 @@ export class EmbeddingService {
     private readonly configService: ConfigService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {
-    this.apiUrl =
-      this.configService.get('EMBEDDING_SERVICE_URL') ??
-      'http://embedding-service:8000';
+    const isDocker = fs.existsSync('/.dockerenv');
+    const defaultEmbeddingUrl = isDocker ? 'http://embedding-service:8000' : 'http://localhost:8000';
+    const envEmbeddingUrl = this.configService.get('EMBEDDING_SERVICE_URL');
+    const resolvedEmbeddingUrl = !isDocker && envEmbeddingUrl?.includes('embedding-service')
+      ? defaultEmbeddingUrl
+      : envEmbeddingUrl ?? defaultEmbeddingUrl;
+    this.apiUrl = resolvedEmbeddingUrl;
   }
 
   async processEvent(event: Event): Promise<void> {

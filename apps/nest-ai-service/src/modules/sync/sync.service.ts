@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { QdrantService } from "../../integrations/qdrant/qdrant.service";
-import { RabbitMQProducerService } from "../../integrations/rabbitmq/rabbitmq-producer.service";
-import { RABBITMQ } from "../../integrations/rabbitmq/rabbitmq.constants";
+import { RabbitMQProducerService } from "../../messaging/rabbitmq/rabbitmq-producer.service";
+import { RABBITMQ } from "../../messaging/rabbitmq/rabbitmq.constants";
 
 
 @Injectable()

@@ -86,6 +86,18 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         this.logger.log(`[NotificationConsumer] Registration OTP sent to ${payload.email}`);
         break;
 
+      // --------------------------------
+      case RABBITMQ.EVENT_TYPES.OWNERSHIP_OTP:
+        if (!payload.otp_code) {
+          throw new Error(`Missing otp_code for event_type="${eventType}"`);
+        }
+        await this.mailService.sendOTP(
+          payload.email,
+          payload.full_name || 'User',
+          payload.otp_code,
+        );
+        this.logger.log(`[NotificationConsumer] Registration OTP sent to ${payload.email}`);
+        break;
       // ── Forgot-Password OTP ───────────────────────────────────────────────
       case RABBITMQ.EVENT_TYPES.PASSWORD_RESET: // "otp.forgot"
         if (!payload.otp_code) {
@@ -122,10 +134,11 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
           payload.full_name || 'User',
           payload.product_name || 'Sản phẩm của bạn',
           payload.warranty_status || 'Đã cập nhật',
-          payload.warranty_end_date || 'Không xác định'
+          payload.warranty_end_date || 'Không xác định',
         );
         this.logger.log(`[NotificationConsumer] Warranty update email sent to ${payload.email}`);
         break;
+
 
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 )
 
 type WarrantyClaimHandler struct {
@@ -29,7 +30,10 @@ func (h *WarrantyClaimHandler) CreateWarrantyClaim(c *gin.Context) {
 	// Note: in a real application the UserID would be extracted from the authentication token middleware. 
 	// For example: userID := c.MustGet("user_id").(uuid.UUID)
 	// We'll mock the extraction here for now.
-	userIDStr := c.GetHeader("X-User-ID")
+	userIDStr := c.GetHeader("X-User-Id")
+	if userIDStr == "" {
+		userIDStr = c.GetHeader("X-User-ID")
+	}
 	if userIDStr == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID is required", "code": "ACCESS_DENIED"})
 		return
@@ -43,19 +47,7 @@ func (h *WarrantyClaimHandler) CreateWarrantyClaim(c *gin.Context) {
 
 	resp, err := h.claimService.CreateWarrantyClaim(c.Request.Context(), userID, req)
 	if err != nil {
-		if err == service.ErrOwnershipValidation {
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "ACCESS_DENIED"})
-			return
-		}
-		if err == service.ErrWarrantyExpired {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "WARRANTY_EXPIRED"})
-			return
-		}
-		if err == service.ErrClaimAlreadyOpen {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "CLAIM_ALREADY_OPEN"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error", "code": "SYSTEM_ERROR"})
+		apperror.HandleError(c, err)
 		return
 	}
 

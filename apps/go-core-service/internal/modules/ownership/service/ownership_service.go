@@ -8,6 +8,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"gorm.io/gorm"
 )
 
@@ -148,7 +149,7 @@ func (s *OwnershipService) GetOwnershipDetail(ctx context.Context, productItemID
 	own, err := s.repo.GetOwnershipByProductItemID(ctx, productItemID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("ownership information not found")
+			return nil, apperror.NewNotFound("ownership information")
 		}
 		return nil, err
 	}
@@ -215,24 +216,49 @@ func (s *OwnershipService) TransferOwnership(ctx context.Context, id uuid.UUID, 
 	oldOwnership, err := s.repo.GetOwnershipByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("ownership information not found")
+			return &apperror.AppError{
+				Status:  404,
+				Code:    apperror.CodeNotFound,
+				Message: "Ownership không tồn tại",
+			}
 		}
 		return err
 	}
 
 	// Authorization
 	if role != "ADMIN" && oldOwnership.OwnerID != currentUserID {
-		return errors.New("access denied")
+		return &apperror.AppError{
+			Status:  403,
+			Code:    apperror.CodeForbidden,
+			Message: "Bạn không có quyền thực hiện thao tác này.",
+		}
 	}
 
 	if oldOwnership.Status != entity.OwnershipStatusActive {
-		return errors.New("only active ownerships can be transferred")
+		return &apperror.AppError{
+			Status:  400,
+			Code:    apperror.CodeBadRequest,
+			Message: "Chỉ quyền sở hữu đang hoạt động mới có thể chuyển nhượng",
+		}
 	}
 
-	// Ensure new user exists
+	// Ensure new user exists (auto-create if they don't, using their email, name, and phone)
 	newOwnerID, err := s.userProvider.EnsureUserExists(ctx, req.NewOwnerEmail, req.NewOwnerName, req.NewOwnerPhone)
 	if err != nil {
-		return err
+		return &apperror.AppError{
+			Status:  400,
+			Code:    apperror.CodeValidation,
+			Message: "Không thể xác thực thông tin người sở hữu mới: " + err.Error(),
+		}
+	}
+
+	// Cannot transfer to oneself
+	if oldOwnership.OwnerID == newOwnerID {
+		return &apperror.AppError{
+			Status:  400,
+			Code:    apperror.CodeValidation,
+			Message: "Không thể chuyển nhượng cho chính mình",
+		}
 	}
 
 	newOwnership := entity.NewOwnership(oldOwnership.ProductItemID, newOwnerID)
@@ -246,13 +272,21 @@ func (s *OwnershipService) DeleteOwnership(ctx context.Context, id uuid.UUID, cu
 	oldOwnership, err := s.repo.GetOwnershipByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("ownership information not found")
+			return &apperror.AppError{
+				Status:  404,
+				Code:    apperror.CodeNotFound,
+				Message: "Ownership không tồn tại",
+			}
 		}
 		return err
 	}
 
 	if role != "ADMIN" && oldOwnership.OwnerID != currentUserID {
-		return errors.New("access denied")
+		return &apperror.AppError{
+			Status:  403,
+			Code:    apperror.CodeForbidden,
+			Message: "Bạn không có quyền thực hiện thao tác này.",
+		}
 	}
 
 	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, oldOwnership.ID, string(entity.OwnershipStatusRevoked))

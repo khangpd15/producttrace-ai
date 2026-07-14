@@ -58,13 +58,13 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 		c.Set("email", claims.Email)
 		c.Set("role", claims.Role)
 		
-		// Set X-User-Id request header so downstream handlers (like GetProfile/UpdateProfile)
-		// which retrieve it via c.GetHeader("X-User-Id") can access it.
+		// Set request headers so downstream handlers can access them.
 		if c.Request != nil {
 			if c.Request.Header == nil {
 				c.Request.Header = make(http.Header)
 			}
 			c.Request.Header.Set("X-User-Id", claims.UserID)
+			c.Request.Header.Set("X-User-Role", claims.Role)
 		}
 
 		c.Next()

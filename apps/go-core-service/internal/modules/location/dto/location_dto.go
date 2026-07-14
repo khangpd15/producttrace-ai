@@ -14,9 +14,9 @@ type CreateLocationReq struct {
 	Phone            string              `json:"phone"`
 	Email            string              `json:"email" binding:"omitempty,email"`
 	Address          string              `json:"address"`
-	Ward             string              `json:"ward" binding:"required"`
-	District         string              `json:"district" binding:"required"`
-	City             string              `json:"city" binding:"required"`
+	Ward             string              `json:"ward"`
+	District         string              `json:"district"`
+	City             string              `json:"city"`
 	Latitude         *float64            `json:"latitude" binding:"required"`
 	Longitude        *float64            `json:"longitude" binding:"required"`
 	OpeningHoursJSON domain.OpeningHours `json:"openingHoursJson"`

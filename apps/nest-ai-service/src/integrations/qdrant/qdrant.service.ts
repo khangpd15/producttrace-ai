@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 import { SearchResult } from '../../modules/search/interfaces/search-result.interface';
 
 @Injectable()
@@ -19,7 +20,13 @@ export class QdrantService {
   private creatingCollection = false;
 
   constructor(private readonly configService: ConfigService) {
-    this.baseUrl = this.configService.get('QDRANT_URL') ?? 'http://qdrant:6333';
+    const isDocker = fs.existsSync('/.dockerenv');
+    const defaultBaseUrl = isDocker ? 'http://qdrant:6333' : 'http://localhost:6333';
+    const envBaseUrl = this.configService.get('QDRANT_URL');
+    const resolvedBaseUrl = !isDocker && envBaseUrl?.includes('qdrant')
+      ? defaultBaseUrl
+      : envBaseUrl ?? defaultBaseUrl;
+    this.baseUrl = resolvedBaseUrl;
     this.apiKey = this.configService.get('QDRANT_API_KEY');
   }
 

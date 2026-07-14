@@ -23,8 +23,10 @@ type UpdateProfileRequest struct {
 	Avatar   *string `json:"avatar"`
 }
 
-type ChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
-	NewPassword     string `json:"new_password" binding:"required,min=8"`
-	ConfirmPassword string `json:"confirm_password" binding:"required,eqfield=NewPassword"`
+type SearchUserRequest struct {
+	Keyword string `form:"keyword" binding:"max=255"`
+	Role    string `form:"role" binding:"omitempty,oneof=ADMIN CUSTOMER STAFF DEALER"`
+	Status  string `form:"status" binding:"omitempty,oneof=ACTIVE BANNED SUSPENDED PENDING"`
+	Page    int    `form:"page"`
+	Limit   int    `form:"limit"`
 }
