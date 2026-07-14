@@ -80,29 +80,6 @@ services:
     networks:
       - app-networks
 
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: product-trace-kafka
-
-    depends_on:
-      - zookeeper
-
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-
-    networks:
-      - app-networks
 
   qdrant:
     image: qdrant/qdrant:v1.0.0
@@ -124,8 +101,8 @@ services:
 
     container_name: product-trace-embedding-service
 
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
 
     environment:
       MODEL_NAME: 'bge-m3'
@@ -178,6 +155,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
       GIN_MODE: release
+      JWT_SECRET: ${JWT_SECRET}
 
     ports:
       - "${GO_CORE_PORT}:8080"
@@ -224,6 +202,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
       GIN_MODE: release
+      JWT_SECRET: ${JWT_SECRET}
 
     depends_on:
       go-core-service:
@@ -253,22 +232,19 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
 
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
-      QDRANT_URL: http://qdrant:6333
-      EMBEDDING_SERVICE_URL: http://embedding-service:8000
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      QDRANT_URL: ${QDRANT_URL}
+      EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
       RABBITMQ_QUEUE: ai.events
-      KAFKA_BROKER: kafka:9092
-      KAFKA_GROUP_ID: nest-ai-service-group
-      QDRANT_URL: http://qdrant:6333
-      EMBEDDING_SERVICE_URL: http://embedding-service:8000
 
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
-      FROM_EMAIL: ${FROM_EMAIL}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
-      WELCOME_TEMPLATE_ID: ${WELCOME_TEMPLATE_ID}
-      WELCOME_EMAIL_TEMPLATE_ID: ${WELCOME_EMAIL_TEMPLATE_ID}
+      FROM_EMAIL: ${FROM_EMAIL}
       VERIFY_EMAIL_TEMPLATE_ID: ${VERIFY_EMAIL_TEMPLATE_ID}
+      WELCOME_TEMPLATE_ID: ${WELCOME_TEMPLATE_ID}
+      SEND_EMAIL_FORGOTPASSWORD: ${SEND_EMAIL_FORGOTPASSWORD}
+      OWNERSHIP_REGISTER: ${OWNERSHIP_REGISTER}
 
     ports:
       - "${NEST_PORT}:3000"
@@ -282,9 +258,6 @@ services:
 
       rabbitmq:
         condition: service_healthy
-
-      kafka:
-        condition: service_started
 
       qdrant:
         condition: service_started

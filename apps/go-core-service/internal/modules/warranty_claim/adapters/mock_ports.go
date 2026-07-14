@@ -37,6 +37,11 @@ func (m *MockOwnershipPort) VerifyOwnership(ctx context.Context, userID uuid.UUI
 	return true, nil // Always allow for mock
 }
 
+func (m *MockOwnershipPort) GetActiveOwner(ctx context.Context, productItemID uuid.UUID) (uuid.UUID, error) {
+	// Return the default seed user001 ID
+	return uuid.MustParse("fc2a257c-2a94-4b66-8def-1e22ee9a114c"), nil
+}
+
 type MockProductItemPort struct{}
 
 func (m *MockProductItemPort) CheckWarrantyValidity(ctx context.Context, productItemID uuid.UUID) (bool, error) {

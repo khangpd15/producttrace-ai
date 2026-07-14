@@ -9,10 +9,9 @@ const (
 	EventExchange = DefaultExchange
 
 	// User routing keys
-	UserRegisteredRK    = "user.registered"
-	UserVerifiedRK      = "user.verified"
-	UserPasswordResetRK = "user.password_reset_requested"
-	UserLoggedInRK      = "user.logged_in"
+	UserRegisteredRK     = "user.registered"
+	UserPasswordForgotRK = "user.password_forgot"
+	UserLoggedInRK       = "user.logged_in"
 
 	// Product routing keys
 	ProductCreatedRK = "product.created"
@@ -20,9 +19,11 @@ const (
 	ProductDeletedRK = "product.deleted"
 
 	// Batch routing keys
-	BatchCreatedRK = "batch.created"
-	BatchUpdatedRK = "batch.updated"
-	BatchDeletedRK = "batch.deleted"
+	BatchCreatedRK       = "batch.created"
+	BatchUpdatedRK       = "batch.updated"
+	BatchDeletedRK       = "batch.deleted"
+	BatchHistoryViewedRK = "batch.history_viewed"
+	BatchExportedRK      = "batch.exported"
 
 	// Owner routing keys
 	OwnerCreatedRK = "owner.created"
@@ -33,12 +34,13 @@ const (
 	WarrantyCreatedRK = "warranty.created"
 
 	// Trace routing keys
-	TraceCreatedRK = "trace.created"
+	TraceCreatedRK  = "trace.created"
+	TraceExportedRK = "trace.exported"
 
 	// Notification routing keys
 	NotificationCreatedRK = "notification.created"
 	OTPRegisterUserRK     = "otp.registered"
-	OTPVerifiedRK   = "otp.verified"
-	OTPForgotRK     = "otp.forgot"
-
+	OTPVerifiedRK         = "otp.verified"
+	OTPForgotRK           = "otp.forgot"
+	OTPOwnership          = "otp.ownership"
 )

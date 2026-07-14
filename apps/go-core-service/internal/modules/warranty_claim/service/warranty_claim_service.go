@@ -12,7 +12,9 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 var (
@@ -55,12 +57,15 @@ func NewWarrantyClaimService(
 
 func (s *warrantyClaimService) CreateWarrantyClaim(ctx context.Context, userID uuid.UUID, req dto.CreateWarrantyClaimRequest) (*dto.WarrantyClaimResponse, error) {
 	// 1. Verify Ownership
-	isOwner, err := s.ownershipPort.VerifyOwnership(ctx, userID, req.ProductID)
+	ownerID, err := s.ownershipPort.GetActiveOwner(ctx, req.ProductID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.Wrap(ErrOwnershipValidation, apperror.NewBadRequest("Sản phẩm chưa có chủ sở hữu. Vui lòng đăng ký sở hữu trước."))
+		}
 		return nil, err
 	}
-	if !isOwner {
-		return nil, ErrOwnershipValidation
+	if ownerID != userID {
+		return nil, apperror.Wrap(ErrOwnershipValidation, apperror.NewForbidden("Bạn không phải chủ sở hữu hiện tại."))
 	}
 
 	// 2. Validate Warranty validity
@@ -69,7 +74,7 @@ func (s *warrantyClaimService) CreateWarrantyClaim(ctx context.Context, userID u
 		return nil, err
 	}
 	if !isValid {
-		return nil, ErrWarrantyExpired
+		return nil, apperror.Wrap(ErrWarrantyExpired, apperror.NewBadRequest("Sản phẩm đã hết hạn bảo hành hoặc không hợp lệ."))
 	}
 
 	// 3. Check for open claims
@@ -81,7 +86,7 @@ func (s *warrantyClaimService) CreateWarrantyClaim(ctx context.Context, userID u
 		return nil, err
 	}
 	if openClaim != nil {
-		return nil, ErrClaimAlreadyOpen
+		return nil, apperror.Wrap(ErrClaimAlreadyOpen, apperror.NewConflict("Sản phẩm đang có yêu cầu bảo hành đang được xử lý."))
 	}
 
 	// 4. Create Claim Entity

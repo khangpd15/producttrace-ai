@@ -57,10 +57,15 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("role", claims.Role)
-
-		// For backward compatibility, if a database lookup is explicitly needed in the future,
-		// we can do: user, err := userRepo.GetUserByID(c.Request.Context(), claims.UserID)
-		// Currently, we skip it to prevent querying the database on every request.
+		
+		// Set request headers so downstream handlers can access them.
+		if c.Request != nil {
+			if c.Request.Header == nil {
+				c.Request.Header = make(http.Header)
+			}
+			c.Request.Header.Set("X-User-Id", claims.UserID)
+			c.Request.Header.Set("X-User-Role", claims.Role)
+		}
 
 		c.Next()
 	}
