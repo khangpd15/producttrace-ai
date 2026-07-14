@@ -77,6 +77,14 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	return r
 }
 
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
+	}
+}
+
 // AUTH
 func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 	auth := api.Group("/auth")
@@ -145,7 +153,6 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 			// Legacy single-batch export: POST /batches/:id/export — giữ lại để backward compat.
 			exportGroup.POST("/:id/export", bh.ExportBatch)
 		}
-
 
 		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")
@@ -408,13 +415,5 @@ func SetupProductItemRouter(api *gin.RouterGroup, pih *productItemHandler.Produc
 	{
 		productItems.GET("", pih.GetProductItemList)
 		productItems.GET("/:item_code", pih.GetProductItemDetail)
-	}
-}
-
-// PUBLIC
-func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
-	public := api.Group("/public")
-	{
-		public.GET("/verify", ph.VerifyQR)
 	}
 }
