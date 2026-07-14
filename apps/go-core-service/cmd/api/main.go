@@ -24,9 +24,9 @@ type HealthResponse struct {
 }
 
 func main() {
-	// Load .env file for local development (ignored if vars already set)
-	if err := godotenv.Load("../../.env"); err != nil {
-		log.Println("No .env file found, using environment variables")
+	// 0. Load .env file (chỉ có tác dụng khi chạy local; production dùng biến môi trường thật)
+	if err := godotenv.Load(); err != nil {
+		log.Println("[WARN] .env file not found, using system environment variables")
 	}
 
 	// 1. Connect to PostgreSQL (GORM client)

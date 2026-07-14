@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/dto"
@@ -21,6 +22,14 @@ func NewLocationHandler(svc service.LocationService) *LocationHandler {
 func (h *LocationHandler) Create(c *gin.Context) {
 	var req dto.CreateLocationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "openingHoursJson") || strings.Contains(err.Error(), "OpeningHoursJSON") {
+			apperror.HandleError(c, &apperror.AppError{
+				Code:    "INVALID_OPENING_HOURS",
+				Message: "Định dạng giờ mở cửa không hợp lệ.",
+				Status:  http.StatusBadRequest,
+			})
+			return
+		}
 		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}
@@ -76,6 +85,14 @@ func (h *LocationHandler) Update(c *gin.Context) {
 
 	var req dto.UpdateLocationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "openingHoursJson") || strings.Contains(err.Error(), "OpeningHoursJSON") {
+			apperror.HandleError(c, &apperror.AppError{
+				Code:    "INVALID_OPENING_HOURS",
+				Message: "Định dạng giờ mở cửa không hợp lệ.",
+				Status:  http.StatusBadRequest,
+			})
+			return
+		}
 		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}

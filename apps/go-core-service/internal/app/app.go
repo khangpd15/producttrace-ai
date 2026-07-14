@@ -8,14 +8,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
 	batchRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
-	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
-	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
-	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
@@ -25,21 +21,21 @@ import (
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
 	attributeValueRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
 	attributeValueService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/services"
+	categoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
 	categoryRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
+	categoryService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/services"
 	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	variantRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	variantService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/services"
-	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
-	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
-	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/router"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 
 	// Auth Module
+	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	authService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/service"
 
@@ -48,13 +44,16 @@ import (
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	userService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
 
-	// Public Module
-	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
-	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
-
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
+	// Location Module
+
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	//
 	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
@@ -64,10 +63,22 @@ import (
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
 	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
 	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
+	// Trace
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
+	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
+	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
+
+	// Middleware
+	middleware "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
+	// Public
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
@@ -84,35 +95,39 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Audit Log (shared service — inject vào mọi module cần ghi log)
 	auditRepo := auditlog.NewAuditLogRepository(database)
 	auditService := auditlog.NewAuditLogService(auditRepo)
+	auditHandler := auditHandler.NewAuditHandler(auditService)
 
 	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
-	uService := userService.NewUserService(uRepo, pub)
+	pRepo := productRepo.NewProductRepository(database)
+	uService := userService.NewUserService(uRepo, pRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
-	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("FRONTEND_URL"))
+	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
 
 	bRepo := batchRepo.NewBatchRepository(database)
 
 	// Product module
-	pRepo := productRepo.NewProductRepository(database)
 	pVariantRepo := variantRepo.NewProductVariantRepository(database)
 
 	// Product category & attribute modules
 	pCategoryRepo := categoryRepo.NewProductCategoryRepository(database)
+	cService := categoryService.NewProductCategoryService(pCategoryRepo)
+	cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pAttrRepo := attributeRepo.NewAttributeRepository(database)
 	pAttrService := attributeService.NewAttributeService(pAttrRepo, pCategoryRepo)
 	pAttrHandler := attributeHandler.NewAttributeHandler(pAttrService)
 
 	// Product Attribute Value module (new)
 	pAttrValRepo := attributeValueRepo.NewAttributeValueRepository(database)
-	pAttrValService := attributeValueService.NewAttributeValueService(database, pAttrValRepo, pVariantRepo, pAttrRepo)
+	pAttrValService := attributeValueService.NewAttributeValueService(database, pAttrValRepo, pVariantRepo, pAttrRepo, pRepo)
 	pAttrValHandler := attributeValueHandler.NewAttributeValueHandler(pAttrValService)
 
 	// Product Variant module (new)
-	vService := variantService.NewProductVariantService(pVariantRepo)
+	// vService cần thêm attrValRepo để cascade xoá attribute_value khi xoá 1 variant
+	vService := variantService.NewProductVariantService(database, pVariantRepo, pAttrValRepo)
 	vHandler := variantHandler.NewProductVariantHandler(vService)
 
 	batchService := services.NewbatchService(bRepo, pdfGenerator, productItemsRepo, pVariantRepo, pub, auditService)
@@ -123,13 +138,12 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	aService := authService.NewAuthenService(uRepo, redisCache, pub)
 	aHandler := authHandler.NewAuthenHandler(aService)
 
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pub)
+	// pService cần thêm pAttrValRepo (tạo/xoá attribute value cascade),
+	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
+	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
+	// khi tạo/cập nhật product)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
 	pHandler := productHandler.NewProductHandler(pService)
- 
-	// Initialize Location Module
-	locRepo := locationRepo.NewLocationRepository(database)
-	locService := locationService.NewLocationService(locRepo)
-	locHandler := locationHandler.NewLocationHandler(locService)
 
 	// Initialize Dashboard Module
 	dbRepo := dashboardRepo.NewDashboardRepository(database)
@@ -139,6 +153,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -151,20 +169,20 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Ownership Module
 	oRepo := ownershipRepo.NewOwnershipRepository(database)
-	oProductAdapter := ownershipAdapters.NewDummyProductAdapter()
-	oEmailAdapter := ownershipAdapters.NewDummyEmailAdapter()
-	oUserAdapter := ownershipAdapters.NewDummyUserAdapter()
+	oProductAdapter := ownershipAdapters.NewProductAdapter(database)
+	oEmailAdapter := ownershipAdapters.NewEmailAdapter(redisCache, pub)
+	oUserAdapter := ownershipAdapters.NewDummyUserAdapter(uRepo)
 	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 
 	// Warranty Claim Module
 	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
-	wcOwnershipMock := &warrantyClaimAdapters.MockOwnershipPort{}
-	wcProductMock := &warrantyClaimAdapters.MockProductItemPort{}
+	wcOwnershipAdapter := warrantyClaimAdapters.NewDbOwnershipAdapter(database)
+	wcProductAdapter := warrantyClaimAdapters.NewDbProductItemAdapter(database)
 	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
 	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
 	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
-	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipMock, wcProductMock, wcEventMock, wcAuditMock, wcNotifMock)
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
 	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
 	r := router.SetupRouter(router.RouterDependency{
@@ -172,18 +190,20 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		AuthHandler:                  aHandler,
 		UserHandler:                  uHandler,
 		ProductHandler:               pHandler,
-		OwnershipHandler:             oHandler,
-		WarrantyClaimHandler:         wcHandler,
-		UserRepo:                     uRepo,
-		LocationHandler:              locHandler,
+		ProductCategoryHandler:       cHandler,
+		AuditHandler:                 auditHandler,
+		LocationHandler:              lHandler,
 		DashboardHandler:             dbHandler,
+		UserRepo:                     uRepo,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
-		ProductItemHandler:           piHandler,
 		TraceHandler:                 tHandler,
 		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
+		ProductItemHandler:           piHandler,
+		OwnershipHandler:             oHandler,
+		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{

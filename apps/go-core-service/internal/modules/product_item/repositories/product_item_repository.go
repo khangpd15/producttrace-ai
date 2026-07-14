@@ -118,7 +118,8 @@ func (rp *productItemRepository) FindByItemCodeWithEvents(ctx context.Context, i
 	err = rp.db.WithContext(ctx).
 		Table("events e").
 		Select("e.event_type as event_name, e.description as detail, e.created_at").
-		Where("e.product_item_id = ? AND e.is_deleted = false", detail.ID).
+		Joins("JOIN product_items pi ON e.product_item_id = pi.id").
+		Where("e.product_item_id = ? AND pi.is_deleted = false", detail.ID).
 		Order("e.created_at ASC").
 		Scan(&events).Error
 
