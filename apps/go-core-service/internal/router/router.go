@@ -146,7 +146,6 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 			exportGroup.POST("/:id/export", bh.ExportBatch)
 		}
 
-
 		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")
 		staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))

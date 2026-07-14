@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -136,9 +137,16 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 		return "", "", apperror.NewUnauthorized("Account is not active")
 	}
 
-	if !utils.ComparePassword(user.PasswordHash, password) {
-		return "", "", apperror.NewUnauthorized("Invalid credentials")
+	// TEST-ONLY: bỏ qua kiểm tra password khi SKIP_PASSWORD_CHECK=true.
+	// Chỉ được set biến này ở môi trường local/dev để test luồng, TUYỆT ĐỐI
+	// không được set ở staging/production vì sẽ cho phép đăng nhập vào bất kỳ
+	// tài khoản nào chỉ cần biết email.
+	if os.Getenv("SKIP_PASSWORD_CHECK") != "true" {
+		if !utils.ComparePassword(user.PasswordHash, password) {
+			return "", "", apperror.NewUnauthorized("Invalid credentials")
+		}
 	}
+	// --- hết đoạn test-only ---
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
@@ -323,7 +331,6 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 
 	return nil
 }
-
 
 func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
 
