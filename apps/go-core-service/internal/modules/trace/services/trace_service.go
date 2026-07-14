@@ -166,7 +166,7 @@ func (s *traceService) SearchTimeline(ctx context.Context, req *request.TraceSea
 	}
 
 	// Build timeline DTOs
-	var timelineDTOs []response.TimelineEventDTO
+	timelineDTOs := []response.TimelineEventDTO{}
 	for _, ev := range events {
 		// Map DB event type to "RECALLED" for consistency if it's RECALL
 		evType := ev.EventType

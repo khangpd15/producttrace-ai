@@ -106,7 +106,7 @@ func (r *traceRepository) FindEvents(ctx context.Context, itemID uuid.UUID, batc
 		Joins("LEFT JOIN users u ON e.actor_id = u.id")
 
 	if batchID != nil {
-		query = query.Where("e.product_item_id = ? OR e.batch_id = ?", itemID, *batchID)
+		query = query.Where("e.product_item_id = ? OR (e.batch_id = ? AND e.product_item_id IS NULL)", itemID, *batchID)
 	} else {
 		query = query.Where("e.product_item_id = ?", itemID)
 	}
