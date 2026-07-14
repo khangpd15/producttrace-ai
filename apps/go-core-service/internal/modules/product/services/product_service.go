@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
@@ -40,6 +43,7 @@ type productService struct {
 	attrValRepo  attrValRepos.AttributeValueRepository
 	attrRepo     attrRepos.AttributeRepository
 	categoryRepo categoryRepos.ProductCategoryRepository
+	publisher    *publisher.Publisher
 }
 
 func NewProductService(
@@ -49,6 +53,7 @@ func NewProductService(
 	attrValRepo attrValRepos.AttributeValueRepository,
 	attrRepo attrRepos.AttributeRepository,
 	categoryRepo categoryRepos.ProductCategoryRepository,
+	pub *publisher.Publisher,
 ) ProductService {
 	return &productService{
 		db:           db,
@@ -57,6 +62,7 @@ func NewProductService(
 		attrValRepo:  attrValRepo,
 		attrRepo:     attrRepo,
 		categoryRepo: categoryRepo,
+		publisher:    pub,
 	}
 }
 
@@ -158,7 +164,27 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 		return nil, err
 	}
 
-	return s.loadProductDetail(ctx, product.ID)
+	productDetail, err := s.loadProductDetail(ctx, product.ID)
+	if err == nil && s.publisher != nil {
+		event := types.Event{
+			EventID:       uuid.New().String(),
+			EventType:     rabbitmq.ProductCreatedRK,
+			EventVersion:  "1.0.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: product.ID.String(),
+			Payload: map[string]interface{}{
+				"productId":   product.ID,
+				"category_id": product.CategoryID,
+				"name":        product.Name,
+				"description": product.Description,
+				"status":      product.Status,
+			},
+		}
+		_ = s.publisher.PublishWithContext(ctx, event)
+	}
+
+	return productDetail, err
 }
 
 func (s *productService) UpdateProduct(ctx context.Context, id uuid.UUID, req request.UpdateProductRequest) (*entities.Product, error) {
@@ -388,7 +414,27 @@ func (s *productService) UpdateProduct(ctx context.Context, id uuid.UUID, req re
 		return nil, err
 	}
 
-	return s.loadProductDetail(ctx, id)
+	productDetail, err := s.loadProductDetail(ctx, id)
+	if err == nil && s.publisher != nil {
+		event := types.Event{
+			EventID:       uuid.New().String(),
+			EventType:     rabbitmq.ProductUpdatedRK,
+			EventVersion:  "1.0.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: id.String(),
+			Payload: map[string]interface{}{
+				"productId":   productDetail.ID,
+				"category_id": productDetail.CategoryID,
+				"name":        productDetail.Name,
+				"description": productDetail.Description,
+				"status":      productDetail.Status,
+			},
+		}
+		_ = s.publisher.PublishWithContext(ctx, event)
+	}
+
+	return productDetail, err
 }
 
 // createVariantAttributes validate rồi tạo 1 danh sách attribute value cho
@@ -563,4 +609,21 @@ func (s *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error 
 
 		return nil
 	})
+
+	if err == nil && s.publisher != nil {
+		event := types.Event{
+			EventID:       uuid.New().String(),
+			EventType:     rabbitmq.ProductDeletedRK,
+			EventVersion:  "1.0.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: id.String(),
+			Payload: map[string]interface{}{
+				"productId": id,
+			},
+		}
+		_ = s.publisher.PublishWithContext(ctx, event)
+	}
+
+	return err
 }

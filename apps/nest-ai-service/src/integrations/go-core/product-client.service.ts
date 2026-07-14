@@ -11,7 +11,7 @@ interface Product {
 }
 
 interface ProductListResponse {
-  data: Product[];
+  items: Product[];
   total: number;
   page: number;
   limit: number;

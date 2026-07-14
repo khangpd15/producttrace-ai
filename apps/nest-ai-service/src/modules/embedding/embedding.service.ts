@@ -28,7 +28,10 @@ export class EmbeddingService {
   ) {
     const isDocker = fs.existsSync('/.dockerenv');
     const defaultEmbeddingUrl = isDocker ? 'http://embedding-service:8000' : 'http://localhost:8000';
-    const envEmbeddingUrl = this.configService.get('EMBEDDING_SERVICE_URL');
+    let envEmbeddingUrl = this.configService.get<string>('EMBEDDING_SERVICE_URL');
+    if (envEmbeddingUrl && envEmbeddingUrl.trim() === '') {
+      envEmbeddingUrl = undefined;
+    }
     const resolvedEmbeddingUrl = !isDocker && envEmbeddingUrl?.includes('embedding-service')
       ? defaultEmbeddingUrl
       : envEmbeddingUrl ?? defaultEmbeddingUrl;

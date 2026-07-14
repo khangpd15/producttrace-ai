@@ -1,6 +1,6 @@
-﻿{
-  "vectors": {
-    "size": 768,
-    "distance": "Cosine"
-  }
+{
+    "vectors": {
+        "size": 768,
+        "distance": "Cosine"
+    }
 }

@@ -142,7 +142,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
 	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
 	// khi tạo/cập nhật product)
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub)
 	pHandler := productHandler.NewProductHandler(pService)
 
 	// Initialize Dashboard Module

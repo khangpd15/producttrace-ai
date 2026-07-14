@@ -22,7 +22,10 @@ export class QdrantService {
   constructor(private readonly configService: ConfigService) {
     const isDocker = fs.existsSync('/.dockerenv');
     const defaultBaseUrl = isDocker ? 'http://qdrant:6333' : 'http://localhost:6333';
-    const envBaseUrl = this.configService.get('QDRANT_URL');
+    let envBaseUrl = this.configService.get<string>('QDRANT_URL');
+    if (envBaseUrl && envBaseUrl.trim() === '') {
+      envBaseUrl = undefined;
+    }
     const resolvedBaseUrl = !isDocker && envBaseUrl?.includes('qdrant')
       ? defaultBaseUrl
       : envBaseUrl ?? defaultBaseUrl;

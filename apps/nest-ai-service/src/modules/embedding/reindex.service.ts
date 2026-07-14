@@ -19,11 +19,11 @@ export class ReindexService {
       const result =
         await this.productClient.getProducts(page, limit);
 
-      if (result.data.length === 0) {
+      if (result.items.length === 0) {
         break;
       }
 
-      for (const product of result.data) {
+      for (const product of result.items) {
         await this.embeddingService.processEvent({
           event_id: `reindex-${product.id}`,
           event_type: 'product.reindexed',
@@ -42,7 +42,7 @@ export class ReindexService {
       }
 
       this.logger.log(
-        `Reindexed page=${page}, products=${result.data.length}`,
+        `Reindexed page=${page}, products=${result.items.length}`,
       );
 
       if (page >= result.total_pages) {

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as amqp from 'amqplib';
@@ -57,6 +58,7 @@ async function ensureEmbeddingTopology() {
       RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED,
       RABBITMQ.ROUTING_KEYS.TRACE_CREATED,
       RABBITMQ.ROUTING_KEYS.TRACE_EXPORTED,
+      RABBITMQ.ROUTING_KEYS.EMBEDDING_REINDEX_REQUESTED,
     ]) {
       await channel.bindQueue(
         RABBITMQ.QUEUES.EMBEDDING,
@@ -87,6 +89,19 @@ async function bootstrap() {
 
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe());
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [RABBITMQ.URL],
+      queue: RABBITMQ.QUEUES.EMBEDDING,
+      queueOptions: {
+        durable: true,
+      },
+    },
+  });
+
+  await app.startAllMicroservices();
 
   await ensureEmbeddingTopology();
 
