@@ -102,8 +102,9 @@ RESET_PASSWORD_TEMPLATE_ID=id_template_quên_mật_khẩu_ở_đây
 | File | Mô tả thay đổi |
 |---|---|
 | `src/messaging/rabbitmq/rabbitmq.constants.ts` | Thêm `NOTIFICATION_SENT: 'notification.sent'` vào `ROUTING_KEYS` và `EVENT_TYPES` |
+| `src/messaging/rabbitmq/rabbitmq.service.ts` | Thêm `NOTIFICATION_SENT` vào danh sách `routingKeys` để tự động bind hàng đợi khi khởi tạo |
 | `src/messaging/consumers/notification.consumer.ts` | Thêm 3 trường động vào `NotificationPayload` và xử lý `case notification.sent` trong switch |
-| `src/modules/mail/mail.service.ts` | Thêm method `sendWarrantyUpdateEmail()` với hỗ trợ SendGrid Template và fallback HTML |
+| `src/mail/mail.service.ts` | Thêm/Cập nhật method `sendWarrantyUpdateEmail(to, fullName, productName, status, endDate)` hỗ trợ đầy đủ các tham số động vào SendGrid Template hoặc fallback HTML |
 | `.env.example` | Thêm biến `WARRANTY_UPDATE_TEMPLATE_ID` |
 
 ---
@@ -199,13 +200,18 @@ WARRANTY_UPDATE_TEMPLATE_ID=d-aa9b56ba4bf64b54a72eddc7ba33ba03
 6. Kiểm tra hòm thư nhận email với giao diện từ template SendGrid.
 
 ### Cách B: Chạy script test trực tiếp
-File test được tạo sẵn tại `apps/nest-ai-service/test-email.js`:
+File test được tạo sẵn tại `apps/nest-ai-service/test-email.js`. Script này đã được tối ưu để tự động đọc cấu hình SendGrid (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `WARRANTY_UPDATE_TEMPLATE_ID`) từ file `.env`.
+
+Cách chạy:
 ```bash
 cd apps/nest-ai-service
-# Đảm bảo SENDGRID_API_KEY đã có trong môi trường
 node test-email.js
 ```
-Email test sẽ gửi đến `nguyenhoang280004@gmail.com` với dữ liệu mẫu.
+
+**Nhật ký kiểm thử (Mới nhất):**
+- **Ngày thực hiện:** 14/07/2026
+- **Email nhận test:** `nguyenzc17@gmail.com` (Đã được cấu hình làm email nhận mặc định trong script để chạy kiểm thử).
+- **Kết quả:** Gửi thành công (`✅ GỬI EMAIL THÀNH CÔNG!`). API SendGrid phản hồi status 2xx, email được chuyển tiếp đến hàng đợi phân phát của SendGrid đến hộp thư đích.
 
 ---
 
@@ -217,4 +223,5 @@ Email test sẽ gửi đến `nguyenhoang280004@gmail.com` với dữ liệu m�
   2. `case` mới vào `notification.consumer.ts`
   3. Method mới vào `mail.service.ts`
 - **Template fallback**: Nếu chưa setup SendGrid Template, hệ thống tự động gửi email HTML thuần có đầy đủ thông tin (không bị lỗi).
+
 
