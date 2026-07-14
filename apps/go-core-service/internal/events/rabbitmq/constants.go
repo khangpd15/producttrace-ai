@@ -5,10 +5,6 @@ const (
 	DefaultExchange = "product-trace.events"
 	DLXExchange     = "product-trace.dlx"
 
-	EmbeddingQueueName   = "embedding_queue"
-	EmbeddingDLXExchange = "embedding.dlx"
-	EmbeddingDLQName     = "embedding.failed"
-
 	// Alias for compatibility/readability
 	EventExchange = DefaultExchange
 
@@ -23,10 +19,9 @@ const (
 	ProductDeletedRK = "product.deleted"
 
 	// Batch routing keys
-	BatchCreatedRK       = "batch.created"
-	BatchUpdatedRK       = "batch.updated"
-	BatchDeletedRK       = "batch.deleted"
-	BatchHistoryViewedRK = "batch.history_viewed"
+	BatchCreatedRK = "batch.created"
+	BatchUpdatedRK = "batch.updated"
+	BatchDeletedRK = "batch.deleted"
 
 	// Owner routing keys
 	OwnerCreatedRK = "owner.created"

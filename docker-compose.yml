@@ -233,6 +233,8 @@ services:
       REDIS_PORT: ${REDIS_PORT}
 
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_SERVICE_URL: http://embedding-service:8000
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
       RABBITMQ_QUEUE: ai.events
       QDRANT_URL: http://qdrant:6333

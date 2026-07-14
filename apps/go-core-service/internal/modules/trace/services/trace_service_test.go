@@ -12,6 +12,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 )
 
 type mockTraceRepository struct {
@@ -66,6 +67,13 @@ func (m *mockAuditLogService) LogUpdate(ctx context.Context, userID *uuid.UUID, 
 }
 func (m *mockAuditLogService) LogDelete(ctx context.Context, userID *uuid.UUID, entity string, entityID uuid.UUID, oldData any) error {
 	return nil
+}
+func (m *mockAuditLogService) GetLogs(ctx context.Context, action, entity string, fromDate, toDate *time.Time, page, limit int) ([]*audit_log.AuditLog, int64, error) {
+	args := m.Called(ctx, action, entity, fromDate, toDate, page, limit)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*audit_log.AuditLog), args.Get(1).(int64), args.Error(2)
 }
 
 func TestSearchTimeline_TrimAndUppercase(t *testing.T) {

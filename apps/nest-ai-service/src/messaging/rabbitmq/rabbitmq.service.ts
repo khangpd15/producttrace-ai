@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
+import * as fs from 'fs';
 
 import { RABBITMQ } from './rabbitmq.constants';
 import { NotificationConsumer } from '../consumers/notification.consumer';
@@ -44,8 +45,14 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
     this.isConnecting = true;
 
-    const url =
-      this.configService.get<string>('RABBITMQ_URL') || RABBITMQ.URL;
+    const isDocker = fs.existsSync('/.dockerenv');
+    const envUrl = this.configService.get<string>('RABBITMQ_URL');
+    const defaultUrl = isDocker
+      ? 'amqp://admin:admin123@rabbitmq:5672/%2F'
+      : 'amqp://admin:admin123@localhost:5672/%2F';
+    const url = !isDocker && envUrl?.includes('rabbitmq')
+      ? defaultUrl
+      : envUrl || RABBITMQ.URL || defaultUrl;
 
     this.logger.log(`Connecting to RabbitMQ ${url.replace(/:([^:@]+)@/, ':****@')}`);
 

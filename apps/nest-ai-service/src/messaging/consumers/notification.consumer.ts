@@ -108,13 +108,6 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         this.logger.log(`[NotificationConsumer] Verification-success email sent to ${payload.email}`);
         break;
 
-      // ── Product Created ───────────────────────────────────────────────────
-      case RABBITMQ.EVENT_TYPES.PRODUCT_CREATED: // "product.created"
-        this.logger.log(
-          `[NotificationConsumer] product.created event received — no email action configured. email="${payload.email}"`,
-        );
-        break;
-
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:
         this.logger.warn(

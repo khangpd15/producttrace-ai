@@ -1,8 +1,17 @@
+import * as fs from 'fs';
+
+const isDocker = fs.existsSync('/.dockerenv');
+const defaultRabbitUrl = isDocker
+  ? 'amqp://admin:admin123@rabbitmq:5672/%2F'
+  : 'amqp://admin:admin123@localhost:5672/%2F';
+const envRabbitUrl = process.env.RABBITMQ_URL;
+const resolvedRabbitUrl = !isDocker && envRabbitUrl?.includes('rabbitmq')
+  ? defaultRabbitUrl
+  : envRabbitUrl || defaultRabbitUrl;
+
 export const RABBITMQ = {
 
-  URL:
-    process.env.RABBITMQ_URL ||
-    'amqp://admin:admin123@localhost:5672/%2F',
+  URL: resolvedRabbitUrl,
 
   EXCHANGE: 'product-trace.events',
 
@@ -17,6 +26,21 @@ export const RABBITMQ = {
    */
   QUEUES: {
     NOTIFICATION: 'ai.events',
+
+    EMBEDDING: 'embedding_queue',
+
+    EMBEDDING_SYNC: 'embedding_sync_queue',
+  },
+
+  DLX: {
+    EMBEDDING: 'embedding.dlx',
+  },
+
+  DLQ_ROUTING_KEYS: {
+
+    NOTIFICATION: 'ai.events.failed',
+
+    EMBEDDING: 'embedding.failed',
   },
 
   /**
@@ -34,6 +58,14 @@ export const RABBITMQ = {
     USER_VERIFIED: 'otp.verified',      // Go: OTPVerifiedRK
     PRODUCT_CREATED: 'product.created',
     OWNERSHIP_OTP: 'otp.ownership',   // Go: ProductCreatedRK
+    PRODUCT_CREATED: 'product.created',   // Go: ProductCreatedRK
+    TRACE_CREATED: 'trace.created',
+    TRACE_EXPORTED: 'trace.exported',
+    TRACE_EVENTS: 'trace.*',
+
+    EMBEDDING_GENERATED: 'embedding.generated',
+    EMBEDDING_COMPLETED: 'embedding.completed',
+    EMBEDDING_REINDEX_REQUESTED: 'embedding.reindex.requested',
   },
 
   /**
@@ -47,5 +79,4 @@ export const RABBITMQ = {
     PRODUCT_CREATED: 'product.created',
     OWNERSHIP_OTP: 'otp.ownership',
   },
-
 };
