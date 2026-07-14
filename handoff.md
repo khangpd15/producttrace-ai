@@ -86,55 +86,70 @@ RESET_PASSWORD_TEMPLATE_ID=id_template_quên_mật_khẩu_ở_đây
 
 ---
 
+
 # Tài liệu Bàn giao: Module Thông Báo Bảo Hành (Warranty Notification)
 
 ## Tổng quan
-Đã triển khai hoàn chỉnh tính năng gửi **email thông báo cập nhật trạng thái bảo hành** cho khách hàng thông qua hệ thống Event-Driven hiện có (RabbitMQ → NestJS Worker → SendGrid). Tính năng nằm trên nhánh `feature/notification-warranty`.
+
+Đã triển khai hoàn chỉnh tính năng gửi **email thông báo cập nhật trạng thái bảo hành** cho khách hàng thông qua hệ thống Event-Driven (RabbitMQ → NestJS Worker → SendGrid).
 
 - **Use Case**: `UC-P3-NOTI-01` — Gửi thông báo cập nhật bảo hành tới email khách hàng khi trạng thái thay đổi.
 - **Nhánh Git**: `feature/notification-warranty`
+- **PR**: [#90 → develop](https://github.com/khangpd15/producttrace-ai/pull/90) _(đang chờ review & approve)_
 - **SendGrid Template ID**: `d-aa9b56ba4bf64b54a72eddc7ba33ba03`
 
 ---
 
-## 1. Các file đã thay đổi
+## 1. Phân chia trách nhiệm (Architecture: Event-Driven — Phương án A)
 
-| File | Mô tả thay đổi |
+| Service | Trách nhiệm |
 |---|---|
-| `src/messaging/rabbitmq/rabbitmq.constants.ts` | Thêm `NOTIFICATION_SENT: 'notification.sent'` vào `ROUTING_KEYS` và `EVENT_TYPES` |
-| `src/messaging/rabbitmq/rabbitmq.service.ts` | Thêm `NOTIFICATION_SENT` vào danh sách `routingKeys` để tự động bind hàng đợi khi khởi tạo |
-| `src/messaging/consumers/notification.consumer.ts` | Thêm 3 trường động vào `NotificationPayload` và xử lý `case notification.sent` trong switch |
-| `src/mail/mail.service.ts` | Thêm/Cập nhật method `sendWarrantyUpdateEmail(to, fullName, productName, status, endDate)` hỗ trợ đầy đủ các tham số động vào SendGrid Template hoặc fallback HTML |
-| `.env.example` | Thêm biến `WARRANTY_UPDATE_TEMPLATE_ID` |
+| **Go Core Service** | Truy vấn PostgreSQL lấy thông tin bảo hành thật → Publish event `notification.sent` lên RabbitMQ với đầy đủ payload |
+| **NestJS (`nest-ai-service`)** | Lắng nghe event từ RabbitMQ → Gửi email qua SendGrid — **Đã hoàn thành** ✅ |
+
+> **NestJS không kết nối trực tiếp vào database.** Toàn bộ dữ liệu bảo hành (tên sản phẩm, trạng thái, ngày hết hạn...) được lấy từ Go Core Service thông qua payload RabbitMQ.
 
 ---
 
 ## 2. Luồng hoạt động (Event Flow)
 
 ```
-Go Core Service (bảo hành update)
-    │
-    │  Publish event: routing_key="notification.sent"
-    │  Payload: { email, full_name, product_name, warranty_status, warranty_end_date }
-    ▼
+[PostgreSQL] ← Go Core Service truy vấn bảng warranties + users + products
+     │
+     │  Publish RabbitMQ event:
+     │  Exchange: "product-trace.events"
+     │  Routing key: "notification.sent"
+     │  Payload: { event_type, data: { email, full_name, product_name, warranty_status, warranty_end_date } }
+     ▼
 RabbitMQ Queue: "ai.events"
-    │
-    ▼
+     │
+     ▼
 NotificationConsumer (NestJS Worker)  ← lắng nghe liên tục
-    │  case "notification.sent"
-    │  Trích xuất payload động
-    ▼
+     │  case "notification.sent"
+     │  Trích xuất payload động
+     ▼
 MailService.sendWarrantyUpdateEmail()
-    │  Gọi SendGrid API với templateId + dynamicTemplateData
-    ▼
+     │  Gọi SendGrid API với templateId + dynamicTemplateData
+     ▼
 Email đến hòm thư khách hàng  ✅
 ```
 
 ---
 
-## 3. Cấu trúc Payload RabbitMQ
+## 3. Các file đã thay đổi trong `nest-ai-service`
 
-Khi service bảo hành (Go Core Service) publish event, JSON message phải có cấu trúc:
+| File | Mô tả thay đổi |
+|---|---|
+| `src/messaging/rabbitmq/rabbitmq.constants.ts` | Thêm `NOTIFICATION_SENT: 'notification.sent'` vào `ROUTING_KEYS` và `EVENT_TYPES`; merge thêm các keys mới từ nhánh develop (`OWNERSHIP_OTP`, `TRACE_*`, `EMBEDDING_*`) |
+| `src/messaging/rabbitmq/rabbitmq.service.ts` | Thêm `NOTIFICATION_SENT` và `OWNERSHIP_OTP` vào danh sách `routingKeys` để tự động bind hàng đợi khi khởi tạo |
+| `src/messaging/consumers/notification.consumer.ts` | Thêm 3 trường động vào `NotificationPayload` (`product_name`, `warranty_status`, `warranty_end_date`); thêm `case "notification.sent"` trong switch để gọi `sendWarrantyUpdateEmail` |
+| `src/mail/mail.service.ts` | Method `sendWarrantyUpdateEmail(to, fullName, productName, status, endDate)` — gửi qua SendGrid Dynamic Template hoặc fallback HTML thuần |
+
+---
+
+## 4. Cấu trúc Payload RabbitMQ
+
+Go Core Service **bắt buộc** publish đúng schema sau:
 
 ```json
 {
@@ -149,15 +164,13 @@ Khi service bảo hành (Go Core Service) publish event, JSON message phải có
 }
 ```
 
-> **Lưu ý**: Tất cả 5 trường trên đều là dữ liệu thật (dynamic), không hardcode. Nếu thiếu trường nào, hệ thống có giá trị mặc định fallback để không crash.
+> **Lưu ý**: Tất cả 5 trường đều là dữ liệu thật (dynamic). Nếu thiếu trường nào, hệ thống có giá trị fallback mặc định để tránh crash — nhưng email sẽ thiếu thông tin.
 
 ---
 
-## 4. Cấu hình SendGrid Template
+## 5. Cấu hình SendGrid Template
 
 **Template ID**: `d-aa9b56ba4bf64b54a72eddc7ba33ba03`
-
-Các biến (variables) được NestJS truyền vào template:
 
 | Tên biến SendGrid | Dữ liệu truyền vào | Ví dụ |
 |---|---|---|
@@ -166,62 +179,87 @@ Các biến (variables) được NestJS truyền vào template:
 | `{{status}}` | Trạng thái bảo hành | `Đã hoàn tất sửa chữa` |
 | `{{endDate}}` | Ngày hết hạn bảo hành | `24/10/2026` |
 | `{{frontendUrl}}` | Link hệ thống | `http://localhost:5173` |
-| `{{year}}` | Năm hiện tại | `2025` |
+| `{{year}}` | Năm hiện tại (auto) | `2026` |
 
 ---
 
-## 5. Cấu hình môi trường (.env)
+## 6. Cấu hình môi trường (.env)
 
 Thêm biến sau vào file `.env` của `apps/nest-ai-service`:
 
 ```env
-# SendGrid Template ID cho thông báo bảo hành
+# SendGrid
+SENDGRID_API_KEY=your_api_key
+SENDGRID_FROM_EMAIL=khangpd.ce191105@gmail.com
+
+# Template ID cho thông báo cập nhật bảo hành
 WARRANTY_UPDATE_TEMPLATE_ID=d-aa9b56ba4bf64b54a72eddc7ba33ba03
 ```
 
-> Nếu biến này **không được set** hoặc để trống, hệ thống sẽ tự động dùng Template ID `d-aa9b56ba4bf64b54a72eddc7ba33ba03` làm giá trị mặc định (đã hardcode trong code).
-> Nếu cả SendGrid API Key cũng không được cấu hình, hệ thống sẽ chạy ở **MOCK mode** và chỉ log ra console mà không gửi email thật.
+> Nếu `WARRANTY_UPDATE_TEMPLATE_ID` không được set, hệ thống dùng Template ID trên làm mặc định.
+> Nếu `SENDGRID_API_KEY` không được set, hệ thống chạy ở **MOCK mode** — chỉ log ra console.
 
 ---
 
-## 6. Hướng dẫn Test
+## 7. Hướng dẫn Test (Tester / Dev khác)
 
-### Cách A: Bắn event thủ công qua RabbitMQ Management UI
+### Test thủ công qua RabbitMQ Management UI
 1. Mở `http://localhost:15672` (đăng nhập: `admin` / `admin123`).
-2. Vào **Queues** → chọn queue `ai.events`.
+2. Vào **Exchanges** → chọn exchange `product-trace.events`.
 3. Tìm mục **Publish message**, điền:
    - **Routing key**: `notification.sent`
-   - **Payload**: JSON như mục 3 ở trên
+   - **Payload**:
+     ```json
+     {
+       "event_type": "notification.sent",
+       "data": {
+         "email": "test@gmail.com",
+         "full_name": "Nguyễn Văn A",
+         "product_name": "iPhone 15 Pro Max",
+         "warranty_status": "ACTIVE",
+         "warranty_end_date": "24/10/2026"
+       }
+     }
+     ```
 4. Nhấn **Publish message**.
-5. Kiểm tra log của `nest-ai-service` sẽ thấy:
+5. Kiểm tra log của `nest-ai-service`:
    ```
-   [NotificationConsumer] Warranty update email sent to khachhang@gmail.com
+   [NotificationConsumer] Warranty update email sent to test@gmail.com
    ```
-6. Kiểm tra hòm thư nhận email với giao diện từ template SendGrid.
-
-### Cách B: Chạy script test trực tiếp
-File test được tạo sẵn tại `apps/nest-ai-service/test-email.js`. Script này đã được tối ưu để tự động đọc cấu hình SendGrid (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `WARRANTY_UPDATE_TEMPLATE_ID`) từ file `.env`.
-
-Cách chạy:
-```bash
-cd apps/nest-ai-service
-node test-email.js
-```
-
-**Nhật ký kiểm thử (Mới nhất):**
-- **Ngày thực hiện:** 14/07/2026
-- **Email nhận test:** `nguyenzc17@gmail.com` (Đã được cấu hình làm email nhận mặc định trong script để chạy kiểm thử).
-- **Kết quả:** Gửi thành công (`✅ GỬI EMAIL THÀNH CÔNG!`). API SendGrid phản hồi status 2xx, email được chuyển tiếp đến hàng đợi phân phát của SendGrid đến hộp thư đích.
+6. Kiểm tra hòm thư nhận email với giao diện từ SendGrid template.
 
 ---
 
-## 7. Điểm quan trọng cho Dev tiếp nhận
+## 8. Điểm quan trọng cho Dev tiếp nhận
 
-- **Không cần sửa gì thêm** trong NestJS khi Go Core Service thay đổi nội dung bảo hành — chỉ cần đảm bảo payload JSON đúng schema như mục 3.
-- Để thêm event thông báo loại mới (ví dụ: `warranty.expired`), chỉ cần thêm:
-  1. Constant mới vào `rabbitmq.constants.ts`
-  2. `case` mới vào `notification.consumer.ts`
-  3. Method mới vào `mail.service.ts`
-- **Template fallback**: Nếu chưa setup SendGrid Template, hệ thống tự động gửi email HTML thuần có đầy đủ thông tin (không bị lỗi).
+### Dev Go Core Service cần làm:
+- Sau khi cập nhật trạng thái bảo hành trong PostgreSQL, publish event lên RabbitMQ với:
+  - **Exchange**: `product-trace.events`
+  - **Routing key**: `notification.sent`
+  - **Payload**: JSON đúng schema mục 4 ở trên
+- Tham khảo các routing key đã có trong `apps/go-core-service/internal/events/rabbitmq/constants.go`
+
+### Dev NestJS KHÔNG cần sửa gì thêm khi:
+- Go Core Service thay đổi nội dung bảo hành — chỉ cần đảm bảo payload JSON đúng schema.
+
+### Để thêm loại thông báo mới (ví dụ: `warranty.expired`):
+1. Thêm constant mới vào `rabbitmq.constants.ts`
+2. Bind routing key mới vào `rabbitmq.service.ts`
+3. Thêm `case` mới vào `notification.consumer.ts`
+4. Thêm method mới vào `mail.service.ts`
+
+### Template fallback:
+Nếu chưa setup SendGrid Template, hệ thống tự động gửi email HTML thuần có đầy đủ thông tin (không bị lỗi/crash).
+
+---
+
+## 9. Lịch sử thay đổi
+
+| Ngày | Nội dung |
+|---|---|
+| 14/07/2026 | Khởi tạo module, implement `sendWarrantyUpdateEmail` với 5 tham số động |
+| 14/07/2026 | Bind routing key `notification.sent` vào `rabbitmq.service.ts` |
+| 14/07/2026 | Giải quyết merge conflict với nhánh `develop` (thêm `OWNERSHIP_OTP`, `TRACE_*`, `EMBEDDING_*` keys) |
+| 14/07/2026 | Tạo PR #90 → `develop`, đang chờ review |
 
 
