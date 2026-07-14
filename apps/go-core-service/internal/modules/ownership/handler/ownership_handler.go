@@ -20,6 +20,16 @@ func NewOwnershipHandler(ownershipService service.IOwnershipService) *OwnershipH
 // HELPERS 
 
 func getUserID(c *gin.Context) (uuid.UUID, bool) {
+	if val, exists := c.Get("user_id"); exists {
+		if uid, ok := val.(uuid.UUID); ok {
+			return uid, true
+		}
+		if str, ok := val.(string); ok {
+			if uid, err := uuid.Parse(str); err == nil {
+				return uid, true
+			}
+		}
+	}
 	raw := c.GetHeader("X-User-Id")
 	id, err := uuid.Parse(raw)
 	if err != nil {
@@ -30,7 +40,12 @@ func getUserID(c *gin.Context) (uuid.UUID, bool) {
 }
 
 func getRole(c *gin.Context) string {
-	return c.GetHeader("X-User-Role") // e.g. "ADMIN" or "CUSTOMER"
+	if val, exists := c.Get("role"); exists {
+		if roleStr, ok := val.(string); ok {
+			return roleStr
+		}
+	}
+	return c.GetHeader("X-User-Role")
 }
 
 // REQUEST OTP

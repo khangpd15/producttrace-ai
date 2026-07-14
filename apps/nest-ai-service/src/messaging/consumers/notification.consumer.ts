@@ -74,6 +74,18 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         this.logger.log(`[NotificationConsumer] Registration OTP sent to ${payload.email}`);
         break;
 
+      // --------------------------------
+      case RABBITMQ.EVENT_TYPES.OWNERSHIP_OTP:
+        if (!payload.otp_code) {
+          throw new Error(`Missing otp_code for event_type="${eventType}"`);
+        }
+        await this.mailService.sendOTP(
+          payload.email,
+          payload.full_name || 'User',
+          payload.otp_code,
+        );
+        this.logger.log(`[NotificationConsumer] Registration OTP sent to ${payload.email}`);
+        break;
       // ── Forgot-Password OTP ───────────────────────────────────────────────
       case RABBITMQ.EVENT_TYPES.PASSWORD_RESET: // "otp.forgot"
         if (!payload.otp_code) {

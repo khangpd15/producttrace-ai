@@ -25,7 +25,9 @@ import (
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
 	attributeValueRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
 	attributeValueService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/services"
+	productCategoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
 	categoryRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
+	productCategoryService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/services"
 	productItemsHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	productItemsService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/services"
@@ -56,22 +58,17 @@ import (
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
 	// Location Module
-	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
-	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
-	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/qr"
-	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/services"
 	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
-	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 
 	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
 	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -133,11 +130,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	pService := productService.NewProductService(database, pRepo, pVariantRepo, pub)
 	pHandler := productHandler.NewProductHandler(pService)
- 
-	// Initialize Location Module
-	locRepo := locationRepo.NewLocationRepository(database)
-	locService := locationService.NewLocationService(locRepo)
-	locHandler := locationHandler.NewLocationHandler(locService)
 
 	// Initialize Dashboard Module
 	dbRepo := dashboardRepo.NewDashboardRepository(database)
@@ -151,6 +143,12 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	lRepo := locationRepo.NewLocationRepository(database)
 	lService := locationService.NewLocationService(lRepo)
 	lHandler := locationHandler.NewLocationHandler(lService)
+
+	// Product Category module
+	catRepo := categoryRepo.NewProductCategoryRepository(database)
+	catService := productCategoryService.NewProductCategoryService(catRepo)
+	catHandler := productCategoryHandler.NewProductCategoryHandler(catService)
+
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -163,20 +161,20 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Ownership Module
 	oRepo := ownershipRepo.NewOwnershipRepository(database)
-	oProductAdapter := ownershipAdapters.NewDummyProductAdapter()
-	oEmailAdapter := ownershipAdapters.NewDummyEmailAdapter()
-	oUserAdapter := ownershipAdapters.NewDummyUserAdapter()
+	oProductAdapter := ownershipAdapters.NewProductAdapter(database)
+	oEmailAdapter := ownershipAdapters.NewEmailAdapter(redisCache, pub)
+	oUserAdapter := ownershipAdapters.NewDummyUserAdapter(uRepo)
 	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 
 	// Warranty Claim Module
 	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
-	wcOwnershipMock := &warrantyClaimAdapters.MockOwnershipPort{}
-	wcProductMock := &warrantyClaimAdapters.MockProductItemPort{}
+	wcOwnershipAdapter := warrantyClaimAdapters.NewDbOwnershipAdapter(database)
+	wcProductAdapter := warrantyClaimAdapters.NewDbProductItemAdapter(database)
 	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
 	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
 	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
-	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipMock, wcProductMock, wcEventMock, wcAuditMock, wcNotifMock)
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
 	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
 	r := router.SetupRouter(router.RouterDependency{
@@ -185,17 +183,18 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductItemHandler:           piHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
-		LocationHandler:              locHandler,
+		LocationHandler:              lHandler,
 		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
-		LocationHandler:              lHandler,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
-		ProductItemHandler:           piHandler,
 		TraceHandler:                 tHandler,
 		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
+		WarrantyClaimHandler:         wcHandler,
+		OwnershipHandler:             oHandler,
+		ProductCategoryHandler:       catHandler,
 	})
 
 	return &App{

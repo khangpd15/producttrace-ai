@@ -19,18 +19,9 @@ import (
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
-)
-
-type RouterDependency struct {
-	BatchHandler         *batchHandler.BatchHandler
-	AuthHandler          *authHandler.AuthenHandler
-	UserHandler          *userHandler.UserHandler
-	ProductHandler       *productHandler.ProductHandler
-	OwnershipHandler     *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler *warrantyClaimHandler.WarrantyClaimHandler
-	UserRepo             userRepo.UserRepositoryInterface
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	productCategoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
 )
 
 type RouterDependency struct {
@@ -38,16 +29,19 @@ type RouterDependency struct {
 	AuthHandler                  *authHandler.AuthenHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
+	OwnershipHandler             *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
-	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
-	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
-	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
+	ProductVariantHandler        *variantHandler.ProductVariantHandler
+	ProductAttributeHandler      *attributeHandler.AttributeHandler
+	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler
 	ProductItemHandler           *productItemHandler.ProductItemHandler
 	TraceHandler                 *traceHandler.TraceHandler
 	PublicHandler                *publicHandler.PublicHandler
 	RateLimiter                  *middleware.RateLimiter
+	ProductCategoryHandler      *productCategoryHandler.ProductCategoryHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -92,6 +86,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
+	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	return r
 }
 
@@ -256,6 +251,8 @@ func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.Wa
 	{
 		warrantyClaims.POST("", wch.CreateWarrantyClaim)
 	}
+}
+
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
@@ -406,4 +403,23 @@ func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *m
 		protected.POST("/export/excel", th.ExportExcel)
 	}
 
+}
+
+// PRODUCT CATEGORY
+func SetupProductCategoryRouter(api *gin.RouterGroup, ch *productCategoryHandler.ProductCategoryHandler, uRepo userRepo.UserRepositoryInterface) {
+	categories := api.Group("/categories")
+	{
+		// Public browse routes
+		categories.GET("", ch.GetAllCategories)
+		categories.GET("/:id", ch.GetCategoryByID)
+
+		// Protected management routes (requires ADMIN or STAFF role)
+		protected := categories.Group("")
+		protected.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+		{
+			protected.POST("", ch.CreateCategory)
+			protected.PUT("/:id", ch.UpdateCategory)
+			protected.DELETE("/:id", ch.DeleteCategory)
+		}
+	}
 }

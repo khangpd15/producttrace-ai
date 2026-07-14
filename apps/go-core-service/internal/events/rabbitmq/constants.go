@@ -13,9 +13,9 @@ const (
 	EventExchange = DefaultExchange
 
 	// User routing keys
-	UserRegisteredRK    = "user.registered"
+	UserRegisteredRK     = "user.registered"
 	UserPasswordForgotRK = "user.password_forgot"
-	UserLoggedInRK      = "user.logged_in"
+	UserLoggedInRK       = "user.logged_in"
 
 	// Product routing keys
 	ProductCreatedRK = "product.created"
@@ -37,7 +37,7 @@ const (
 	WarrantyCreatedRK = "warranty.created"
 
 	// Trace routing keys
-	TraceCreatedRK = "trace.created"
+	TraceCreatedRK  = "trace.created"
 	TraceExportedRK = "trace.exported"
 
 	// Notification routing keys
@@ -45,4 +45,5 @@ const (
 	OTPRegisterUserRK     = "otp.registered"
 	OTPVerifiedRK         = "otp.verified"
 	OTPForgotRK           = "otp.forgot"
+	OTPOwnership          = "otp.ownership"
 )

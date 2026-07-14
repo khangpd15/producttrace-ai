@@ -104,6 +104,15 @@ func (m *mockUserProvider) GetUserEmailByID(ctx context.Context, userID uuid.UUI
 func (m *mockUserProvider) EnsureUserExists(ctx context.Context, email, fullName, phone string) (uuid.UUID, error) {
 	return m.ensureUserExistsFn(ctx, email, fullName, phone)
 }
+func (m *mockUserProvider) GetUserByEmail(ctx context.Context, email string) (uuid.UUID, string, error) {
+	if email == "new@example.com" {
+		return uuid.New(), "ACTIVE", nil
+	}
+	if email == "pending@example.com" {
+		return uuid.New(), "PENDING", nil
+	}
+	return uuid.Nil, "", errors.New("user not found")
+}
 func (m *mockUserProvider) SearchUserIDs(ctx context.Context, name string, email string, phone string) ([]uuid.UUID, error) {
 	return []uuid.UUID{}, nil
 }
