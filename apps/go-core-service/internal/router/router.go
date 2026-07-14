@@ -19,16 +19,6 @@ import (
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
-)
-
-type RouterDependency struct {
-	BatchHandler         *batchHandler.BatchHandler
-	AuthHandler          *authHandler.AuthenHandler
-	UserHandler          *userHandler.UserHandler
-	ProductHandler       *productHandler.ProductHandler
-	OwnershipHandler     *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler *warrantyClaimHandler.WarrantyClaimHandler
-	UserRepo             userRepo.UserRepositoryInterface
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 )
@@ -38,6 +28,8 @@ type RouterDependency struct {
 	AuthHandler                  *authHandler.AuthenHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
+	OwnershipHandler             *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
@@ -256,6 +248,8 @@ func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.Wa
 	{
 		warrantyClaims.POST("", wch.CreateWarrantyClaim)
 	}
+}
+
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
