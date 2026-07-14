@@ -30,8 +30,19 @@ type RouterDependency struct {
 	AuditHandler                 *auditHandler.AuditHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
+	OwnershipHandler             *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
+	DashboardHandler             *dashboardHandler.DashboardHandler
+	ProductVariantHandler        *variantHandler.ProductVariantHandler
+	ProductAttributeHandler      *attributeHandler.AttributeHandler
+	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler
+	ProductItemHandler           *productItemHandler.ProductItemHandler
+	TraceHandler                 *traceHandler.TraceHandler
+	PublicHandler                *publicHandler.PublicHandler
+	RateLimiter                  *middleware.RateLimiter
+	ProductCategoryHandler      *productCategoryHandler.ProductCategoryHandler
 	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
@@ -75,6 +86,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
+	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	return r
 }
 
@@ -182,6 +194,45 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 				adminGroup.DELETE("/:id", ph.DeleteProduct)
 			}
 		}
+	}
+}
+
+// OWNERSHIP
+func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHandler, uRepo userRepo.UserRepositoryInterface) {
+	ownerships := api.Group("/ownership")
+	ownerships.Use(middleware.AuthMiddleware(uRepo))
+
+	// Customer routes: chỉ cần QR code, thông tin lấy từ profile JWT
+	customerGroup := ownerships.Group("")
+	customerGroup.Use(middleware.RoleMiddleware("CUSTOMER"))
+	{
+		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
+		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+	}
+
+	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
+	adminGroup := ownerships.Group("/admin")
+	adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+	{
+		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
+		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+	}
+
+	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
+	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
+	
+	// CRUD Extensions
+	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
+	ownerships.DELETE("/:id", oh.DeleteOwnership)
+	ownerships.GET("", oh.SearchOwnerships)
+}
+
+// WARRANTY CLAIM
+func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyClaims := api.Group("/warranty-claims")
+	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
+	{
+		warrantyClaims.POST("", wch.CreateWarrantyClaim)
 	}
 }
 
@@ -350,6 +401,24 @@ func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *m
 
 }
 
+// PRODUCT CATEGORY
+func SetupProductCategoryRouter(api *gin.RouterGroup, ch *productCategoryHandler.ProductCategoryHandler, uRepo userRepo.UserRepositoryInterface) {
+	categories := api.Group("/categories")
+	{
+		// Public browse routes
+		categories.GET("", ch.GetAllCategories)
+		categories.GET("/:id", ch.GetCategoryByID)
+
+		// Protected management routes (requires ADMIN or STAFF role)
+		protected := categories.Group("")
+		protected.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+		{
+			protected.POST("", ch.CreateCategory)
+			protected.PUT("/:id", ch.UpdateCategory)
+			protected.DELETE("/:id", ch.DeleteCategory)
+		}
+	}
+}
 // AUDIT
 func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo userRepo.UserRepositoryInterface) {
 	audits := api.Group("/audits")

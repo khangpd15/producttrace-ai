@@ -47,6 +47,18 @@ import (
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
+	// Location Module
+
+	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
+	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
+	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
+
+	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -117,11 +129,6 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
-	// Initialize Location Module
-	locRepo := locationRepo.NewLocationRepository(database)
-	locService := locationService.NewLocationService(locRepo)
-	locHandler := locationHandler.NewLocationHandler(locService)
-
 	// Initialize Dashboard Module
 	dbRepo := dashboardRepo.NewDashboardRepository(database)
 	dbService := dashboardService.NewDashboardService(dbRepo)
@@ -129,6 +136,16 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
+
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
+
+	// Product Category module
+	catRepo := categoryRepo.NewProductCategoryRepository(database)
+	catService := productCategoryService.NewProductCategoryService(catRepo)
+	catHandler := productCategoryHandler.NewProductCategoryHandler(catService)
 
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
@@ -139,6 +156,24 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	// Initialize Public Module
 	pubService := publicService.NewPublicService(productItemsRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
+
+	// Ownership Module
+	oRepo := ownershipRepo.NewOwnershipRepository(database)
+	oProductAdapter := ownershipAdapters.NewProductAdapter(database)
+	oEmailAdapter := ownershipAdapters.NewEmailAdapter(redisCache, pub)
+	oUserAdapter := ownershipAdapters.NewDummyUserAdapter(uRepo)
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
+	oHandler := ownershipHandler.NewOwnershipHandler(oService)
+
+	// Warranty Claim Module
+	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
+	wcOwnershipAdapter := warrantyClaimAdapters.NewDbOwnershipAdapter(database)
+	wcProductAdapter := warrantyClaimAdapters.NewDbProductItemAdapter(database)
+	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
+	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
+	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
+	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
