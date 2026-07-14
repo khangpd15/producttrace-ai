@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -37,8 +38,11 @@ type BatchRepository interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	// SoftDelete set is_deleted = true; GORM tự set updated_at.
 	SoftDelete(ctx context.Context, id uuid.UUID) error
-	// ExportBatch handle export logic with transaction
+	// ExportBatch handle export logic with transaction (legacy single batch)
 	ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error
+	// ExportBatches xuất nhiều batch trong một transaction (bulk export).
+	// All-or-nothing: rollback toàn bộ nếu bất kỳ batch nào lỗi.
+	ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error)
 
 	// --- Constraint checks (dùng trước khi delete) ---
 	ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error)
@@ -71,7 +75,15 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 	}
 
 	if req.Status != "" && req.Status != "ALL" {
-		query = query.Where("b.status = ?", req.Status)
+		if strings.Contains(req.Status, ",") {
+			parts := strings.Split(req.Status, ",")
+			for i, p := range parts {
+				parts[i] = strings.ToUpper(strings.TrimSpace(p))
+			}
+			query = query.Where("b.status IN ?", parts)
+		} else {
+			query = query.Where("b.status = ?", req.Status)
+		}
 	}
 
 	if req.OriginCountry != "" && req.OriginCountry != "ALL" {
@@ -394,7 +406,7 @@ func (r *batchRepository) GetBatchEvents(ctx context.Context, batchID uuid.UUID)
 		Table("events e").
 		Select("e.event_type as event_name, e.description as detail, e.created_at").
 		Joins("JOIN product_items p ON e.product_item_id = p.id").
-		Where("p.batch_id = ? AND e.is_deleted = false", batchID).
+		Where("p.batch_id = ? AND p.is_deleted = false", batchID).
 		Order("e.created_at DESC").
 		Scan(&events).Error
 
@@ -564,6 +576,362 @@ func (r *batchRepository) ExportBatch(ctx context.Context, batchID uuid.UUID, ex
 
 		return nil
 	})
+}
+
+// ---------------------------------------------------------------------------
+// History & Products (UC-P2-BATCH-06, UC-P2-BATCH-05)
+// ---------------------------------------------------------------------------
+
+// GetBatchHistory trả về danh sách lịch sử thay đổi của một Batch từ bảng audit_logs.
+// JOIN LEFT bảng users để lấy full_name và role của người thực hiện.
+// old_data và new_data được trả thồ ngà rư để service parse sang diff-view.
+func (r *batchRepository) GetBatchHistory(ctx context.Context, batchID uuid.UUID, page, limit int) ([]response.BatchHistoryItemDTO, error) {
+	type historyRow struct {
+		LogID     uuid.UUID
+		Action    string
+		OldData   []byte
+		NewData   []byte
+		CreatedAt time.Time
+		// User fields (nullable — system actions có thể không có user)
+		UserID   *uuid.UUID
+		FullName *string
+		Role     *string
+	}
+
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 15
+	}
+	offset := (page - 1) * limit
+
+	var rows []historyRow
+	err := r.db.WithContext(ctx).
+		Table("audit_logs al").
+		Select(`
+			al.id  AS log_id,
+			al.action,
+			al.old_data,
+			al.new_data,
+			al.created_at,
+			u.id        AS user_id,
+			u.full_name AS full_name,
+			u.role      AS role
+		`).
+		Joins("LEFT JOIN users u ON u.id = al.user_id").
+		Where("al.entity = ? AND al.entity_id = ?", "Batch", batchID).
+		Order("al.created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "audit_logs")
+	}
+
+	items := make([]response.BatchHistoryItemDTO, 0, len(rows))
+	for _, row := range rows {
+		// Parse old_data và new_data từ JSONB sang map[string]any
+		var oldMap, newMap map[string]any
+		if len(row.OldData) > 0 {
+			_ = json.Unmarshal(row.OldData, &oldMap)
+		}
+		if len(row.NewData) > 0 {
+			_ = json.Unmarshal(row.NewData, &newMap)
+		}
+
+		// Build changedFields: xây dựng diff-view bằng cách so sánh key giữa old và new.
+		// Chỉ show key xuất hiện trong newMap (trường thực sự đã được cập nhật).
+		changedFields := make(map[string]response.FieldDiffDTO)
+		for key, newVal := range newMap {
+			oldVal := oldMap[key]
+			changedFields[key] = response.FieldDiffDTO{
+				Old: oldVal,
+				New: newVal,
+			}
+		}
+
+		// Map performer (nil nếu system action)
+		var actor *response.BatchHistoryActorDTO
+		if row.UserID != nil && row.FullName != nil {
+			role := ""
+			if row.Role != nil {
+				role = *row.Role
+			}
+			actor = &response.BatchHistoryActorDTO{
+				UserID:   *row.UserID,
+				FullName: *row.FullName,
+				Role:     role,
+			}
+		}
+
+		items = append(items, response.BatchHistoryItemDTO{
+			LogID:         row.LogID,
+			Action:        row.Action,
+			ChangedFields: changedFields,
+			PerformedBy:   actor,
+			IPAddress:     "",
+			CreatedAt:     row.CreatedAt,
+		})
+	}
+
+	return items, nil
+}
+
+// validProductItemStatuses là whitelist trạng thái hợp lệ của product_item để
+// tránh SQL Injection khi filter status trong GetBatchProducts.
+var validProductItemStatuses = map[string]struct{}{
+	"AVAILABLE":  {},
+	"IN_TRANSIT": {},
+	"SOLD":       {},
+	"RECALLED":   {},
+}
+
+// GetBatchProducts trả về danh sách sản phẩm đơn lả trong lô với pagination.
+// LEFT JOIN locations để lấy thông tin vị trí lưu kho hiện tại.
+// Sắp xếp theo serial_number ASC theo spec UC-P2-BATCH-05.
+func (r *batchRepository) GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error) {
+	query := r.db.WithContext(ctx).
+		Table("product_items pi").
+		Joins("LEFT JOIN locations l ON l.id = pi.current_location_id").
+		Where("pi.batch_id = ? AND pi.is_deleted = false", batchID)
+
+	// Filter status (chỉ apply khi client truyền vào và hợp lệ)
+	if req.Status != "" {
+		if _, ok := validProductItemStatuses[req.Status]; ok {
+			query = query.Where("pi.status = ?", req.Status)
+		}
+	}
+
+	// Search keyword ILIKE trên item_code và serial_number (AF-001)
+	if req.Keyword != "" {
+		kw := "%" + req.Keyword + "%"
+		query = query.Where("pi.item_code ILIKE ? OR pi.serial_number ILIKE ?", kw, kw)
+	}
+
+	var totalRecords int64
+	if err := query.Count(&totalRecords).Error; err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+	totalPages := int((totalRecords + int64(limit) - 1) / int64(limit))
+	if totalPages == 0 && totalRecords > 0 {
+		totalPages = 1
+	}
+
+	// Struct tạm để Scan — tránh conflict tên cột giữa các bảng.
+	type productRow struct {
+		ItemID       uuid.UUID
+		ItemCode     string
+		SerialNumber string
+		Status       string
+		CreatedAt    time.Time
+		LocationID   *uuid.UUID
+		LocationName *string
+		LocationType *string
+	}
+
+	var rows []productRow
+	err := query.
+		Select(`
+			pi.id             AS item_id,
+			pi.item_code,
+			pi.serial_number,
+			pi.status,
+			pi.created_at,
+			l.id              AS location_id,
+			l.name            AS location_name,
+			l.type            AS location_type
+		`).
+		Order("pi.serial_number ASC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+
+	// Map sang DTO — xử lý nullable location (LEFT JOIN)
+	items := make([]response.BatchProductItemDTO, 0, len(rows))
+	for _, row := range rows {
+		var location *response.BatchProductLocationDTO
+		if row.LocationID != nil {
+			location = &response.BatchProductLocationDTO{
+				LocationID: *row.LocationID,
+				Name:       derefString(row.LocationName),
+				Type:       derefString(row.LocationType),
+			}
+		}
+		items = append(items, response.BatchProductItemDTO{
+			ItemID:          row.ItemID,
+			ItemCode:        row.ItemCode,
+			SerialNumber:    row.SerialNumber,
+			Status:          row.Status,
+			CurrentLocation: location,
+			CreatedAt:       row.CreatedAt,
+		})
+	}
+
+	return &response.GetBatchProductsResponse{
+		Items: items,
+		Pagination: response.BatchProductPaginationDTO{
+			CurrentPage:  page,
+			PageSize:     limit,
+			TotalRecords: int(totalRecords),
+			TotalPages:   totalPages,
+		},
+	}, nil
+}
+
+// ExportBatches xuất nhiều batch trong 1 DB transaction (all-or-nothing).
+//
+// Với mỗi batchID:
+//  1. Validate batch tồn tại, chưa deleted.
+//  2. Lấy toàn bộ ProductItems chưa bị xóa của batch đó.
+//  3. Validate batch có ProductItems.
+//  4. Update ProductItem.current_location_id và status → "IN_TRANSIT".
+//  5. Tạo Event (event_type=BATCH_EXPORTED) cho từng ProductItem.
+//
+// Sau khi duyệt hết:
+//  6. Ghi 1 audit_log tổng hợp cho toàn bộ batch_ids.
+//
+// Nếu bất kỳ bước nào lỗi → rollback toàn bộ transaction.
+func (r *batchRepository) ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error) {
+	var totalExportedItems int
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		destLocationID, parseErr := uuid.Parse(req.DestinationLocationID)
+		if parseErr != nil {
+			return apperror.NewValidation("destination_location_id must be a valid UUID")
+		}
+
+		// Validate destination location tồn tại
+		var locationCount int64
+		if err := tx.Table("locations").Where("id = ? AND is_active = true", destLocationID).Count(&locationCount).Error; err != nil {
+			return apperror.WrapDBError(err, "location")
+		}
+		if locationCount == 0 {
+			return apperror.NewNotFound("destination location not found or inactive")
+		}
+
+		now := time.Now().UTC()
+
+		for _, batchIDStr := range req.BatchIDs {
+			batchID, parseErr := uuid.Parse(batchIDStr)
+			if parseErr != nil {
+				return apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", batchIDStr))
+			}
+
+			// 1. Validate batch tồn tại và chưa bị xóa
+			var batch entities.Batch
+			if err := tx.Where("id = ? AND is_deleted = false", batchID).First(&batch).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return apperror.NewNotFound(fmt.Sprintf("batch %s not found", batchIDStr))
+				}
+				return apperror.WrapDBError(err, "batch")
+			}
+
+			// 2. Lấy tất cả ProductItems của batch này (chưa xóa)
+			type itemRow struct {
+				ID uuid.UUID
+			}
+			var items []itemRow
+			if err := tx.Table("product_items").
+				Select("id").
+				Where("batch_id = ? AND is_deleted = false", batchID).
+				Scan(&items).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			// 3. Validate batch có ít nhất 1 ProductItem
+			if len(items) == 0 {
+				return apperror.NewBadRequest(fmt.Sprintf("batch %s has no product items to export", batch.BatchCode))
+			}
+
+			// 4. Collect item IDs để bulk update
+			itemIDs := make([]uuid.UUID, 0, len(items))
+			for _, it := range items {
+				itemIDs = append(itemIDs, it.ID)
+			}
+
+			// 5. Bulk update: set current_location_id và status cho tất cả items
+			if err := tx.Table("product_items").
+				Where("id IN ?", itemIDs).
+				Updates(map[string]interface{}{
+					"current_location_id": destLocationID,
+					"status":              "IN_TRANSIT",
+					"updated_at":          now,
+				}).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			// 6. Tạo Event cho từng ProductItem
+			events := make([]map[string]interface{}, 0, len(itemIDs))
+			for _, itemID := range itemIDs {
+				events = append(events, map[string]interface{}{
+					"id":              uuid.New(),
+					"product_item_id": itemID,
+					"batch_id":        batchID,
+					"actor_id":        currentUserID,
+					"location_id":     destLocationID,
+					"event_type":      "WAREHOUSE_OUT",
+					"title":           "Xuất kho",
+					"description":     fmt.Sprintf("Batch %s exported to location %s", batch.BatchCode, req.DestinationLocationID),
+					"created_at":      now,
+				})
+			}
+			if err := tx.Table("events").Create(&events).Error; err != nil {
+				return apperror.WrapDBError(err, "events")
+			}
+
+			totalExportedItems += len(itemIDs)
+		}
+
+		// 7. Ghi 1 audit_log tổng hợp cho toàn bộ operation
+		batchIDsJSON := "[" + func() string {
+			quoted := make([]string, len(req.BatchIDs))
+			for i, id := range req.BatchIDs {
+				quoted[i] = `"` + id + `"`
+			}
+			return strings.Join(quoted, ",")
+		}() + "]"
+
+		auditLog := map[string]interface{}{
+			"id":     uuid.New(),
+			"action": "EXPORT_BATCHES",
+			"entity": "BATCH",
+			// entity_id: dùng batch_id đầu tiên (log tổng hợp)
+			"entity_id":  req.BatchIDs[0],
+			"user_id":    currentUserID.String(),
+			"new_data":   fmt.Sprintf(`{"batch_ids":%s,"destination_location_id":"%s","exported_item_count":%d,"note":"%s"}`, batchIDsJSON, req.DestinationLocationID, totalExportedItems, req.Note),
+			"created_at": now,
+		}
+		if err := tx.Table("audit_logs").Create(&auditLog).Error; err != nil {
+			return apperror.WrapDBError(err, "audit_log")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ExportBatchesResponse{
+		ExportedBatchCount:    len(req.BatchIDs),
+		ExportedItemCount:     totalExportedItems,
+		BatchIDs:              req.BatchIDs,
+		DestinationLocationID: req.DestinationLocationID,
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
