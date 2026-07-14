@@ -1,5 +1,35 @@
 _format_version: "3.0"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CORS STRATEGY: Kong Gateway handles CORS centrally.
+# We enable the Kong CORS plugin globally and disable the Go Gin CORS middleware
+# to prevent duplicate CORS headers which cause browsers to block requests.
+# ─────────────────────────────────────────────────────────────────────────────
+
+plugins:
+  - name: cors
+    config:
+      origins:
+        - https://frontend-producttrace-ai.vercel.app
+        - http://localhost:5173
+        - http://localhost:3000
+        - http://localhost:3001
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Origin
+        - Content-Type
+        - Authorization
+        - Accept
+        - ngrok-skip-browser-warning
+      credentials: true
+      preflight_continue: false
+
 services:
   - name: go-core-service
     url: http://go-core-service:8080
@@ -8,7 +38,7 @@ services:
       - name: go-core-route
         paths:
           - /api
-        strip_path: true
+        strip_path: false
 
   - name: nest-ai-service
     url: http://nest-ai-service:3000
@@ -17,4 +47,4 @@ services:
       - name: nest-ai-route
         paths:
           - /ai
-        strip_path: true
+        strip_path: false

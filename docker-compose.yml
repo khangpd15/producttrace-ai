@@ -1,12 +1,13 @@
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
     container_name: product-trace-db
 
     environment:
-      POSTGRES_DB: product_trace_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     ports:
       - "5433:5432"
@@ -15,7 +16,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d product_trace_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +29,7 @@ services:
     container_name: product-trace-redis
 
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
 
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -42,10 +43,11 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: product-trace-rabbitmq
+    hostname: rabbitmq
 
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
 
     ports:
       - "5672:5672"
@@ -55,10 +57,78 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
 
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+    networks:
+      - app-networks
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: product-trace-zookeeper
+
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+    ports:
+      - "2181:2181"
+
+    networks:
+      - app-networks
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: product-trace-kafka
+
+    depends_on:
+      - zookeeper
+
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+
+    networks:
+      - app-networks
+
+  qdrant:
+    image: qdrant/qdrant:v1.0.0
+    container_name: product-trace-qdrant
+
+    ports:
+      - "6333:6333"
+
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+    networks:
+      - app-networks
+
+  embedding-service:
+    build:
+      context: ./apps/nest-ai-service/embedding-service
+      dockerfile: Dockerfile
+
+    container_name: product-trace-embedding-service
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      MODEL_NAME: 'bge-m3'
 
     networks:
       - app-networks
@@ -75,7 +145,7 @@ services:
         "-path",
         "/migrations",
         "-database",
-        "postgres://postgres:123456@postgres:5432/product_trace_db?sslmode=disable",
+        "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable",
         "up"
       ]
 
@@ -91,28 +161,73 @@ services:
   go-core-service:
     build:
       context: ./apps/go-core-service
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
 
     container_name: go-core-service
 
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_NAME: product_trace_db
-      DB_USER: postgres
-      DB_PASSWORD: 123456
-
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
 
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+      GIN_MODE: release
 
     ports:
-      - "8080:8080"
+      - "${GO_CORE_PORT}:8080"
 
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+      redis:
+        condition: service_healthy
+
+      rabbitmq:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - app-networks
+
+  worker-service:
+    build:
+      context: ./apps/go-core-service
+      dockerfile: Dockerfile.worker
+
+    container_name: worker-service
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+      GIN_MODE: release
+
+    depends_on:
+      go-core-service:
+        condition: service_healthy
 
       redis:
         condition: service_healthy
@@ -131,28 +246,51 @@ services:
     container_name: nest-ai-service
 
     environment:
-      PORT: 3000
+      PORT: ${NEST_PORT}
 
-      GO_CORE_URL: http://go-core-service:8080
+      GO_CORE_URL: ${GO_CORE_URL}
 
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
 
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_SERVICE_URL: http://embedding-service:8000
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
       RABBITMQ_QUEUE: ai.events
+      KAFKA_BROKER: kafka:9092
+      KAFKA_GROUP_ID: nest-ai-service-group
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_SERVICE_URL: http://embedding-service:8000
+
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+      WELCOME_TEMPLATE_ID: ${WELCOME_TEMPLATE_ID}
+      WELCOME_EMAIL_TEMPLATE_ID: ${WELCOME_EMAIL_TEMPLATE_ID}
+      VERIFY_EMAIL_TEMPLATE_ID: ${VERIFY_EMAIL_TEMPLATE_ID}
 
     ports:
-      - "3000:3000"
+      - "${NEST_PORT}:3000"
 
     depends_on:
       go-core-service:
-        condition: service_started
+        condition: service_healthy
 
       redis:
         condition: service_healthy
 
       rabbitmq:
         condition: service_healthy
+
+      kafka:
+        condition: service_started
+
+      qdrant:
+        condition: service_started
+
+      embedding-service:
+        condition: service_started
 
     networks:
       - app-networks
@@ -165,3 +303,5 @@ networks:
 volumes:
   postgres-data:
   rabbitmq-data:
+  qdrant-data:
+
