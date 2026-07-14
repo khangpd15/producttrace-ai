@@ -6,10 +6,12 @@ import (
     "errors"
 
     "github.com/google/uuid"
+    attrValRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/dto/request"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
     "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+    "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/dbctx"
     "gorm.io/datatypes"
     "gorm.io/gorm"
 )
@@ -22,11 +24,17 @@ type ProductVariantService interface {
 }
 
 type productVariantService struct {
+    db          *gorm.DB
     variantRepo repositories.ProductVariantRepository
+    attrValRepo attrValRepos.AttributeValueRepository
 }
 
-func NewProductVariantService(variantRepo repositories.ProductVariantRepository) ProductVariantService {
-    return &productVariantService{variantRepo: variantRepo}
+func NewProductVariantService(
+    db *gorm.DB,
+    variantRepo repositories.ProductVariantRepository,
+    attrValRepo attrValRepos.AttributeValueRepository,
+) ProductVariantService {
+    return &productVariantService{db: db, variantRepo: variantRepo, attrValRepo: attrValRepo}
 }
 
 func (s *productVariantService) UpdateVariant(ctx context.Context, id uuid.UUID, req request.UpdateVariantRequest) (*entities.ProductVariant, error) {
@@ -112,9 +120,21 @@ func (s *productVariantService) DeleteVariant(ctx context.Context, id uuid.UUID)
         return apperror.Wrap(err, apperror.NewInternal("Failed to find variant"))
     }
 
-    if err := s.variantRepo.SoftDelete(ctx, id); err != nil {
-        return apperror.Wrap(err, apperror.NewInternal("Failed to delete variant"))
-    }
+    // Xoá riêng 1 variant: chỉ cascade XUỐNG (attribute_values của variant này),
+    // TUYỆT ĐỐI không đụng tới product cha. Cả 2 lệnh dưới đây dùng chung 1
+    // transaction để tránh trường hợp variant bị xoá nhưng attribute_value
+    // của nó vẫn còn sót lại (hoặc ngược lại).
+    return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+        txCtx := dbctx.InjectTx(ctx, tx)
 
-    return nil
+        if err := s.variantRepo.SoftDelete(txCtx, id); err != nil {
+            return apperror.Wrap(err, apperror.NewInternal("Failed to delete variant"))
+        }
+
+        if err := s.attrValRepo.DeleteByVariantID(txCtx, id); err != nil {
+            return apperror.Wrap(err, apperror.NewInternal("Failed to delete variant attribute values"))
+        }
+
+        return nil
+    })
 }

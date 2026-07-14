@@ -29,7 +29,7 @@ func SetupTopology(ch *amqp.Channel) error {
 		}
 	}
 
-	// Declare the main queue for NestJS notification consumer
+	// Declare the main queue for NestJS consumer
 	q, err := ch.QueueDeclare(
 		"ai.events", // name
 		true,        // durable
@@ -46,10 +46,6 @@ func SetupTopology(ch *amqp.Channel) error {
 	}
 	routingNestKeys := []string{
 		OTPRegisterUserRK,
-		OTPForgotRK,
-		OTPVerifiedRK,
-		ProductCreatedRK,
-		TraceExportedRK,
 	}
 
 	for _, rk := range routingNestKeys {
@@ -63,73 +59,6 @@ func SetupTopology(ch *amqp.Channel) error {
 		if err != nil {
 			return fmt.Errorf("bind queue %s to exchange %s with rk %s: %w", q.Name, DefaultExchange, rk, err)
 		}
-	}
-
-	// Declare Embedding queue and bind it to the product-created and trace events
-	embeddingQueueArgs := amqp.Table{
-		"x-dead-letter-exchange":    EmbeddingDLXExchange,
-		"x-dead-letter-routing-key": EmbeddingDLQName,
-	}
-	embeddingQueue, err := ch.QueueDeclare(
-		EmbeddingQueueName,
-		true,
-		false,
-		false,
-		false,
-		embeddingQueueArgs,
-	)
-	if err != nil {
-		return fmt.Errorf("declare embedding queue: %w", err)
-	}
-
-	for _, rk := range []string{ProductCreatedRK, TraceExportedRK} {
-		err = ch.QueueBind(
-			embeddingQueue.Name,
-			rk,
-			DefaultExchange,
-			false,
-			nil,
-		)
-		if err != nil {
-			return fmt.Errorf("bind embedding queue %s to exchange %s with rk %s: %w", embeddingQueue.Name, DefaultExchange, rk, err)
-		}
-	}
-
-	// Declare Embedding DLX exchange and DLQ queue
-	err = ch.ExchangeDeclare(
-		EmbeddingDLXExchange,
-		"topic",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("declare embedding dlx exchange %s: %w", EmbeddingDLXExchange, err)
-	}
-
-	embeddingDLQ, err := ch.QueueDeclare(
-		EmbeddingDLQName,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("declare embedding dlq: %w", err)
-	}
-
-	err = ch.QueueBind(
-		embeddingDLQ.Name,
-		EmbeddingDLQName,
-		EmbeddingDLXExchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("bind embedding dlq: %w", err)
 	}
 
 	// Declare DLQ queue and bind it
@@ -156,8 +85,6 @@ func SetupTopology(ch *amqp.Channel) error {
 		return fmt.Errorf("bind dlq: %w", err)
 	}
 
-	// Declare notification.password.reset queue for NestJS PasswordResetConsumer
-
 	qOtp, err := ch.QueueDeclare(
 		"otp.events", // name
 		true,         // durable
@@ -175,7 +102,7 @@ func SetupTopology(ch *amqp.Channel) error {
 
 	routingOTPKeys := []string{
 		UserRegisteredRK,
-		UserPasswordForgotRK,
+		UserPasswordResetRK,
 	}
 	for _, rk := range routingOTPKeys {
 		err = ch.QueueBind(
