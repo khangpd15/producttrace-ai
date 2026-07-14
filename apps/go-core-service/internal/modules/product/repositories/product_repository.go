@@ -150,7 +150,7 @@ func (r *productRepository) SoftDelete(ctx context.Context, id uuid.UUID) error 
 
 func (r *productRepository) HasProductsByOwner(ctx context.Context, ownerID uuid.UUID) (bool, error) {
 	var count int64
-	err := GetDB(ctx, r.db).
+	err := dbctx.GetDB(ctx, r.db).
 		Model(&entities.Product{}).
 		Where("created_by = ? AND is_deleted = false", ownerID).
 		Count(&count).Error

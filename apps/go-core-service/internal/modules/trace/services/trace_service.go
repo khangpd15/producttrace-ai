@@ -633,7 +633,7 @@ func (s *traceService) generatePDFBytes(item *repositories.ProductItemDetail, ev
 		pdf.Cell(0, 4, ev.Title)
 
 		pdf.Ln(4)
-		pdf.SetX(timelineX+6)
+		pdf.SetX(timelineX + 6)
 		pdf.SetFont("Helvetica", "I", 8)
 		pdf.SetTextColor(100, 100, 100)
 		dateStr := ev.Timestamp.Format("2006-01-02 15:04:05 (UTC)")
@@ -644,7 +644,7 @@ func (s *traceService) generatePDFBytes(item *repositories.ProductItemDetail, ev
 		pdf.Cell(0, 4, fmt.Sprintf("%s | Location: %s", dateStr, locStr))
 
 		pdf.Ln(4)
-		pdf.SetX(timelineX+6)
+		pdf.SetX(timelineX + 6)
 		pdf.SetFont("Helvetica", "", 9)
 		pdf.SetTextColor(60, 60, 60)
 		pdf.MultiCell(150, 4, ev.Description, "", "", false)

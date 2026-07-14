@@ -12,16 +12,18 @@ import (
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
+	productCategoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
 	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
-	categoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
 type RouterDependency struct {
@@ -35,19 +37,14 @@ type RouterDependency struct {
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
-	ProductVariantHandler        *variantHandler.ProductVariantHandler
-	ProductAttributeHandler      *attributeHandler.AttributeHandler
-	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler
-	ProductItemHandler           *productItemHandler.ProductItemHandler
 	TraceHandler                 *traceHandler.TraceHandler
 	PublicHandler                *publicHandler.PublicHandler
 	RateLimiter                  *middleware.RateLimiter
-	ProductCategoryHandler      *productCategoryHandler.ProductCategoryHandler
+	ProductCategoryHandler       *productCategoryHandler.ProductCategoryHandler
 	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
-	CategoryHandler              *categoryHandler.ProductCategoryHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -76,16 +73,12 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
-	SetupCategoryRouter(api, deps.CategoryHandler, deps.UserRepo)
-	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
-	SetupPublicRouter(api, deps.PublicHandler)
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	return r
 }
@@ -220,7 +213,7 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 
 	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
 	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
-	
+
 	// CRUD Extensions
 	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
 	ownerships.DELETE("/:id", oh.DeleteOwnership)
@@ -364,39 +357,20 @@ func SetupProductAttributeValueRouter(api *gin.RouterGroup, ah *attributeValueHa
 	}
 }
 
-// PRODUCT CATEGORY
-func SetupCategoryRouter(api *gin.RouterGroup, ch *categoryHandler.ProductCategoryHandler, uRepo userRepo.UserRepositoryInterface) {
-	categories := api.Group("/categories")
-	{
-		// Public: dùng để scan QR
-		items.GET("", ph.GetProductItemList)
-		items.GET("/:item_code", ph.GetProductItemDetail)
-	}
-}
-
 // TRACE
 func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *middleware.RateLimiter, uRepo userRepo.UserRepositoryInterface) {
 
 	legacy := api.Group("/trace")
-		categories.GET("", ch.GetAllCategories)
-		categories.GET("/:id", ch.GetCategoryByID)
 
-		protectedCategories := categories.Group("")
-		protectedCategories.Use(middleware.AuthMiddleware(uRepo))
-		{
-			staffGroup := protectedCategories.Group("")
-			staffGroup.Use(middleware.RoleMiddleware("ADMIN", "MANUFACTURER"))
-			{
-				staffGroup.POST("", ch.CreateCategory)
-				staffGroup.PUT("/:id", ch.UpdateCategory)
-			}
+	// Public search with rate limiting
+	legacy.GET("/search", rl.Limit(30, time.Minute), th.Search)
 
-			adminGroup := protectedCategories.Group("")
-			adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
-			{
-				adminGroup.DELETE("/:id", ch.DeleteCategory)
-			}
-		}
+	// Protected export endpoints
+	protected := legacy.Group("")
+	protected.Use(middleware.AuthMiddleware(uRepo))
+	{
+		protected.POST("/export/pdf", th.ExportPDF)
+		protected.POST("/export/excel", th.ExportExcel)
 	}
 
 }
@@ -419,6 +393,7 @@ func SetupProductCategoryRouter(api *gin.RouterGroup, ch *productCategoryHandler
 		}
 	}
 }
+
 // AUDIT
 func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo userRepo.UserRepositoryInterface) {
 	audits := api.Group("/audits")
@@ -426,5 +401,4 @@ func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo
 	{
 		audits.GET("", ah.GetLogs)
 	}
-}
 }
