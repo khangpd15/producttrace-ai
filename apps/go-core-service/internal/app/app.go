@@ -105,7 +105,11 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	uService := userService.NewUserService(uRepo, pRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
-	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = os.Getenv("BASE_URL")
+	}
+	pdfGenerator := qr.NewPDFGenerator(qrGenerator, frontendURL)
 
 	bRepo := batchRepo.NewBatchRepository(database)
 
@@ -164,10 +168,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	tHandler := traceHandler.NewTraceHandler(tService)
 	rateLimiter := middleware.NewRateLimiter(redisClient)
 
-	// Initialize Public Module
-	pubService := publicService.NewPublicService(productItemsRepo)
-	pubHandler := publicHandler.NewPublicHandler(pubService)
-
 	// Ownership Module
 	oRepo := ownershipRepo.NewOwnershipRepository(database)
 	oProductAdapter := ownershipAdapters.NewProductAdapter(database)
@@ -185,6 +185,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
 	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
 	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
+
+	// Initialize Public Module
+	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wcRepo, lRepo, uRepo)
+	pubHandler := publicHandler.NewPublicHandler(pubService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,

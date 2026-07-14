@@ -80,7 +80,18 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
+	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
+	SetupPublicRouter(api, deps.PublicHandler)
 	return r
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
+	}
 }
 
 // AUTH
