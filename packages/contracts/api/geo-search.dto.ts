@@ -8,7 +8,7 @@ export interface GeoSearchRequestDto {
   shopType?: 'STORE' | 'WARRANTY_CENTER'; // Optional: Cần tìm cửa hàng hay trạm bảo hành
 }
 
-// Dữ liệu Phúc sẽ trả về cho Frontend
+// Dữ liệu sẽ trả về cho Frontend
 export interface GeoSearchResponseDto {
   shopId: string;
   name: string;
