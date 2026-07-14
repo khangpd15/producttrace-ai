@@ -10,6 +10,8 @@ import { AuthModule } from './auth/auth.module';
 
 // RabbitMQ của Email
 import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
+import { GeoSearchModule } from './modules/geo-search/geo-search.module';
+import { QdrantModule } from './integrations/qdrant/qdrant.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
     MailModule,
     AuthModule,
     RabbitMQModule,
+    GeoSearchModule, 
+    QdrantModule,
   ],
   controllers: [MockController],
 })

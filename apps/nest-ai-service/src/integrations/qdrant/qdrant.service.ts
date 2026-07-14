@@ -1,211 +1,137 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
+import { QdrantClient } from '@qdrant/qdrant-js';
 import { SearchResult } from '../../modules/search/interfaces/search-result.interface';
 
 @Injectable()
-export class QdrantService {
+export class QdrantService implements OnModuleInit {
   private readonly logger = new Logger(QdrantService.name);
-
-  private readonly baseUrl: string;
-  private readonly apiKey: string | undefined;
-
-  // ✅ COLLECTION NAME (fixed)
+  private client: QdrantClient;
   private readonly collectionName = 'product_embeddings';
-
-  // ✅ FIXED VECTOR SIZE (quan trọng cho production)
-  private readonly vectorSize = 768; // đổi theo model của bạn
-
-  private collectionReady = false;
-  private creatingCollection = false;
+  private readonly vectorSize = 768; // ✅ Cố định size vector theo model
 
   constructor(private readonly configService: ConfigService) {
-    const isDocker = fs.existsSync('/.dockerenv');
-    const defaultBaseUrl = isDocker ? 'http://qdrant:6333' : 'http://localhost:6333';
-    const envBaseUrl = this.configService.get('QDRANT_URL');
-    const resolvedBaseUrl = !isDocker && envBaseUrl?.includes('qdrant')
-      ? defaultBaseUrl
-      : envBaseUrl ?? defaultBaseUrl;
-    this.baseUrl = resolvedBaseUrl;
-    this.apiKey = this.configService.get('QDRANT_API_KEY');
+    this.client = new QdrantClient({
+      url: this.configService.get('QDRANT_URL'),
+      apiKey: this.configService.get('QDRANT_API_KEY'),
+    });
+  }
+
+  async onModuleInit() {
+    await this.initializeCollection();
   }
 
   // =========================
-  // UPSERT VECTOR
+  // KHỞI TẠO COLLECTION (Clean)
   // =========================
-  async upsertVector(
-    id: string,
-    vector: number[],
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    // validate vector
-    if (!vector || vector.length !== this.vectorSize) {
-      throw new Error(
-        `Invalid vector size: expected ${this.vectorSize}, got ${vector?.length}`,
-      );
-    }
-
-    // ensure collection exists
-    await this.ensureCollection();
-
-    const response = await fetch(
-      `${this.baseUrl}/collections/${this.collectionName}/points?wait=true`,
-      {
-        method: 'PUT',
-        headers: this.headers,
-        body: JSON.stringify({
-          points: [
-            {
-              id,
-              vector,
-              payload,
-            },
-          ],
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const body = await response.text();
-      this.logger.error(`Qdrant upsert failed: ${response.status} ${body}`);
-      throw new Error(`Qdrant upsert failed: ${response.status}`);
-    }
-
-    this.logger.log(
-      `Upsert success: id=${id}, collection=${this.collectionName}`,
-    );
-  }
-
-  // =========================
-  // VECTOR SEARCH
-  // =========================
-  async vectorSearch(
-    vector: number[],
-    filter?: Record<string, unknown>,
-    limit = 10,
-  ): Promise<SearchResult[]> {
-    // validate vector
-    if (!vector || vector.length !== this.vectorSize) {
-      throw new Error(
-        `Invalid vector size: expected ${this.vectorSize}, got ${vector?.length}`,
-      );
-    }
-
-    // ensure collection exists
-    await this.ensureCollection();
-
-    const response = await fetch(
-      `${this.baseUrl}/collections/${this.collectionName}/points/search`,
-      {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({
-          vector,
-          filter,
-          limit,
-          with_payload: true,
-          with_vector: false,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const body = await response.text();
-
-      this.logger.error(
-        `Qdrant search failed: ${response.status} ${body}`,
-      );
-
-      throw new Error(
-        `Qdrant search failed: ${response.status}`,
-      );
-    }
-
-    const body = await response.json();
-
-    return body.result as SearchResult [];
-  }
-  // =========================
-  // ENSURE COLLECTION
-  // =========================
-  private async ensureCollection(): Promise<void> {
-    if (this.collectionReady) return;
-    if (this.creatingCollection) return;
-
-    this.creatingCollection = true;
-
+  private async initializeCollection(): Promise<void> {
     try {
-      const exists = await this.collectionExists();
+      const collections = await this.client.getCollections();
+      const exists = collections.collections.some((c: { name: string; }) => c.name === this.collectionName);
 
       if (!exists) {
-        this.logger.log(
-          `Creating collection=${this.collectionName}, vectorSize=${this.vectorSize}`,
-        );
+        this.logger.log(`Initializing collection: ${this.collectionName}`);
+        await this.client.createCollection(this.collectionName, {
+          vectors: { size: this.vectorSize, distance: 'Cosine' },
+        });
 
-        const response = await fetch(
-          `${this.baseUrl}/collections/${this.collectionName}`,
-          {
-            method: 'PUT',
-            headers: this.headers,
-            body: JSON.stringify({
-              vectors: {
-                size: this.vectorSize,
-                distance: 'Cosine',
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          const body = await response.text();
-          throw new Error(
-            `Qdrant collection creation failed: ${response.status} ${body}`,
-          );
-        }
-
-        this.logger.log(`Collection created: ${this.collectionName}`);
+        // Index cho Geo và Type
+        await this.client.createPayloadIndex(this.collectionName, { field_name: 'location', field_schema: 'geo' });
+        await this.client.createPayloadIndex(this.collectionName, { field_name: 'type', field_schema: 'keyword' });
+        
+        console.log(`[QdrantService] Collection initialized successfully.`);
       }
-
-      this.collectionReady = true;
-    } finally {
-      this.creatingCollection = false;
+    } catch (error) {
+      this.logger.error('[QdrantService] Failed to initialize collection:', error);
     }
   }
 
   // =========================
-  // CHECK COLLECTION EXISTS
+  // VECTOR SEARCH & UPSERT
   // =========================
-  private async collectionExists(): Promise<boolean> {
-    const response = await fetch(
-      `${this.baseUrl}/collections/${this.collectionName}`,
-      {
-        method: 'GET',
-        headers: this.headers,
+  async upsertVector(id: string, vector: number[], payload: Record<string, unknown>): Promise<void> {
+    await this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{ id, vector, payload }],
+    });
+  }
+
+  async vectorSearch(vector: number[], filter?: Record<string, unknown>, limit = 10): Promise<SearchResult[]> {
+    const result = await this.client.search(this.collectionName, {
+      vector,
+      filter: filter as any,
+      limit,
+      with_payload: true,
+    });
+    return result as unknown as SearchResult[];
+  }
+
+  // =========================
+  // GEO & PRODUCT SEARCH (Giữ lại logic của bạn)
+  // =========================
+  async findStoresByRadius(lat: number, lon: number, radiusMeters: number) {
+    return this.findLocationsByRadius(lat, lon, radiusMeters, 'store');
+  }
+
+  async findLocationsByRadius(lat: number, lon: number, radiusMeters: number, type: 'store' | 'service_center') {
+    const result = await this.client.scroll(this.collectionName, {
+      filter: {
+        must: [
+          { key: 'type', match: { value: type } },
+          { key: 'location', geo_radius: { center: { lat, lon }, radius: radiusMeters } },
+        ],
       },
-    );
+      with_payload: true,
+    });
+    return result.points;
+  }
 
-    if (response.ok) return true;
+  async findProductsByRadius(lat: number, lon: number, radiusMeters: number, productId?: string) {
+    const filters: any[] = [
+      { key: 'location', geo_radius: { center: { lat, lon }, radius: radiusMeters } },
+    ];
+    if (productId) filters.push({ key: 'products', match: { value: productId } });
 
-    if (response.status === 404) return false;
-
-    const body = await response.text();
-    throw new Error(
-      `Qdrant check failed: ${response.status} ${body}`,
-    );
+    const result = await this.client.scroll(this.collectionName, {
+      filter: { must: filters },
+      with_payload: true,
+    });
+    return result.points;
   }
 
   // =========================
-  // HEADERS
+  // UPSERT ENTITIES (Giữ lại logic của bạn)
   // =========================
-  private get headers() {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+  async upsertStoreToQdrant(data: any) {
+    return this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{
+        id: data.id,
+        payload: {
+          name: data.name,
+          type: 'store',
+          location: { lat: data.latitude, lon: data.longitude },
+          address: data.address,
+          products: data.products || [],
+        },
+        vector: [],
+      }],
+    });
+  }
 
-    if (this.apiKey) {
-      headers['api-key'] = this.apiKey;
-    }
-
-    return headers;
+  async upsertProduct(data: any) {
+    return this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{
+        id: data.id,
+        payload: {
+          name: data.name,
+          type: 'product',
+          productId: data.productId,
+          metadata: data.metadata || {},
+        },
+        vector: [],
+      }],
+    });
   }
 }

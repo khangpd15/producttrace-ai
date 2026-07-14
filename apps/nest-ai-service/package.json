@@ -16,6 +16,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/microservices": "^11.1.27",
     "@nestjs/platform-express": "^11.0.0",
+    "@qdrant/qdrant-js": "^1.18.0",
     "@sendgrid/mail": "^8.1.6",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
