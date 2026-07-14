@@ -1,8 +1,9 @@
 package response
 
 import (
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type CategoryResponse struct {

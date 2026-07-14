@@ -3,9 +3,7 @@ package router
 import (
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
 	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
@@ -53,15 +51,6 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// CORS middleware — must be registered before all routes
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
 	// Apply global Recovery, RequestID, and Logger middlewares
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
@@ -80,6 +69,11 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
+	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
+	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
+	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
+	SetupPublicRouter(api, deps.PublicHandler)
 	return r
 }
 
@@ -400,5 +394,22 @@ func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo
 	audits.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
 	{
 		audits.GET("", ah.GetLogs)
+	}
+}
+
+// PRODUCT ITEMS
+func SetupProductItemRouter(api *gin.RouterGroup, pih *productItemHandler.ProductItemHandler, uRepo userRepo.UserRepositoryInterface) {
+	productItems := api.Group("/product-items")
+	{
+		productItems.GET("", pih.GetProductItemList)
+		productItems.GET("/:item_code", pih.GetProductItemDetail)
+	}
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
 	}
 }
