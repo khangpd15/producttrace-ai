@@ -123,5 +123,5 @@ func (h *ProductCategoryHandler) GetAllCategories(c *gin.Context) {
 	}
 
 	categoryList := mapper.ToListCategoryResponse(categories, total, filter.Page, filter.Limit)
-	c.JSON(http.StatusOK, response.ResponseSuccess("OK", categoryList.Data))
+	c.JSON(http.StatusOK, response.ResponseSuccess("OK", categoryList))
 }
