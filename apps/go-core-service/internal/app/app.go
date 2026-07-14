@@ -49,6 +49,11 @@ import (
 
 	// Location Module
 
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	//
 	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
@@ -63,6 +68,17 @@ import (
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
 	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
+	// Trace
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
+	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
+	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
+
+	// Middleware
+	middleware "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
+	// Public
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
@@ -98,8 +114,8 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Product category & attribute modules
 	pCategoryRepo := categoryRepo.NewProductCategoryRepository(database)
-	cService := categoryService.NewProductCategoryService(pCategoryRepo)  
-cHandler := categoryHandler.NewProductCategoryHandler(cService)
+	cService := categoryService.NewProductCategoryService(pCategoryRepo)
+	cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pAttrRepo := attributeRepo.NewAttributeRepository(database)
 	pAttrService := attributeService.NewAttributeService(pAttrRepo, pCategoryRepo)
 	pAttrHandler := attributeHandler.NewAttributeHandler(pAttrService)
@@ -142,11 +158,6 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	lService := locationService.NewLocationService(lRepo)
 	lHandler := locationHandler.NewLocationHandler(lService)
 
-	// Product Category module
-	catRepo := categoryRepo.NewProductCategoryRepository(database)
-	catService := productCategoryService.NewProductCategoryService(catRepo)
-	catHandler := productCategoryHandler.NewProductCategoryHandler(catService)
-
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -178,11 +189,11 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
-		CategoryHandler:              cHandler,
+		ProductCategoryHandler:       cHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
 		AuditHandler:                 auditHandler,
-		LocationHandler:              locHandler,
+		LocationHandler:              lHandler,
 		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
 		ProductVariantHandler:        vHandler,
@@ -192,6 +203,8 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
 		ProductItemHandler:           piHandler,
+		OwnershipHandler:             oHandler,
+		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{
