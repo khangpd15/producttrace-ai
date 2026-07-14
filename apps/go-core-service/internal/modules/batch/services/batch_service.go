@@ -30,13 +30,13 @@ var validBatchStatuses = map[string]struct{}{
 }
 
 // validFilterStatuses là tập hợp các status hợp lệ khi lọc danh sách batch (Filter API).
-// Bao gồm DRAFT và LOCKED theo UC-P2-BATCH-04.
+// Bao gồm DRAFT và BLOCKED theo UC-P2-BATCH-04.
 var validFilterStatuses = map[string]struct{}{
 	"DRAFT":    {},
 	"ACTIVE":   {},
 	"EXPIRED":  {},
 	"RECALLED": {},
-	"LOCKED":   {},
+	"BLOCKED":  {},
 }
 
 type BatchService interface {
@@ -100,7 +100,7 @@ func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchL
 	if req.Status != "" && req.Status != "ALL" {
 		if _, ok := validFilterStatuses[req.Status]; !ok {
 			return nil, apperror.NewValidation(
-				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, LOCKED",
+				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, BLOCKED",
 			)
 		}
 

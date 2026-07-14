@@ -78,7 +78,15 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 	}
 
 	if req.Status != "" && req.Status != "ALL" {
-		query = query.Where("b.status = ?", req.Status)
+		if strings.Contains(req.Status, ",") {
+			parts := strings.Split(req.Status, ",")
+			for i, p := range parts {
+				parts[i] = strings.ToUpper(strings.TrimSpace(p))
+			}
+			query = query.Where("b.status IN ?", parts)
+		} else {
+			query = query.Where("b.status = ?", req.Status)
+		}
 	}
 
 	if req.OriginCountry != "" && req.OriginCountry != "ALL" {
@@ -401,7 +409,7 @@ func (r *batchRepository) GetBatchEvents(ctx context.Context, batchID uuid.UUID)
 		Table("events e").
 		Select("e.event_type as event_name, e.description as detail, e.created_at").
 		Joins("JOIN product_items p ON e.product_item_id = p.id").
-		Where("p.batch_id = ? AND e.is_deleted = false", batchID).
+		Where("p.batch_id = ? AND p.is_deleted = false", batchID).
 		Order("e.created_at DESC").
 		Scan(&events).Error
 
@@ -722,14 +730,14 @@ func (r *batchRepository) GetBatchProducts(ctx context.Context, batchID uuid.UUI
 
 	// Struct tạm để Scan — tránh conflict tên cột giữa các bảng.
 	type productRow struct {
-		ItemID         uuid.UUID
-		ItemCode       string
-		SerialNumber   string
-		Status         string
-		CreatedAt      time.Time
-		LocationID     *uuid.UUID
-		LocationName   *string
-		LocationType   *string
+		ItemID       uuid.UUID
+		ItemCode     string
+		SerialNumber string
+		Status       string
+		CreatedAt    time.Time
+		LocationID   *uuid.UUID
+		LocationName *string
+		LocationType *string
 	}
 
 	var rows []productRow
