@@ -50,6 +50,7 @@ func SetupTopology(ch *amqp.Channel) error {
 		OTPVerifiedRK,
 		ProductCreatedRK,
 		TraceExportedRK,
+		OTPOwnership,
 	}
 
 	for _, rk := range routingNestKeys {
@@ -88,8 +89,6 @@ func SetupTopology(ch *amqp.Channel) error {
 	if err != nil {
 		return fmt.Errorf("bind dlq: %w", err)
 	}
-
-	// Declare notification.password.reset queue for NestJS PasswordResetConsumer
 
 	qOtp, err := ch.QueueDeclare(
 		"otp.events", // name

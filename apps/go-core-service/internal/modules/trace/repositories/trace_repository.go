@@ -57,7 +57,7 @@ func NewTraceRepository(db *gorm.DB) TraceRepository {
 
 func (r *traceRepository) FindProductItemByCode(ctx context.Context, code string) (*ProductItemDetail, error) {
 	var detail ProductItemDetail
-	err := r.db.WithContext(ctx).
+	query := r.db.WithContext(ctx).
 		Table("product_items pi").
 		Select(`
 			pi.id as item_id,
@@ -69,10 +69,15 @@ func (r *traceRepository) FindProductItemByCode(ctx context.Context, code string
 			pi.batch_id
 		`).
 		Joins("JOIN product_variants pv ON pi.variant_id = pv.id").
-		Joins("JOIN products p ON pv.product_id = p.id").
-		Where("(pi.item_code = ? OR pi.serial_number = ?) AND pi.is_deleted = false", code, code).
-		Take(&detail).Error
+		Joins("JOIN products p ON pv.product_id = p.id")
 
+	if _, err := uuid.Parse(code); err == nil {
+		query = query.Where("(pi.id = ? OR pi.item_code = ? OR pi.serial_number = ?) AND pi.is_deleted = false", code, code, code)
+	} else {
+		query = query.Where("(pi.item_code = ? OR pi.serial_number = ?) AND pi.is_deleted = false", code, code)
+	}
+
+	err := query.Take(&detail).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil

@@ -3,37 +3,48 @@ package router
 import (
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
+	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	batchHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/batch/handler"
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	productHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/handler"
 	attributeHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute/handler"
 	attributeValueHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/handler"
+	productCategoryHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/handler"
 	productItemHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/handler"
 	variantHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/handler"
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
-	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
 type RouterDependency struct {
 	BatchHandler                 *batchHandler.BatchHandler
 	AuthHandler                  *authHandler.AuthenHandler
+	AuditHandler                 *auditHandler.AuditHandler
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
+	OwnershipHandler             *ownershipHandler.OwnershipHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
+	DashboardHandler             *dashboardHandler.DashboardHandler
+	TraceHandler                 *traceHandler.TraceHandler
+	PublicHandler                *publicHandler.PublicHandler
+	RateLimiter                  *middleware.RateLimiter
+	ProductCategoryHandler       *productCategoryHandler.ProductCategoryHandler
 	ProductVariantHandler        *variantHandler.ProductVariantHandler        // new
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
-	TraceHandler                 *traceHandler.TraceHandler
-	PublicHandler                *publicHandler.PublicHandler
-	RateLimiter                  *middleware.RateLimiter
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -42,24 +53,19 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// CORS is handled centrally by Kong Gateway (see infra/kong/kong.yml).
-	// // We disable Go's CORS middleware here to prevent duplicate CORS headers and 403 Forbidden on production origins.
-	// r.Use(middleware.CORSMiddleware())
-	// r.Use(cors.New(cors.Config{
-	// 	AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
-	// 	AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-	// 	AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
-	// 	AllowCredentials: true,
-	// 	MaxAge:           12 * time.Hour,
-	// }))
+	// CORS middleware — must be registered before all routes
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// Apply global Recovery, RequestID, and Logger middlewares
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())
-
-	// Static serving of exported certificates/files
-	r.Static("/storage", "./storage")
 
 	api := r.Group("/api")
 
@@ -67,22 +73,14 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupUserRouter(api, deps.UserHandler, deps.UserRepo)
 	SetupBatchRouter(api, deps.BatchHandler, deps.UserRepo)
 	SetupProductRouter(api, deps.ProductHandler, deps.UserRepo)
-	// SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupLocationRouter(api, deps.LocationHandler, deps.UserRepo)
 	SetupProductVariantRouter(api, deps.ProductVariantHandler, deps.UserRepo)               // new
 	SetupProductAttributeRouter(api, deps.ProductAttributeHandler, deps.UserRepo)           // new
 	SetupProductAttributeValueRouter(api, deps.ProductAttributeValueHandler, deps.UserRepo) // new
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
-	SetupPublicRouter(api, deps.PublicHandler)
+	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
+	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	return r
-}
-
-// PUBLIC
-func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
-	public := api.Group("/public")
-	{
-		public.GET("/verify", ph.VerifyQR)
-	}
 }
 
 // AUTH
@@ -95,8 +93,6 @@ func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 		auth.POST("/resend-otp", ah.ResendOTP)
 		auth.POST("/refresh", ah.RefreshToken)
 		auth.POST("/logout", ah.Logout)
-		auth.POST("/forgot-password", ah.ForgotPassword)
-		auth.POST("/reset-password", ah.ResetPassword)
 	}
 }
 
@@ -110,6 +106,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
+		profileGroup.GET("/search", uh.SearchUsers)
 	}
 
 	// Admin-only management routes (requires ADMIN role)
@@ -121,6 +118,8 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 		adminGroup.DELETE("/:id", uh.DeleteUser)
 		adminGroup.GET("", uh.ListUsers)
 		adminGroup.GET("/:id", uh.GetUserDetail)
+		adminGroup.PUT("/:id/lock", uh.LockAccount)
+		adminGroup.PUT("/:id/unlock", uh.UnlockAccount)
 	}
 }
 
@@ -141,15 +140,6 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
 		protectedBatches.GET("/search", bh.SearchBatch)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
-		// UC-P2-BATCH-05: Xem sản phẩm trong lô — Admin, Staff, Dealer
-		protectedBatches.GET("/:id/products", bh.GetBatchProducts)
-
-		// UC-P2-BATCH-06: Xem lịch sử thay đổi lô — chỉ Admin và Staff (không có Dealer/Customer)
-		historyGroup := protectedBatches.Group("")
-		historyGroup.Use(middleware.RoleMiddleware("ADMIN", "STAFF"))
-		{
-			historyGroup.GET("/:id/history", bh.GetBatchHistory)
-		}
 
 		// MANAGER and WAREHOUSE can export batch
 		exportGroup := protectedBatches.Group("")
@@ -205,6 +195,45 @@ func SetupProductRouter(api *gin.RouterGroup, ph *productHandler.ProductHandler,
 	}
 }
 
+// OWNERSHIP
+func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHandler, uRepo userRepo.UserRepositoryInterface) {
+	ownerships := api.Group("/ownership")
+	ownerships.Use(middleware.AuthMiddleware(uRepo))
+
+	// Customer routes: chỉ cần QR code, thông tin lấy từ profile JWT
+	customerGroup := ownerships.Group("")
+	customerGroup.Use(middleware.RoleMiddleware("CUSTOMER"))
+	{
+		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
+		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+	}
+
+	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
+	adminGroup := ownerships.Group("/admin")
+	adminGroup.Use(middleware.RoleMiddleware("ADMIN"))
+	{
+		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
+		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+	}
+
+	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
+	ownerships.GET("/detail/:product_item_id", oh.GetOwnershipDetail) // updated to avoid conflict with /:id
+
+	// CRUD Extensions
+	ownerships.PUT("/:id/transfer", oh.TransferOwnership)
+	ownerships.DELETE("/:id", oh.DeleteOwnership)
+	ownerships.GET("", oh.SearchOwnerships)
+}
+
+// WARRANTY CLAIM
+func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyClaims := api.Group("/warranty-claims")
+	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
+	{
+		warrantyClaims.POST("", wch.CreateWarrantyClaim)
+	}
+}
+
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
@@ -220,6 +249,17 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
+	}
+}
+
+func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHandler, uRepo userRepo.UserRepositoryInterface) {
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+	{
+		dashboard.GET("/stats", dh.GetStats)
+		dashboard.GET("/activities", dh.GetActivities)
+		dashboard.GET("/alerts", dh.GetAlerts)
+		dashboard.GET("/charts/production-sales", dh.GetProductionSalesChart)
 	}
 }
 
@@ -338,4 +378,32 @@ func SetupTraceRouter(api *gin.RouterGroup, th *traceHandler.TraceHandler, rl *m
 		protected.POST("/export/excel", th.ExportExcel)
 	}
 
+}
+
+// PRODUCT CATEGORY
+func SetupProductCategoryRouter(api *gin.RouterGroup, ch *productCategoryHandler.ProductCategoryHandler, uRepo userRepo.UserRepositoryInterface) {
+	categories := api.Group("/categories")
+	{
+		// Public browse routes
+		categories.GET("", ch.GetAllCategories)
+		categories.GET("/:id", ch.GetCategoryByID)
+
+		// Protected management routes (requires ADMIN or STAFF role)
+		protected := categories.Group("")
+		protected.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+		{
+			protected.POST("", ch.CreateCategory)
+			protected.PUT("/:id", ch.UpdateCategory)
+			protected.DELETE("/:id", ch.DeleteCategory)
+		}
+	}
+}
+
+// AUDIT
+func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo userRepo.UserRepositoryInterface) {
+	audits := api.Group("/audits")
+	audits.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
+	{
+		audits.GET("", ah.GetLogs)
+	}
 }

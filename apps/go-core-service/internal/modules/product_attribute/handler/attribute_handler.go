@@ -99,7 +99,8 @@ func (h *AttributeHandler) ListAttributes(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.ResponseSuccess("OK", mapper.ToListAttributeResponse(attrs, total, req.Page, req.Limit)))
+	attrList := mapper.ToListAttributeResponse(attrs, total, req.Page, req.Limit)
+	c.JSON(http.StatusOK, response.ResponseSuccess("OK", attrList.Data))
 }
 
 func (h *AttributeHandler) DeleteAttribute(c *gin.Context) {

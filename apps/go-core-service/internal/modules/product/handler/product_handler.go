@@ -37,8 +37,17 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// Mock user ID tạm thời
-	createdBy := uuid.New()
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, response.ResponseError("Unauthorized", nil))
+		return
+	}
+
+	createdBy, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, response.ResponseError("Invalid user id in context", nil))
+		return
+	}
 
 	product, err := h.productService.CreateProduct(c.Request.Context(), req, createdBy)
 	if err != nil {

@@ -13,9 +13,11 @@ type ProductCategoryRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductCategory, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	ExistsByCode(ctx context.Context, code string) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string) (bool, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
 	ExistsByNameExcludeID(ctx context.Context, name string, id uuid.UUID) (bool, error)
 	ExistsByCodeExcludeID(ctx context.Context, code string, id uuid.UUID) (bool, error)
+	ExistsBySlugExcludeID(ctx context.Context, slug string, id uuid.UUID) (bool, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	IsInUse(ctx context.Context, id uuid.UUID) (bool, error)
 	FindAll(ctx context.Context, filter CategoryFilter) ([]entities.ProductCategory, int64, error)
@@ -69,6 +71,24 @@ func (r *productCategoryRepository) ExistsByCode(ctx context.Context, code strin
 	err := r.db.WithContext(ctx).
 		Model(&entities.ProductCategory{}).
 		Where("code = ?", code).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *productCategoryRepository) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.ProductCategory{}).
+		Where("slug = ?", slug).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *productCategoryRepository) ExistsBySlugExcludeID(ctx context.Context, slug string, id uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.ProductCategory{}).
+		Where("slug = ? AND id != ?", slug, id).
 		Count(&count).Error
 	return count > 0, err
 }

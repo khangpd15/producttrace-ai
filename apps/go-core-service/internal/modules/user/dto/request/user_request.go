@@ -22,3 +22,11 @@ type UpdateProfileRequest struct {
 	Phone    *string `json:"phone"`
 	Avatar   *string `json:"avatar"`
 }
+
+type SearchUserRequest struct {
+	Keyword string `form:"keyword" binding:"max=255"`
+	Role    string `form:"role" binding:"omitempty,oneof=ADMIN CUSTOMER STAFF DEALER"`
+	Status  string `form:"status" binding:"omitempty,oneof=ACTIVE BANNED SUSPENDED PENDING"`
+	Page    int    `form:"page"`
+	Limit   int    `form:"limit"`
+}

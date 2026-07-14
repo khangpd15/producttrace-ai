@@ -10,8 +10,10 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/entities"
 	valRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_attribute_value/repositories"
+	productRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/dbctx"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +31,7 @@ type attributeValueService struct {
 	valRepo     valRepos.AttributeValueRepository
 	variantRepo variantRepos.ProductVariantRepository
 	attrRepo    repositories.AttributeRepository
+	productRepo productRepos.ProductRepository
 }
 
 func NewAttributeValueService(
@@ -36,30 +39,46 @@ func NewAttributeValueService(
 	valRepo valRepos.AttributeValueRepository,
 	variantRepo variantRepos.ProductVariantRepository,
 	attrRepo repositories.AttributeRepository,
+	productRepo productRepos.ProductRepository,
 ) AttributeValueService {
 	return &attributeValueService{
 		db:          db,
 		valRepo:     valRepo,
 		variantRepo: variantRepo,
 		attrRepo:    attrRepo,
+		productRepo: productRepo,
 	}
 }
 
 func (s *attributeValueService) AssignAttributes(ctx context.Context, variantID uuid.UUID, req request.BulkCreateAttributeValuesRequest) ([]entities.AttributeValue, error) {
-	// 1. Verify variant exists
-	variantExists, err := s.variantRepo.ExistsByID(ctx, variantID)
+	// 1. Verify variant exists — lấy full entity để biết ProductID, phục vụ
+	// bước kiểm tra category ở dưới.
+	variant, err := s.variantRepo.FindByID(ctx, variantID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.NewNotFound("product variant")
+		}
 		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check product variant"))
 	}
-	if !variantExists {
-		return nil, apperror.NewNotFound("product variant")
+
+	// 1b. Lấy category của product cha (thông qua variant) để đối chiếu
+	// với category của từng attribute được gán bên dưới.
+	product, err := s.productRepo.FindByID(ctx, variant.ProductID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperror.NewNotFound("product")
+		}
+		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to load product of variant"))
+	}
+	if product.CategoryID == nil {
+		return nil, apperror.NewBadRequest("Product has no category, cannot assign attributes")
 	}
 
 	createdVals := make([]entities.AttributeValue, 0, len(req.Items))
 
 	// Run in transaction
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		txCtx := valRepos.InjectTx(ctx, tx)
+		txCtx := dbctx.InjectTx(ctx, tx)
 
 		// To prevent duplicate attributes within the same batch list
 		seenAttributes := make(map[uuid.UUID]bool)
@@ -72,12 +91,18 @@ func (s *attributeValueService) AssignAttributes(ctx context.Context, variantID 
 			seenAttributes[item.AttributeID] = true
 
 			// 2. Verify attribute exists
-			attrExists, err := s.attrRepo.ExistsByID(txCtx, item.AttributeID)
+			attrEntity, err := s.attrRepo.FindByID(txCtx, item.AttributeID)
 			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return apperror.NewNotFound("attribute")
+				}
 				return apperror.Wrap(err, apperror.NewInternal("Failed to check attribute"))
 			}
-			if !attrExists {
-				return apperror.NewNotFound("attribute")
+
+			// 2b. Attribute phải thuộc đúng category của product cha (qua variant),
+			// tránh gán nhầm attribute của category khác cho variant này.
+			if attrEntity.CategoryID != *product.CategoryID {
+				return apperror.NewBadRequest("Attribute does not belong to this product's category: " + item.AttributeID.String())
 			}
 
 			// 3. Check if variant already has value assigned for this attribute

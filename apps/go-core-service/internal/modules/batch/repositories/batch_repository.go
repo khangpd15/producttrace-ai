@@ -47,12 +47,6 @@ type BatchRepository interface {
 	// --- Constraint checks (dùng trước khi delete) ---
 	ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error)
 	ExistsEvents(ctx context.Context, batchID uuid.UUID) (bool, error)
-
-	// --- History & Products (UC-P2-BATCH-05, UC-P2-BATCH-06) ---
-	// GetBatchHistory trả về lịch sử thay đổi từ bảng audit_logs JOIN users.
-	GetBatchHistory(ctx context.Context, batchID uuid.UUID, page, limit int) ([]response.BatchHistoryItemDTO, error)
-	// GetBatchProducts trả về danh sách product items có pagination, filter và search.
-	GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error)
 }
 
 type batchRepository struct {
@@ -562,15 +556,18 @@ func (r *batchRepository) ExportBatch(ctx context.Context, batchID uuid.UUID, ex
 		// (without selecting specific items), and there's no batch_events table.
 		// We insert an audit_log record for the export action.
 
-		// "audit_logs" schema from migration: id, action, entity, entity_id, user_id, old_data, new_data, ip_address, created_at
+		// Wait, user says "Create history/event. Create audit log."
+		// Since we don't have batch_id in events and user said status is just reference and event might not be strictly needed for batch,
+		// we will just insert an audit_log to represent the history.
+		// "audit_logs" schema from migration: id, action, entity_type, entity_id, user_id, old_values, new_values, ip_address, created_at
 		auditLog := map[string]interface{}{
-			"id":         uuid.New(),
-			"action":     "EXPORT_BATCH",
-			"entity":     "BATCH",
-			"entity_id":  batch.ID.String(),
-			"user_id":    currentUserID.String(),
-			"new_data":   fmt.Sprintf(`{"exported_quantity": %d, "destination": "%s", "operator": "%s", "notes": "%s"}`, exportReq.Quantity, exportReq.DestinationLocation, exportReq.OperatorName, exportReq.Notes),
-			"created_at": time.Now(),
+			"id":          uuid.New(),
+			"action":      "EXPORT_BATCH",
+			"entity_type": "BATCH",
+			"entity_id":   batch.ID.String(),
+			"user_id":     currentUserID.String(),
+			"new_values":  fmt.Sprintf(`{"exported_quantity": %d, "destination": "%s", "operator": "%s", "notes": "%s"}`, exportReq.Quantity, exportReq.DestinationLocation, exportReq.OperatorName, exportReq.Notes),
+			"created_at":  time.Now(),
 		}
 
 		if err := tx.Table("audit_logs").Create(auditLog).Error; err != nil {
@@ -909,9 +906,9 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 		}() + "]"
 
 		auditLog := map[string]interface{}{
-			"id":      uuid.New(),
-			"action":  "EXPORT_BATCHES",
-			"entity":  "BATCH",
+			"id":     uuid.New(),
+			"action": "EXPORT_BATCHES",
+			"entity": "BATCH",
 			// entity_id: dùng batch_id đầu tiên (log tổng hợp)
 			"entity_id":  req.BatchIDs[0],
 			"user_id":    currentUserID.String(),
