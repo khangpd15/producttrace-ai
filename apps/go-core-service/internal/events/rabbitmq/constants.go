@@ -10,7 +10,8 @@ const (
 
 	// User routing keys
 	UserRegisteredRK    = "user.registered"
-	UserPasswordForgotRK = "user.password_forgot"
+	UserVerifiedRK      = "user.verified"
+	UserPasswordResetRK = "user.password_reset_requested"
 	UserLoggedInRK      = "user.logged_in"
 
 	// Product routing keys
@@ -19,10 +20,9 @@ const (
 	ProductDeletedRK = "product.deleted"
 
 	// Batch routing keys
-	BatchCreatedRK       = "batch.created"
-	BatchUpdatedRK       = "batch.updated"
-	BatchDeletedRK       = "batch.deleted"
-	BatchHistoryViewedRK = "batch.history_viewed"
+	BatchCreatedRK = "batch.created"
+	BatchUpdatedRK = "batch.updated"
+	BatchDeletedRK = "batch.deleted"
 
 	// Owner routing keys
 	OwnerCreatedRK = "owner.created"
@@ -34,11 +34,11 @@ const (
 
 	// Trace routing keys
 	TraceCreatedRK = "trace.created"
-	TraceExportedRK = "trace.exported"
 
 	// Notification routing keys
 	NotificationCreatedRK = "notification.created"
 	OTPRegisterUserRK     = "otp.registered"
-	OTPVerifiedRK         = "otp.verified"
-	OTPForgotRK           = "otp.forgot"
+	OTPVerifiedRK   = "otp.verified"
+	OTPForgotRK     = "otp.forgot"
+
 )

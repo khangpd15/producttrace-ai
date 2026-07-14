@@ -47,6 +47,17 @@ func (s *productCategoryService) CreateCategory(ctx context.Context, req request
 		return nil, apperror.NewConflict("Category code already exists")
 	}
 
+	// Validate slug unique nếu có truyền lên
+	if req.Slug != nil && *req.Slug != "" {
+		exists, err = s.categoryRepo.ExistsBySlug(ctx, *req.Slug)
+		if err != nil {
+			return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check category slug"))
+		}
+		if exists {
+			return nil, apperror.NewConflict("Category slug already exists")
+		}
+	}
+
 	// Validate parent tồn tại nếu có
 	if req.ParentID != nil {
 		exists, err = s.categoryRepo.ExistsByID(ctx, *req.ParentID)
@@ -62,8 +73,10 @@ func (s *productCategoryService) CreateCategory(ctx context.Context, req request
 		ID:          uuid.New(),
 		Name:        req.Name,
 		Code:        &req.Code,
+		Slug:        req.Slug,
 		ParentID:    req.ParentID,
 		Description: req.Description,
+		IconURL:     req.Icon,
 		IsActive:    req.Status == "ACTIVE",
 	}
 
@@ -108,6 +121,20 @@ func (s *productCategoryService) UpdateCategory(ctx context.Context, id uuid.UUI
 		category.Code = req.Code
 	}
 
+	// Validate slug unique (trừ chính nó)
+	if req.Slug != nil {
+		if *req.Slug != "" {
+			exists, err := s.categoryRepo.ExistsBySlugExcludeID(ctx, *req.Slug, id)
+			if err != nil {
+				return nil, apperror.Wrap(err, apperror.NewInternal("Failed to check category slug"))
+			}
+			if exists {
+				return nil, apperror.NewConflict("Category slug already exists")
+			}
+		}
+		category.Slug = req.Slug
+	}
+
 	// Validate parent tồn tại nếu có
 	if req.ParentID != nil {
 		exists, err := s.categoryRepo.ExistsByID(ctx, *req.ParentID)
@@ -122,6 +149,10 @@ func (s *productCategoryService) UpdateCategory(ctx context.Context, id uuid.UUI
 
 	if req.Description != nil {
 		category.Description = req.Description
+	}
+
+	if req.Icon != nil {
+		category.IconURL = req.Icon
 	}
 
 	if req.Status != nil {
