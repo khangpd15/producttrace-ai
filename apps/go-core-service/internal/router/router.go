@@ -191,6 +191,17 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 	}
 }
 
+func SetupDashboardRouter(api *gin.RouterGroup, dh *dashboardHandler.DashboardHandler, uRepo userRepo.UserRepositoryInterface) {
+	dashboard := api.Group("/dashboard")
+	dashboard.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN", "STAFF"))
+	{
+		dashboard.GET("/stats", dh.GetStats)
+		dashboard.GET("/activities", dh.GetActivities)
+		dashboard.GET("/alerts", dh.GetAlerts)
+		dashboard.GET("/charts/production-sales", dh.GetProductionSalesChart)
+	}
+}
+
 // PRODUCT VARIANT
 func SetupProductVariantRouter(api *gin.RouterGroup, vh *variantHandler.ProductVariantHandler, uRepo userRepo.UserRepositoryInterface) {
 	variants := api.Group("/variants")
