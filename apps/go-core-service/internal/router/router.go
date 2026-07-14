@@ -80,6 +80,13 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupTraceRouter(api, deps.TraceHandler, deps.RateLimiter, deps.UserRepo)
 	SetupAuditRouter(api, deps.AuditHandler, deps.UserRepo)
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
+
+	// Register missing routers
+	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
+	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
+	SetupPublicRouter(api, deps.PublicHandler)
+
 	return r
 }
 
@@ -405,5 +412,13 @@ func SetupAuditRouter(api *gin.RouterGroup, ah *auditHandler.AuditHandler, uRepo
 	audits.Use(middleware.AuthMiddleware(uRepo), middleware.RoleMiddleware("ADMIN"))
 	{
 		audits.GET("", ah.GetLogs)
+	}
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
 	}
 }

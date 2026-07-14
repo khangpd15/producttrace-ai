@@ -157,7 +157,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	lRepo := locationRepo.NewLocationRepository(database)
 	lService := locationService.NewLocationService(lRepo)
 	lHandler := locationHandler.NewLocationHandler(lService)
-
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
@@ -188,10 +187,10 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
+		AuthHandler:                  aHandler,
+		UserHandler:                  uHandler,
 		ProductHandler:               pHandler,
 		ProductCategoryHandler:       cHandler,
-		UserHandler:                  uHandler,
-		AuthHandler:                  aHandler,
 		AuditHandler:                 auditHandler,
 		LocationHandler:              lHandler,
 		DashboardHandler:             dbHandler,
