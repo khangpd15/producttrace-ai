@@ -137,6 +137,37 @@ func (hb *BatchHandler) ExportBatch(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("export batch successfully", nil))
 }
 
+// ExportBatches xử lý POST /api/v1/batches/export (bulk export).
+// Xuất toàn bộ ProductItems của nhiều batch trong 1 transaction.
+// All-or-nothing: nếu 1 batch lỗi → rollback toàn bộ.
+func (hb *BatchHandler) ExportBatches(c *gin.Context) {
+	var req request.ExportBatchesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	currentUserIDStr := utils.GetCurrentUserID(c)
+	if currentUserIDStr == "" {
+		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
+		return
+	}
+	currentUserID, err := uuid.Parse(currentUserIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
+		return
+	}
+
+	result, err := hb.service.ExportBatches(c.Request.Context(), &req, currentUserID)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("export batches successfully", result))
+}
+
+
 func (hb *BatchHandler) CreateBatch(c *gin.Context) {
 	var req request.CreateBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

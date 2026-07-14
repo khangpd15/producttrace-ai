@@ -38,8 +38,11 @@ type BatchRepository interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	// SoftDelete set is_deleted = true; GORM tự set updated_at.
 	SoftDelete(ctx context.Context, id uuid.UUID) error
-	// ExportBatch handle export logic with transaction
+	// ExportBatch handle export logic with transaction (legacy single batch)
 	ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error
+	// ExportBatches xuất nhiều batch trong một transaction (bulk export).
+	// All-or-nothing: rollback toàn bộ nếu bất kỳ batch nào lỗi.
+	ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error)
 
 	// --- Constraint checks (dùng trước khi delete) ---
 	ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error)
@@ -789,6 +792,148 @@ func (r *batchRepository) GetBatchProducts(ctx context.Context, batchID uuid.UUI
 			TotalRecords: int(totalRecords),
 			TotalPages:   totalPages,
 		},
+	}, nil
+}
+
+// ExportBatches xuất nhiều batch trong 1 DB transaction (all-or-nothing).
+//
+// Với mỗi batchID:
+//  1. Validate batch tồn tại, chưa deleted.
+//  2. Lấy toàn bộ ProductItems chưa bị xóa của batch đó.
+//  3. Validate batch có ProductItems.
+//  4. Update ProductItem.current_location_id và status → "IN_TRANSIT".
+//  5. Tạo Event (event_type=BATCH_EXPORTED) cho từng ProductItem.
+//
+// Sau khi duyệt hết:
+//  6. Ghi 1 audit_log tổng hợp cho toàn bộ batch_ids.
+//
+// Nếu bất kỳ bước nào lỗi → rollback toàn bộ transaction.
+func (r *batchRepository) ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error) {
+	var totalExportedItems int
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		destLocationID, parseErr := uuid.Parse(req.DestinationLocationID)
+		if parseErr != nil {
+			return apperror.NewValidation("destination_location_id must be a valid UUID")
+		}
+
+		// Validate destination location tồn tại
+		var locationCount int64
+		if err := tx.Table("locations").Where("id = ? AND is_active = true", destLocationID).Count(&locationCount).Error; err != nil {
+			return apperror.WrapDBError(err, "location")
+		}
+		if locationCount == 0 {
+			return apperror.NewNotFound("destination location not found or inactive")
+		}
+
+		now := time.Now().UTC()
+
+		for _, batchIDStr := range req.BatchIDs {
+			batchID, parseErr := uuid.Parse(batchIDStr)
+			if parseErr != nil {
+				return apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", batchIDStr))
+			}
+
+			// 1. Validate batch tồn tại và chưa bị xóa
+			var batch entities.Batch
+			if err := tx.Where("id = ? AND is_deleted = false", batchID).First(&batch).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return apperror.NewNotFound(fmt.Sprintf("batch %s not found", batchIDStr))
+				}
+				return apperror.WrapDBError(err, "batch")
+			}
+
+			// 2. Lấy tất cả ProductItems của batch này (chưa xóa)
+			type itemRow struct {
+				ID uuid.UUID
+			}
+			var items []itemRow
+			if err := tx.Table("product_items").
+				Select("id").
+				Where("batch_id = ? AND is_deleted = false", batchID).
+				Scan(&items).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			// 3. Validate batch có ít nhất 1 ProductItem
+			if len(items) == 0 {
+				return apperror.NewBadRequest(fmt.Sprintf("batch %s has no product items to export", batch.BatchCode))
+			}
+
+			// 4. Collect item IDs để bulk update
+			itemIDs := make([]uuid.UUID, 0, len(items))
+			for _, it := range items {
+				itemIDs = append(itemIDs, it.ID)
+			}
+
+			// 5. Bulk update: set current_location_id và status cho tất cả items
+			if err := tx.Table("product_items").
+				Where("id IN ?", itemIDs).
+				Updates(map[string]interface{}{
+					"current_location_id": destLocationID,
+					"status":              "IN_TRANSIT",
+					"updated_at":          now,
+				}).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			// 6. Tạo Event cho từng ProductItem
+			events := make([]map[string]interface{}, 0, len(itemIDs))
+			for _, itemID := range itemIDs {
+				events = append(events, map[string]interface{}{
+					"id":              uuid.New(),
+					"product_item_id": itemID,
+					"batch_id":        batchID,
+					"actor_id":        currentUserID,
+					"location_id":     destLocationID,
+					"event_type":      "WAREHOUSE_OUT",
+					"title":           "Xuất kho",
+					"description":     fmt.Sprintf("Batch %s exported to location %s", batch.BatchCode, req.DestinationLocationID),
+					"created_at":      now,
+				})
+			}
+			if err := tx.Table("events").Create(&events).Error; err != nil {
+				return apperror.WrapDBError(err, "events")
+			}
+
+			totalExportedItems += len(itemIDs)
+		}
+
+		// 7. Ghi 1 audit_log tổng hợp cho toàn bộ operation
+		batchIDsJSON := "[" + func() string {
+			quoted := make([]string, len(req.BatchIDs))
+			for i, id := range req.BatchIDs {
+				quoted[i] = `"` + id + `"`
+			}
+			return strings.Join(quoted, ",")
+		}() + "]"
+
+		auditLog := map[string]interface{}{
+			"id":      uuid.New(),
+			"action":  "EXPORT_BATCHES",
+			"entity":  "BATCH",
+			// entity_id: dùng batch_id đầu tiên (log tổng hợp)
+			"entity_id":  req.BatchIDs[0],
+			"user_id":    currentUserID.String(),
+			"new_data":   fmt.Sprintf(`{"batch_ids":%s,"destination_location_id":"%s","exported_item_count":%d,"note":"%s"}`, batchIDsJSON, req.DestinationLocationID, totalExportedItems, req.Note),
+			"created_at": now,
+		}
+		if err := tx.Table("audit_logs").Create(&auditLog).Error; err != nil {
+			return apperror.WrapDBError(err, "audit_log")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ExportBatchesResponse{
+		ExportedBatchCount:    len(req.BatchIDs),
+		ExportedItemCount:     totalExportedItems,
+		BatchIDs:              req.BatchIDs,
+		DestinationLocationID: req.DestinationLocationID,
 	}, nil
 }
 

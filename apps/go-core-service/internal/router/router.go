@@ -155,8 +155,13 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 		exportGroup := protectedBatches.Group("")
 		exportGroup.Use(middleware.RoleMiddleware("MANAGER", "WAREHOUSE", "ADMIN")) // usually admin has all access
 		{
+			// Bulk export: POST /batches/export (new) — xuất nhiều batch, toàn bộ ProductItems, all-or-nothing.
+			// Đặt trước /:id/export để Gin ưu tiên static segment.
+			exportGroup.POST("/export", bh.ExportBatches)
+			// Legacy single-batch export: POST /batches/:id/export — giữ lại để backward compat.
 			exportGroup.POST("/:id/export", bh.ExportBatch)
 		}
+
 
 		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")

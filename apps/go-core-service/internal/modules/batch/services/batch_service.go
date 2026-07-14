@@ -47,6 +47,12 @@ type BatchService interface {
 	CreateBatch(ctx context.Context, req *request.CreateBatchRequest, currenUserID uuid.UUID) (*response.BatchCreateResponse, error)
 	ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([]byte, error)
 	ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error
+	// ExportBatches xuất nhiều batch cùng lúc trong 1 transaction (bulk).
+	// Backend tự lấy toàn bộ ProductItems của mỗi Batch.
+	// Trước khi gọi repo, service validate:
+	//   - Mỗi batch_id phải là UUID hợp lệ.
+	//   - destination_location_id phải là UUID hợp lệ.
+	ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error)
 	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
 	// UpdateBatchStatus cập nhật duy nhất field status của một Batch.
 	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
@@ -269,6 +275,46 @@ func (sb *batchService) ExportBatchQR(ctx context.Context, batchID uuid.UUID) ([
 
 func (sb *batchService) ExportBatch(ctx context.Context, batchID uuid.UUID, exportReq *request.ExportBatchRequest, currentUserID uuid.UUID) error {
 	return sb.repo.ExportBatch(ctx, batchID, exportReq, currentUserID)
+}
+
+// ExportBatches xuất nhiều batch trong một lần (bulk export).
+// Business rules:
+//   - Mỗi batch_id phải là UUID hợp lệ.
+//   - destination_location_id phải là UUID hợp lệ.
+//   - Toàn bộ được xử lý trong 1 transaction (repo).
+//   - Sau khi thành công: publish event batch.exported lên RabbitMQ (fire-and-forget).
+func (sb *batchService) ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error) {
+	// Validate tất cả batch_ids là UUID hợp lệ trước khi gọi repo.
+	for _, idStr := range req.BatchIDs {
+		if _, err := uuid.Parse(idStr); err != nil {
+			return nil, apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", idStr))
+		}
+	}
+
+	// Validate destination_location_id là UUID hợp lệ.
+	if _, err := uuid.Parse(req.DestinationLocationID); err != nil {
+		return nil, apperror.NewValidation("destination_location_id must be a valid UUID")
+	}
+
+	// Gọi repo thực hiện toàn bộ trong 1 transaction.
+	result, err := sb.repo.ExportBatches(ctx, req, currentUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Publish event batch.exported (fire-and-forget — lỗi publish không block response).
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     rabbitmq.BatchExportedRK,
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       result,
+	}
+	_ = sb.publisher.Publish(event) // fire-and-forget
+
+	return result, nil
 }
 
 func (sb *batchService) GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error) {

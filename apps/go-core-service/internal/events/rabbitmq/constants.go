@@ -23,6 +23,8 @@ const (
 	BatchUpdatedRK       = "batch.updated"
 	BatchDeletedRK       = "batch.deleted"
 	BatchHistoryViewedRK = "batch.history_viewed"
+	BatchExportedRK      = "batch.exported"
+
 
 	// Owner routing keys
 	OwnerCreatedRK = "owner.created"

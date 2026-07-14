@@ -52,6 +52,11 @@ import (
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
+
+	// Location Module
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
 )
 
 type App struct {
@@ -121,12 +126,18 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	pubService := publicService.NewPublicService(productItemsRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
 
+	// Initialize Location Module
+	locRepo := locationRepo.NewLocationRepository(database)
+	locService := locationService.NewLocationService(locRepo)
+	locHandler := locationHandler.NewLocationHandler(locService)
+
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
 		ProductHandler:               pHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
 		UserRepo:                     uRepo,
+		LocationHandler:              locHandler,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
