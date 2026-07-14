@@ -35,6 +35,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 
 	// Auth Module
+	auditHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/audit/handler"
 	authHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/handler"
 	authService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/authen/service"
 
@@ -45,6 +46,12 @@ import (
 
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
+
+	// Dashboard Module
+	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
+	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
+	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
 
@@ -60,12 +67,14 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Audit Log (shared service — inject vào mọi module cần ghi log)
 	auditRepo := auditlog.NewAuditLogRepository(database)
 	auditService := auditlog.NewAuditLogService(auditRepo)
+	auditHandler := auditHandler.NewAuditHandler(auditService)
 
 	productItemsRepo := productItemsRepo.NewProductItemRepository(database)
 
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
-	uService := userService.NewUserService(uRepo, pub)
+	pRepo := productRepo.NewProductRepository(database)
+	uService := userService.NewUserService(uRepo, pRepo, pub)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
@@ -73,7 +82,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	bRepo := batchRepo.NewBatchRepository(database)
 
 	// Product module
-	pRepo := productRepo.NewProductRepository(database)
 	pVariantRepo := variantRepo.NewProductVariantRepository(database)
 
 	// Product category & attribute modules
@@ -109,8 +117,28 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
+	// Initialize Location Module
+	locRepo := locationRepo.NewLocationRepository(database)
+	locService := locationService.NewLocationService(locRepo)
+	locHandler := locationHandler.NewLocationHandler(locService)
+
+	// Initialize Dashboard Module
+	dbRepo := dashboardRepo.NewDashboardRepository(database)
+	dbService := dashboardService.NewDashboardService(dbRepo)
+	dbHandler := dashboardHandler.NewDashboardHandler(dbService)
+
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
+
+	// Initialize Trace Module
+	tRepo := traceRepo.NewTraceRepository(database)
+	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
+	tHandler := traceHandler.NewTraceHandler(tService)
+	rateLimiter := middleware.NewRateLimiter(redisClient)
+
+	// Initialize Public Module
+	pubService := publicService.NewPublicService(productItemsRepo)
+	pubHandler := publicHandler.NewPublicHandler(pubService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
@@ -118,10 +146,16 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 		CategoryHandler:              cHandler,
 		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
+		AuditHandler:                 auditHandler,
+		LocationHandler:              locHandler,
+		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
 		ProductVariantHandler:        vHandler,
 		ProductAttributeHandler:      pAttrHandler,
 		ProductAttributeValueHandler: pAttrValHandler,
+		TraceHandler:                 tHandler,
+		PublicHandler:                pubHandler,
+		RateLimiter:                  rateLimiter,
 		ProductItemHandler:           piHandler,
 	})
 
