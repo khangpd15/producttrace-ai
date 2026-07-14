@@ -13,9 +13,11 @@ type ProductCategoryRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductCategory, error)
 	ExistsByName(ctx context.Context, name string) (bool, error)
 	ExistsByCode(ctx context.Context, code string) (bool, error)
+	ExistsBySlug(ctx context.Context, slug string) (bool, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
 	ExistsByNameExcludeID(ctx context.Context, name string, id uuid.UUID) (bool, error)
 	ExistsByCodeExcludeID(ctx context.Context, code string, id uuid.UUID) (bool, error)
+	ExistsBySlugExcludeID(ctx context.Context, slug string, id uuid.UUID) (bool, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	IsInUse(ctx context.Context, id uuid.UUID) (bool, error)
 	FindAll(ctx context.Context, filter CategoryFilter) ([]entities.ProductCategory, int64, error)
@@ -26,10 +28,10 @@ type productCategoryRepository struct {
 }
 
 type CategoryFilter struct {
-    Search    *string
-    Status    *string
-    Page      int
-    Limit     int
+	Search *string
+	Status *string
+	Page   int
+	Limit  int
 }
 
 func NewProductCategoryRepository(db *gorm.DB) ProductCategoryRepository {
@@ -69,6 +71,24 @@ func (r *productCategoryRepository) ExistsByCode(ctx context.Context, code strin
 	err := r.db.WithContext(ctx).
 		Model(&entities.ProductCategory{}).
 		Where("code = ?", code).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *productCategoryRepository) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.ProductCategory{}).
+		Where("slug = ?", slug).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *productCategoryRepository) ExistsBySlugExcludeID(ctx context.Context, slug string, id uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entities.ProductCategory{}).
+		Where("slug = ? AND id != ?", slug, id).
 		Count(&count).Error
 	return count > 0, err
 }
@@ -117,29 +137,28 @@ func (r *productCategoryRepository) IsInUse(ctx context.Context, id uuid.UUID) (
 	return count > 0, err
 }
 
-
 func (r *productCategoryRepository) FindAll(ctx context.Context, filter CategoryFilter) ([]entities.ProductCategory, int64, error) {
-    var categories []entities.ProductCategory
-    var total int64
+	var categories []entities.ProductCategory
+	var total int64
 
-    query := r.db.WithContext(ctx).Model(&entities.ProductCategory{})
+	query := r.db.WithContext(ctx).Model(&entities.ProductCategory{})
 
-    if filter.Search != nil {
-        query = query.Where("name ILIKE ?", "%"+*filter.Search+"%")
-    }
-    if filter.Status != nil {
-        isActive := *filter.Status == "ACTIVE"
-        query = query.Where("is_active = ?", isActive)
-    }
+	if filter.Search != nil {
+		query = query.Where("name ILIKE ?", "%"+*filter.Search+"%")
+	}
+	if filter.Status != nil {
+		isActive := *filter.Status == "ACTIVE"
+		query = query.Where("is_active = ?", isActive)
+	}
 
-    query.Count(&total)
+	query.Count(&total)
 
-    offset := (filter.Page - 1) * filter.Limit
-    err := query.
-        Preload("Children").
-        Offset(offset).
-        Limit(filter.Limit).
-        Find(&categories).Error
+	offset := (filter.Page - 1) * filter.Limit
+	err := query.
+		Preload("Children").
+		Offset(offset).
+		Limit(filter.Limit).
+		Find(&categories).Error
 
-    return categories, total, err
+	return categories, total, err
 }

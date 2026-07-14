@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
-import { ProductCreatedConsumer } from './messaging/consumers/product-created.consumer';
-import { UserRegisteredConsumer } from './messaging/consumers/user-registered.consumer';
-import { PasswordResetConsumer } from './messaging/consumers/password-reset.consumer';
+import { SyncModule } from './modules/sync/sync.module';
+import { EmbeddingModule } from './modules/embedding/embedding.module';
+
 import { MailModule } from './modules/mail/mail.module';
 import { MockController } from './mock.controller';
 import { AuthModule } from './auth/auth.module';
@@ -11,17 +11,27 @@ import { GeoEventConsumer } from './messaging/consumers/geo-event.consumer';
 import { QdrantModule } from './integrations/qdrant/qdrant.module';
 import { GeoSearchModule } from './modules/geo-search/geo-search.module';
 
+// RabbitMQ của Email
+import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
+import { GeoSearchModule } from './modules/geo-search/geo-search.module';
+import { QdrantModule } from './integrations/qdrant/qdrant.module';
+
 @Module({
   imports: [
     GeoSearchModule,
     QdrantModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '../../.env',
+      envFilePath: '.env',
     }),
+    SyncModule,
+    EmbeddingModule,
     MailModule,
     AuthModule,
+    RabbitMQModule,
+    GeoSearchModule, 
+    QdrantModule,
   ],
-  controllers: [ProductCreatedConsumer, UserRegisteredConsumer, PasswordResetConsumer, GeoEventConsumer, MockController],
+  controllers: [MockController],
 })
 export class AppModule {}

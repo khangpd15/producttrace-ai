@@ -5,7 +5,7 @@ import { USER_REPOSITORY } from './repositories/user.repository';
 import { JsonUserRepository } from './repositories/json-user.repository';
 import { PASSWORD_RESET_REPOSITORY } from './repositories/password-reset.repository';
 import { JsonPasswordResetRepository } from './repositories/json-password-reset.repository';
-import { MailModule } from '../mail/mail.module';
+import { MailModule } from '../modules/mail/mail.module';
 
 @Module({
   imports: [MailModule],

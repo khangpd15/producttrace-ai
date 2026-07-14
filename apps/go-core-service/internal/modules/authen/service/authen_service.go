@@ -2,14 +2,18 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/consumer"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
@@ -20,118 +24,97 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
 
+const (
+	asyncPublishTimeout = 4 * time.Second
+)
+
 type AuthenServiceInterface interface {
 	RegisterUser(ctx context.Context, email, phone, fullName, password string) (*UserEntity.User, error)
 	LoginUser(ctx context.Context, email, password string) (accessToken string, refreshToken string, err error)
 	VerifyOTP(ctx context.Context, email, otp string) error
 	RefreshToken(ctx context.Context, refreshToken string) (newAccessToken string, newRefreshToken string, err error)
 	Logout(ctx context.Context, refreshToken string) error
+	ReSendOTP(ctx context.Context, email string) error
+	ConsumerOTPEvent(ctx context.Context) error
 }
 
 type AuthenService struct {
 	userRepository UserRepository.UserRepositoryInterface
 	cache          cache.Cache
 	publisher      *publisher.Publisher
+	consumer       *consumer.Consumer
+}
+
+type otpEventEnvelope struct {
+	Pattern string `json:"pattern"`
+	Data    struct {
+		EventType     string          `json:"event_type"`
+		EventVersion  string          `json:"event_version"`
+		CorrelationID string          `json:"correlation_id"`
+		Payload       json.RawMessage `json:"payload"`
+	} `json:"data"`
+}
+
+type userRegisteredPayload struct {
+	Email    string `json:"email"`
+	FullName string `json:"full_name"`
+	Phone    string `json:"phone,omitempty"`
+	OTPCode  string `json:"otp_code,omitempty"`
 }
 
 func NewAuthenService(
 	userRepository UserRepository.UserRepositoryInterface,
 	cache cache.Cache,
 	publisher *publisher.Publisher,
+	consumers ...*consumer.Consumer,
 ) AuthenServiceInterface {
+	var authConsumer *consumer.Consumer
+	if len(consumers) > 0 {
+		authConsumer = consumers[0]
+	}
+
 	return &AuthenService{
 		userRepository: userRepository,
 		cache:          cache,
 		publisher:      publisher,
+		consumer:       authConsumer,
 	}
 }
 
 func (s *AuthenService) RegisterUser(ctx context.Context, email, phone, fullName, password string) (*UserEntity.User, error) {
-	// OTP Rate limiting: 5 OTPs per 15 minutes
-	limitKey := fmt.Sprintf("otp_limit:%s", email)
-	limitVal, err := s.cache.Get(ctx, limitKey)
-	if err == nil {
-		// Key exists, check count and expiry
-		var count int
-		var expiry int64
-		_, fmtErr := fmt.Sscanf(limitVal, "%d:%d", &count, &expiry)
-		if fmtErr == nil {
-			if time.Now().Unix() > expiry {
-				// Expired, reset limit
-				expiry = time.Now().Add(15 * time.Minute).Unix()
-				newVal := fmt.Sprintf("1:%d", expiry)
-				_ = s.cache.Set(ctx, limitKey, newVal, 15*time.Minute)
-			} else if count >= 5 {
-				return nil, apperror.NewTooManyRequests("Too many OTP requests. Please try again later.")
-			} else {
-				// Increment count
-				count++
-				newVal := fmt.Sprintf("%d:%d", count, expiry)
-				rem := time.Duration(expiry-time.Now().Unix()) * time.Second
-				if rem < 1*time.Second {
-					rem = 1 * time.Second
-				}
-				_ = s.cache.Set(ctx, limitKey, newVal, rem)
-			}
-		}
-	} else if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
-		// No limit key exists, create new one
-		expiry := time.Now().Add(15 * time.Minute).Unix()
-		val := fmt.Sprintf("1:%d", expiry)
-		_ = s.cache.Set(ctx, limitKey, val, 15*time.Minute)
-	}
 
-	// Check if user already exists
-	exists, err := s.userRepository.CheckEmailExists(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, apperror.NewConflict("User already exists")
-	}
-
-	// Hash password
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create new user
-	newUser := UserEntity.NewUser(email, phone, fullName, hashedPassword, string(UserEntity.RoleCustomer))
-	savedUser, err := s.userRepository.CreateUser(ctx, newUser)
+	user := UserEntity.NewUser(email, phone, fullName, hashedPassword, string(UserEntity.RoleCustomer))
+	savedUser, err := s.userRepository.CreateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate OTP
-	otpCode, err := utils.GenerateOTP()
-	if err != nil {
-		return nil, err
-	}
+	correlationID := uuid.New().String()
 
-	// Save OTP to Redis with 5m TTL
-	err = s.cache.Set(ctx, fmt.Sprintf("otp:email:%s", email), otpCode, 5*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-
-	// Publish event to RabbitMQ
 	event := types.Event{
 		EventID:       uuid.New().String(),
 		EventType:     rabbitmq.UserRegisteredRK,
 		EventVersion:  "1.0.0",
 		Timestamp:     time.Now().UTC(),
 		Producer:      "go-core-service",
-		CorrelationID: uuid.New().String(),
+		CorrelationID: correlationID,
 		Payload: map[string]interface{}{
 			"email":     savedUser.Email,
 			"full_name": savedUser.FullName,
-			"otp_code":  otpCode,
+			"phone":     savedUser.Phone,
 		},
 	}
 
-	// Publish user.registered event
-	_ = s.publisher.Publish(event)
+	if err := s.publisher.PublishWithContext(ctx, event); err != nil {
+		return nil, apperror.NewInternal("publish user.registered failed")
+	}
+
+	log.Printf("[REGISTER] user created email=%s", email)
 
 	return savedUser, nil
 }
@@ -145,7 +128,6 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 		return "", "", apperror.NewUnauthorized("Invalid credentials")
 	}
 
-	// Check if status is pending verification
 	if user.Status == UserEntity.StatusPending {
 		return "", "", apperror.NewValidation("Please verify your account via OTP first")
 	}
@@ -154,39 +136,66 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 		return "", "", apperror.NewUnauthorized("Account is not active")
 	}
 
-	// Compare passwords
 	if !utils.ComparePassword(user.PasswordHash, password) {
 		return "", "", apperror.NewUnauthorized("Invalid credentials")
 	}
 
-	// Generate JWT Access Token
 	accessToken, err := utils.GenerateAccessToken(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
 		return "", "", err
 	}
 
-	// Generate Refresh Token
 	rawToken := uuid.NewString()
 	hashedToken := utils.HashToken(rawToken)
 
-	key := fmt.Sprintf(
-		"refresh_token:%s:%s",
-		user.ID.String(),
-		hashedToken,
-	)
-
-	err = s.cache.Set(
-		ctx,
-		key,
-		user.ID.String(),
-		7*24*time.Hour,
-	)
+	key := fmt.Sprintf("refresh_token:%s:%s", user.ID.String(), hashedToken)
+	err = s.cache.Set(ctx, key, user.ID.String(), 7*24*time.Hour)
 	if err != nil {
 		return "", "", err
 	}
 
 	clientRefreshToken := fmt.Sprintf("%s.%s", user.ID.String(), rawToken)
 	return accessToken, clientRefreshToken, nil
+}
+
+func (s *AuthenService) ReSendOTP(ctx context.Context, email string) error {
+
+	user, err := s.userRepository.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return apperror.NewNotFound("User not found")
+	}
+
+	otpCode, err := utils.GenerateOTP()
+	if err != nil {
+		return err
+	}
+
+	if err := s.cache.Set(ctx, fmt.Sprintf("otp:email:%s", email), otpCode, 5*time.Minute); err != nil {
+		return err
+	}
+
+	event := types.Event{
+		EventID:       uuid.New().String(),
+		EventType:     rabbitmq.OTPRegisterUserRK,
+		EventVersion:  "1.0.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.New().String(),
+		Payload: map[string]interface{}{
+			"email":     user.Email,
+			"full_name": user.FullName,
+			"otp_code":  otpCode,
+		},
+	}
+
+	if err := s.publisher.PublishWithContext(ctx, event); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error {
@@ -203,10 +212,8 @@ func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error 
 		return apperror.NewValidation("Incorrect OTP code")
 	}
 
-	// OTP matches, delete it
 	s.cache.Delete(ctx, otpKey)
 
-	// Fetch user
 	user, err := s.userRepository.GetUserByEmail(ctx, email)
 	if err != nil {
 		return err
@@ -215,25 +222,29 @@ func (s *AuthenService) VerifyOTP(ctx context.Context, email, otp string) error 
 		return apperror.NewNotFound("User not found")
 	}
 
-	// Update user status to ACTIVE
 	err = s.userRepository.UpdateUserStatus(ctx, user.ID.String(), UserEntity.StatusActive)
 	if err != nil {
 		return err
 	}
 
-	// Publish user.verified event
 	event := types.Event{
 		EventID:       uuid.New().String(),
-		EventType:     rabbitmq.UserVerifiedRK,
+		EventType:     rabbitmq.OTPVerifiedRK,
 		EventVersion:  "1.0.0",
 		Timestamp:     time.Now().UTC(),
 		Producer:      "go-core-service",
 		CorrelationID: uuid.New().String(),
 		Payload: map[string]interface{}{
-			"email": user.Email,
+			"email":     user.Email,
+			"full_name": user.FullName,
 		},
 	}
-	_ = s.publisher.Publish(event)
+
+	ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
+	defer cancel()
+	if err := s.publisher.PublishWithContext(ctxPub, event); err != nil {
+		log.Printf("[VerifyOTP] failed to publish otp.verified event: %v", err)
+	}
 
 	return nil
 }
@@ -246,7 +257,6 @@ func (s *AuthenService) RefreshToken(ctx context.Context, oldRefreshToken string
 	userID := parts[0]
 	rawToken := parts[1]
 
-	// Check if token has been blacklisted (during logout)
 	blacklistKey := fmt.Sprintf("blacklist:refresh:%s", rawToken)
 	blacklisted, err := s.cache.Get(ctx, blacklistKey)
 	if err == nil && blacklisted == "true" {
@@ -264,10 +274,8 @@ func (s *AuthenService) RefreshToken(ctx context.Context, oldRefreshToken string
 		return "", "", err
 	}
 
-	// Delete old refresh token (Token Rotation)
 	s.cache.Delete(ctx, tokenKey)
 
-	// Fetch user to verify active status
 	user, err := s.userRepository.GetUserByID(ctx, storedUserID)
 	if err != nil {
 		return "", "", err
@@ -276,18 +284,15 @@ func (s *AuthenService) RefreshToken(ctx context.Context, oldRefreshToken string
 		return "", "", apperror.NewUnauthorized("User is inactive or not found")
 	}
 
-	// Generate new Access Token
 	newAccessToken, err := utils.GenerateAccessToken(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
 		return "", "", err
 	}
 
-	// Generate new Refresh Token
 	newRawToken := uuid.NewString()
 	newHashedToken := utils.HashToken(newRawToken)
 	newTokenKey := fmt.Sprintf("refresh_token:%s:%s", user.ID.String(), newHashedToken)
 
-	// Store new Refresh Token in Redis
 	err = s.cache.Set(ctx, newTokenKey, user.ID.String(), 7*24*time.Hour)
 	if err != nil {
 		return "", "", err
@@ -308,10 +313,8 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 	hashedToken := utils.HashToken(rawToken)
 	tokenKey := fmt.Sprintf("refresh_token:%s:%s", userID, hashedToken)
 
-	// Delete from active refresh tokens
 	_ = s.cache.Delete(ctx, tokenKey)
 
-	// Blacklist the token identifier (rawToken) for 7 days (maximum lifetime of a refresh token)
 	blacklistKey := fmt.Sprintf("blacklist:refresh:%s", rawToken)
 	err := s.cache.Set(ctx, blacklistKey, "true", 7*24*time.Hour)
 	if err != nil {
@@ -319,4 +322,69 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 	}
 
 	return nil
+}
+
+
+func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
+
+	return s.consumer.StartConsumer(&consumer.ConsumerSpec{
+		Queue:    "otp.events",
+		Prefetch: 10,
+
+		Handler: func(ctx context.Context, msg amqp.Delivery) error {
+
+			var envelope otpEventEnvelope
+			if err := json.Unmarshal(msg.Body, &envelope); err != nil {
+				return err
+			}
+
+			// FIX: use Data.EventType properly
+			if envelope.Data.EventType != rabbitmq.UserRegisteredRK {
+				return nil
+			}
+
+			var payload userRegisteredPayload
+			if err := json.Unmarshal(envelope.Data.Payload, &payload); err != nil {
+				return err
+			}
+
+			if payload.Email == "" {
+				return errors.New("missing email")
+			}
+
+			otpCode, err := utils.GenerateOTP()
+			if err != nil {
+				return err
+			}
+
+			if err := s.cache.Set(ctx,
+				fmt.Sprintf("otp:email:%s", payload.Email),
+				otpCode,
+				5*time.Minute,
+			); err != nil {
+				return err
+			}
+
+			// OTP → AI EVENT
+			event := types.Event{
+				EventID:       uuid.New().String(),
+				EventType:     rabbitmq.OTPRegisterUserRK,
+				EventVersion:  "1.0.0",
+				Timestamp:     time.Now().UTC(),
+				Producer:      "otp-worker",
+				CorrelationID: envelope.Data.CorrelationID,
+				Payload: map[string]interface{}{
+					"email":     payload.Email,
+					"full_name": payload.FullName,
+					"phone":     payload.Phone,
+					"otp_code":  otpCode,
+				},
+			}
+
+			ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
+			defer cancel()
+
+			return s.publisher.PublishWithContext(ctxPub, event)
+		},
+	})
 }

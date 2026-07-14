@@ -1,53 +1,40 @@
-import { Controller, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
-
+import { Injectable, Logger } from '@nestjs/common';
+import { BaseConsumer } from './base.consumer';
 import { RABBITMQ } from '../rabbitmq/rabbitmq.constants';
 import { MailService } from '../../modules/mail/mail.service';
-import { ConfigService } from '@nestjs/config';
+import { Event } from '../types/event.interface';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
-export interface PasswordResetRequestedEvent {
-  email: string;
-  name: string;
-  resetToken: string;
-  resetLink?: string;
-  [key: string]: any;
+export class PasswordResetPayload {
+  @IsEmail({}, { message: 'email must be a valid email address' })
+  @IsNotEmpty({ message: 'email is required' })
+  email!: string;
+
+  @IsString({ message: 'full_name must be a string' })
+  @IsNotEmpty({ message: 'full_name is required' })
+  full_name!: string;
+
+  @IsString({ message: 'otp_code must be a string' })
+  @IsNotEmpty({ message: 'otp_code is required' })
+  otp_code!: string;
 }
 
-@Controller()
-export class PasswordResetConsumer {
-  private readonly logger = new Logger(PasswordResetConsumer.name);
+@Injectable()
+export class PasswordResetConsumer extends BaseConsumer<PasswordResetPayload> {
+  protected readonly logger = new Logger(PasswordResetConsumer.name);
+  protected readonly queueName = RABBITMQ.QUEUES.NOTIFICATION; // legacy — no longer active
+  protected readonly payloadClass = PasswordResetPayload;
 
-  constructor(
-    private readonly mailService: MailService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly emailService: MailService) {
+    super();
+  }
 
-  @EventPattern(RABBITMQ.ROUTING_KEYS.PASSWORD_RESET_REQUESTED)
-  async handle(
-    @Payload() event: PasswordResetRequestedEvent,
-    @Ctx() context: RmqContext,
-  ) {
-    const channel = context.getChannelRef();
-    const message = context.getMessage();
-
-    try {
-      this.logger.log(`Received auth.password_reset_requested event for: ${event.email}`);
-      
-      const templateId = this.configService.get<string>('RESET_PASSWORD_TEMPLATE_ID') || '';
-      
-      // Send the forgot password template email
-      await this.mailService.sendTemplateMail(event.email, templateId, {
-        name: event.name,
-        resetToken: event.resetToken,
-        resetLink: event.resetLink,
-      });
-
-      // Acknowledge message processing is successful
-      channel.ack(message);
-    } catch (error) {
-      this.logger.error('Error processing auth.password_reset_requested event', error);
-      // Negative acknowledgement
-      channel.nack(message, false, false);
-    }
+  /**
+   * Business logic implementation for password.reset event.
+   * Calls the email service to send a password reset OTP.
+   */
+  protected async processPayload(payload: PasswordResetPayload, event: Event<PasswordResetPayload>): Promise<void> {
+    this.logger.log(`Processing password reset event for email: ${payload.email}`);
+    await this.emailService.sendPasswordReset(payload.email, payload.full_name, payload.otp_code);
   }
 }

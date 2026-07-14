@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { QdrantController } from './qdrant.controller'; 
-import { QdrantService } from './qdrant.service'; 
+import { GeoSearchController } from './geo-search.controller';
+import { GeoSearchService } from './geo-search.service';
+import { QdrantModule } from '../../integrations/qdrant/qdrant.module';
 
 @Module({
-    imports: [],
-  controllers: [QdrantController], 
-  providers: [QdrantService],
-  exports: [QdrantService],
+  imports: [QdrantModule],
+  controllers: [GeoSearchController],
+  providers: [GeoSearchService],
 })
-export class QdrantModule {}
+export class GeoSearchModule {}

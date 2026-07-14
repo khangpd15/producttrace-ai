@@ -24,11 +24,25 @@ func New(mgr RabbitMQPublisher) *Publisher {
 }
 
 // Publish serializes and publishes an event to RabbitMQ via the manager.
+// It wraps the event in a NestJS-compatible format (with 'pattern' and 'data' fields).
 func (p *Publisher) Publish(event types.Event) error {
-	body, err := json.Marshal(event)
+	return p.PublishWithContext(context.Background(), event)
+}
+
+// PublishWithContext serializes and publishes an event using the provided context.
+func (p *Publisher) PublishWithContext(ctx context.Context, event types.Event) error {
+	nestMsg := struct {
+		Pattern string      `json:"pattern"`
+		Data    types.Event `json:"data"`
+	}{
+		Pattern: event.EventType,
+		Data:    event,
+	}
+
+	body, err := json.Marshal(nestMsg)
 	if err != nil {
 		return err
 	}
 
-	return p.mgr.Publish(context.Background(), event.EventType, body)
+	return p.mgr.Publish(ctx, event.EventType, body)
 }

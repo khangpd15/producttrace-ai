@@ -3,9 +3,9 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	UserEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/entity"
 	Response "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
-	"github.com/gin-gonic/gin"
 )
 
 func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {

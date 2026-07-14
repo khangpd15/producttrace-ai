@@ -282,7 +282,10 @@ func (m *Manager) publishOnce(ctx context.Context, routingKey string, body []byt
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent, // Make message persistent
 			Timestamp:    time.Now().UTC(),
-			Body:         body,
+			Headers: amqp.Table{
+				"pattern": routingKey,
+			},
+			Body: body,
 		},
 	)
 	if err != nil {
@@ -323,4 +326,13 @@ func (m *Manager) Close() error {
 	}
 
 	return err
+}
+func (m *Manager) ChannelConnection() *amqp.Connection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.conn
+}
+
+func (m *Manager) Context() context.Context {
+	return m.ctx
 }

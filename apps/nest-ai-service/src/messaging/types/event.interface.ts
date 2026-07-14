@@ -1,9 +1,9 @@
 export interface Event<T = unknown> {
-  eventId: string;
-  eventType: string;
-  eventVersion: string;
+  event_id: string;
+  event_type: string;
+  event_version: string;
   timestamp: string;
   producer: string;
-  correlationId: string;
+  correlation_id: string;
   payload: T;
 }

@@ -1,5 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { SearchGeoDto } from './dto/search-geo.dto';
+import { SearchStoreDto } from './dto/search-store.dto';
+import { SearchServiceCenterDto } from './dto/search-service-center.dto';
 import { QdrantService } from '../../integrations/qdrant/qdrant.service';
 
 @Injectable()
@@ -7,7 +8,7 @@ export class GeoSearchService {
   constructor(private readonly qdrantService: QdrantService) { }
 
   // HÀM: Tính khoảng cách giữa 2 tọa độ (Trả về số mét)
-  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371e3; // Bán kính Trái Đất tính bằng mét
     const phi1 = (lat1 * Math.PI) / 180;
     const phi2 = (lat2 * Math.PI) / 180;
@@ -36,9 +37,9 @@ export class GeoSearchService {
         if (!payload || !payload.location) return null;
 
         const storeLat = payload.location.lat;
-        const storeLon = payload.location.lon;
+        const storeLng = payload.location.lon;
 
-        const distanceInMeters = this.calculateDistance(userLat, userLng, storeLat, storeLon);
+        const distanceInMeters = this.calculateDistance(userLat, userLng, storeLat, storeLng);
 
         const distanceNote =
           distanceInMeters >= 1000
@@ -62,10 +63,10 @@ export class GeoSearchService {
   }
 
   // 1. Tìm tất cả cửa hàng gần người dùng nhất
-  async searchLocations(searchGeoDto: SearchGeoDto) {
+  async searchLocations(searchStoreDto: SearchStoreDto) {
     try {
-      console.log('[GeoSearchService] Processing search stores:', searchGeoDto);
-      const { lat, lng, radius = 20000 } = searchGeoDto;
+      console.log('[GeoSearchService] Processing search stores:', searchStoreDto);
+      const { lat, lng, radius = 20000 } = searchStoreDto;
 
       const rawStores = await this.qdrantService.findStoresByRadius(lat, lng, radius);
 
@@ -86,10 +87,10 @@ export class GeoSearchService {
   }
 
   // 2. Tìm trung tâm bảo hành gần người dùng nhất
-  async searchServiceCenters(searchGeoDto: SearchGeoDto) {
+  async searchServiceCenters(searchServiceCenterDto: SearchServiceCenterDto) {
     try {
-      console.log('[GeoSearchService] Processing service center search:', searchGeoDto);
-      const { lat, lng, radius = 10000 } = searchGeoDto;
+      console.log('[GeoSearchService] Processing service center search:', searchServiceCenterDto);
+      const { lat, lng, radius = 20000 } = searchServiceCenterDto;
 
       const rawCenters = await this.qdrantService.findLocationsByRadius(lat, lng, radius, 'service_center');
 
@@ -110,10 +111,10 @@ export class GeoSearchService {
   }
 
   // 3. Tìm cửa hàng có sản phẩm cụ thể gần người dùng nhất
-  async searchProductsNearby(searchGeoDto: SearchGeoDto) {
+  async searchProductsNearby(searchStoreDto: SearchStoreDto) {
     try {
-      console.log('[GeoSearchService] Processing products nearby search:', searchGeoDto);
-      const { lat, lng, radius = 20000, keyword } = searchGeoDto;
+      console.log('[GeoSearchService] Processing products nearby search:', searchStoreDto);
+      const { lat, lng, radius = 20000, keyword } = searchStoreDto;
 
       const rawLocations = await this.qdrantService.findProductsByRadius(lat, lng, radius, keyword);
 
