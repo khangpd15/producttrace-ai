@@ -59,6 +59,11 @@ import (
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
 
+	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
+	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
+	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
+	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
+
 	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
@@ -102,7 +107,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
 	pRepo := productRepo.NewProductRepository(database)
-	uService := userService.NewUserService(uRepo, pRepo, pub)
+	uService := userService.NewUserService(uRepo, pRepo, pub, auditService)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	frontendURL := os.Getenv("FRONTEND_URL")
@@ -185,6 +190,14 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
 	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
+	// Warranty Module
+	wRepo := warrantyRepo.NewWarrantyRepository(database)
+	wService := warrantyService.NewWarrantyService(wRepo)
+	wHandler := warrantyHandler.NewWarrantyHandler(wService)
+
+	// AutoMigrate Warranty
+	_ = database.AutoMigrate(&warrantyEntity.Warranty{})
+
 	// Initialize Public Module
 	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wcRepo, lRepo, uRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
@@ -207,6 +220,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		RateLimiter:                  rateLimiter,
 		ProductItemHandler:           piHandler,
 		OwnershipHandler:             oHandler,
+		WarrantyHandler:              wHandler,
 		WarrantyClaimHandler:         wcHandler,
 	})
 
