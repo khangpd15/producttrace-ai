@@ -29,7 +29,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      MODEL_NAME: "bge-m3"
+      MODEL_NAME: "BAAI/bge-m3"
 
   nest-ai-service:
     build:
@@ -45,7 +45,7 @@ services:
         condition: service_started
 
     environment:
-      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672"
+      RABBITMQ_URL: "amqp://admin:admin123@rabbitmq:5672/%2F"
       EMBEDDING_SERVICE_URL: "http://embedding-service:8000"
       QDRANT_URL: "http://qdrant:6333"
 

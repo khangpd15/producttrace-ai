@@ -14,10 +14,12 @@ export class QdrantService {
   private readonly collectionName = 'product_embeddings';
 
   // ✅ FIXED VECTOR SIZE (quan trọng cho production)
-  private readonly vectorSize = 768; // đổi theo model của bạn
+  private readonly vectorSize = 1024; // đổi theo model BGE-M3
 
   private collectionReady = false;
-  private creatingCollection = false;
+  // Singleton Promise: concurrent callers all await the same creation task
+  // instead of returning early (the previous bool-flag race condition).
+  private ensureCollectionPromise: Promise<void> | null = null;
 
   constructor(private readonly configService: ConfigService) {
     const isDocker = fs.existsSync('/.dockerenv');
@@ -129,47 +131,102 @@ export class QdrantService {
   // ENSURE COLLECTION
   // =========================
   private async ensureCollection(): Promise<void> {
+    // Fast path — collection already confirmed ready
     if (this.collectionReady) return;
-    if (this.creatingCollection) return;
 
-    this.creatingCollection = true;
+    // Singleton Promise pattern: if creation is already in progress, all
+    // concurrent callers await the same Promise instead of returning early
+    // (the previous bool-flag approach caused a race condition where the
+    // second caller skipped creation and immediately tried to upsert into a
+    // non-existent collection).
+    if (!this.ensureCollectionPromise) {
+      this.ensureCollectionPromise = this.doEnsureCollection().finally(() => {
+        this.ensureCollectionPromise = null;
+      });
+    }
 
-    try {
-      const exists = await this.collectionExists();
+    return this.ensureCollectionPromise;
+  }
 
-      if (!exists) {
-        this.logger.log(
-          `Creating collection=${this.collectionName}, vectorSize=${this.vectorSize}`,
+  private async doEnsureCollection(): Promise<void> {
+    const exists = await this.collectionExists();
+
+    if (!exists) {
+      this.logger.log(
+        `Creating collection=${this.collectionName}, vectorSize=${this.vectorSize}`,
+      );
+
+      const response = await fetch(
+        `${this.baseUrl}/collections/${this.collectionName}`,
+        {
+          method: 'PUT',
+          headers: this.headers,
+          body: JSON.stringify({
+            vectors: {
+              size: this.vectorSize,
+              distance: 'Cosine',
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(
+          `Qdrant collection creation failed: ${response.status} ${body}`,
         );
-
-        const response = await fetch(
-          `${this.baseUrl}/collections/${this.collectionName}`,
-          {
-            method: 'PUT',
-            headers: this.headers,
-            body: JSON.stringify({
-              vectors: {
-                size: this.vectorSize,
-                distance: 'Cosine',
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          const body = await response.text();
-          throw new Error(
-            `Qdrant collection creation failed: ${response.status} ${body}`,
-          );
-        }
-
-        this.logger.log(`Collection created: ${this.collectionName}`);
       }
 
-      this.collectionReady = true;
-    } finally {
-      this.creatingCollection = false;
+      this.logger.log(`Collection created: ${this.collectionName}`);
+    } else {
+      await this.validateCollectionConfig();
     }
+
+    this.collectionReady = true;
+  }
+
+  private async validateCollectionConfig(): Promise<void> {
+    const response = await fetch(
+      `${this.baseUrl}/collections/${this.collectionName}`,
+      {
+        method: 'GET',
+        headers: this.headers,
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `Failed to validate Qdrant collection: ${response.status} ${body}`,
+      );
+    }
+
+    const info = await response.json();
+    // Qdrant v1.x response: result.config.params.vectors.{size, distance}
+    const vectorsCfg =
+      info?.result?.vectors ??
+      info?.result?.config?.params?.vectors;
+
+    const currentSize: number | undefined =
+      vectorsCfg?.size ?? vectorsCfg?.vector_size;
+
+    // Normalise to lowercase for safe comparison ('Cosine' vs 'cosine')
+    const currentDistance: string = String(
+      vectorsCfg?.distance ?? vectorsCfg?.distance_metric ?? '',
+    ).toLowerCase();
+
+    if (currentSize !== this.vectorSize || currentDistance !== 'cosine') {
+      throw new Error(
+        `Qdrant collection ${this.collectionName} config mismatch: ` +
+        `expected size=${this.vectorSize}, distance=Cosine but found ` +
+        `size=${currentSize}, distance=${currentDistance}. ` +
+        `Delete and recreate the collection before upserting vectors.`,
+      );
+    }
+
+    this.logger.log(
+      `[QDRANT] Collection config validated: size=${currentSize}, distance=${currentDistance}`,
+    );
   }
 
   // =========================

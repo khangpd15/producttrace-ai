@@ -30,6 +30,8 @@ export const RABBITMQ = {
     EMBEDDING: 'embedding_queue',
 
     EMBEDDING_SYNC: 'embedding_sync_queue',
+
+    EMBEDDING_REINDEX: 'embedding_reindex_queue',
   },
 
   DLX: {
@@ -41,6 +43,8 @@ export const RABBITMQ = {
     NOTIFICATION: 'ai.events.failed',
 
     EMBEDDING: 'embedding.failed',
+
+    EMBEDDING_REINDEX: 'embedding.reindex.failed',
   },
 
   /**
