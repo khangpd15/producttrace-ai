@@ -13,11 +13,14 @@ import (
 )
 
 type IOwnershipService interface {
-	CustomerRequestOTP(ctx context.Context, req dto.CustomerRequestOTPReq, userID uuid.UUID) error
+	CustomerRequestOTP(ctx context.Context, req dto.CustomerRequestOTPReq, userID uuid.UUID) (*uuid.UUID, error)
 	CustomerVerifyAndRegister(ctx context.Context, req dto.CustomerVerifyAndRegisterReq, userID uuid.UUID) (*entity.Ownership, error)
 
-	AdminRequestOTP(ctx context.Context, req dto.AdminRequestOTPReq, adminID uuid.UUID) error
+	AdminRequestOTP(ctx context.Context, req dto.AdminRequestOTPReq, adminID uuid.UUID) (*uuid.UUID, error)
 	AdminVerifyAndRegister(ctx context.Context, req dto.AdminVerifyAndRegisterReq, adminID uuid.UUID) (*entity.Ownership, error)
+
+	ApproveOwnership(ctx context.Context, ownershipID uuid.UUID, adminID uuid.UUID) error
+	RejectOwnership(ctx context.Context, ownershipID uuid.UUID, adminID uuid.UUID) error
 
 	// UC-P1-OWNER-02: Xem thông tin chi tiết quyền sở hữu
 	GetOwnershipDetail(ctx context.Context, productItemID uuid.UUID) (*dto.OwnershipDetailRes, error)
@@ -50,24 +53,62 @@ func NewOwnershipService(
 }
 
 // ---------------------------------------------------------------------------
+// VALIDATION HELPERS
+// ---------------------------------------------------------------------------
+
+func (s *OwnershipService) ensureItemAvailableForRegistration(ctx context.Context, productItemID uuid.UUID) error {
+	filterActive := repository.SearchFilter{
+		ProductItemIDs:  []uuid.UUID{productItemID},
+		OwnershipStatus: string(entity.OwnershipStatusActive),
+		Limit:           1,
+	}
+	activeList, _, err := s.repo.SearchOwnerships(ctx, filterActive)
+	if err == nil && len(activeList) > 0 {
+		return apperror.NewValidation("Thiết bị này đã có người đăng ký sở hữu")
+	}
+
+	filterPending := repository.SearchFilter{
+		ProductItemIDs:  []uuid.UUID{productItemID},
+		OwnershipStatus: string(entity.OwnershipStatusPending),
+		Limit:           1,
+	}
+	pendingList, _, err := s.repo.SearchOwnerships(ctx, filterPending)
+	if err == nil && len(pendingList) > 0 {
+		return apperror.NewValidation("Thiết bị này đang chờ duyệt đăng ký sở hữu")
+	}
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
 // CUSTOMER FLOW
 // ---------------------------------------------------------------------------
 
-func (s *OwnershipService) CustomerRequestOTP(ctx context.Context, req dto.CustomerRequestOTPReq, userID uuid.UUID) error {
+func (s *OwnershipService) CustomerRequestOTP(ctx context.Context, req dto.CustomerRequestOTPReq, userID uuid.UUID) (*uuid.UUID, error) {
 	email, _, _, err := s.userProvider.GetUserEmailByID(ctx, userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	productID, err := s.productPort.FindProductByQR(ctx, req.QRCode)
 	if err != nil {
-		return err
-	}
-	if err := s.productPort.ValidateProductOwnershipStatus(ctx, productID); err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.emailClient.RequestOTP(ctx, email, productID.String())
+	if err := s.ensureItemAvailableForRegistration(ctx, productID); err != nil {
+		return nil, err
+	}
+
+	if err := s.productPort.ValidateProductOwnershipStatus(ctx, productID); err != nil {
+		return nil, err
+	}
+
+	err = s.emailClient.RequestOTP(ctx, email, productID.String())
+	if err != nil {
+		return nil, err
+	}
+	
+	return &productID, nil
 }
 
 func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dto.CustomerVerifyAndRegisterReq, userID uuid.UUID) (*entity.Ownership, error) {
@@ -84,13 +125,19 @@ func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dt
 		return nil, errors.New("invalid or expired OTP")
 	}
 
+	if err := s.ensureItemAvailableForRegistration(ctx, req.ProductID); err != nil {
+		return nil, err
+	}
+
 	newOwnership := entity.NewOwnership(req.ProductID, userID)
+	newOwnership.Status = entity.OwnershipStatusPending // Customers start as pending
+
 	saved, err := s.repo.CreateOwnership(ctx, nil, newOwnership)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.productPort.UpdateOwnershipStatus(ctx, req.ProductID, string(entity.OwnershipStatusActive)); err != nil {
+	if err := s.productPort.UpdateOwnershipStatus(ctx, req.ProductID, string(entity.OwnershipStatusPending)); err != nil {
 		return nil, err
 	}
 
@@ -101,16 +148,32 @@ func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dt
 // ADMIN FLOW
 // ---------------------------------------------------------------------------
 
-func (s *OwnershipService) AdminRequestOTP(ctx context.Context, req dto.AdminRequestOTPReq, adminID uuid.UUID) error {
+func (s *OwnershipService) AdminRequestOTP(ctx context.Context, req dto.AdminRequestOTPReq, adminID uuid.UUID) (*uuid.UUID, error) {
 	productID, err := s.productPort.FindProductByQR(ctx, req.QRCode)
 	if err != nil {
-		return err
-	}
-	if err := s.productPort.ValidateProductOwnershipStatus(ctx, productID); err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.emailClient.RequestOTP(ctx, req.OwnerEmail, productID.String())
+	if err := s.ensureItemAvailableForRegistration(ctx, productID); err != nil {
+		return nil, err
+	}
+
+	if err := s.productPort.ValidateProductOwnershipStatus(ctx, productID); err != nil {
+		return nil, err
+	}
+
+	// Verify user exists BEFORE sending OTP
+	_, err = s.userProvider.EnsureUserExists(ctx, req.OwnerEmail, req.OwnerName, req.OwnerPhone)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.emailClient.RequestOTP(ctx, req.OwnerEmail, productID.String())
+	if err != nil {
+		return nil, err
+	}
+	
+	return &productID, nil
 }
 
 func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.AdminVerifyAndRegisterReq, adminID uuid.UUID) (*entity.Ownership, error) {
@@ -120,6 +183,10 @@ func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.A
 	}
 	if !valid {
 		return nil, errors.New("invalid or expired OTP")
+	}
+
+	if err := s.ensureItemAvailableForRegistration(ctx, req.ProductID); err != nil {
+		return nil, err
 	}
 
 	ownerID, err := s.userProvider.EnsureUserExists(ctx, req.OwnerEmail, req.OwnerName, req.OwnerPhone)
@@ -138,6 +205,55 @@ func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.A
 	}
 
 	return saved, nil
+}
+
+// ---------------------------------------------------------------------------
+// ADMIN APPROVAL (FR-037 Extension)
+// ---------------------------------------------------------------------------
+
+func (s *OwnershipService) ApproveOwnership(ctx context.Context, ownershipID uuid.UUID, adminID uuid.UUID) error {
+	own, err := s.repo.GetOwnershipByID(ctx, ownershipID)
+	if err != nil {
+		return err
+	}
+
+	if own.Status != entity.OwnershipStatusPending {
+		return errors.New("chỉ có thể duyệt quyền sở hữu đang ở trạng thái PENDING")
+	}
+
+	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, ownershipID, string(entity.OwnershipStatusActive))
+	if err != nil {
+		return err
+	}
+
+	if err := s.productPort.UpdateOwnershipStatus(ctx, own.ProductItemID, string(entity.OwnershipStatusActive)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *OwnershipService) RejectOwnership(ctx context.Context, ownershipID uuid.UUID, adminID uuid.UUID) error {
+	own, err := s.repo.GetOwnershipByID(ctx, ownershipID)
+	if err != nil {
+		return err
+	}
+
+	if own.Status != entity.OwnershipStatusPending {
+		return errors.New("chỉ có thể từ chối quyền sở hữu đang ở trạng thái PENDING")
+	}
+
+	// Reject by setting status to REVOKED or REJECTED.
+	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, ownershipID, string(entity.OwnershipStatusRevoked))
+	if err != nil {
+		return err
+	}
+
+	if err := s.productPort.UpdateOwnershipStatus(ctx, own.ProductItemID, "IN_STOCK"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ---------------------------------------------------------------------------

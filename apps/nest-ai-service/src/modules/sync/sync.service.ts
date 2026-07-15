@@ -19,6 +19,9 @@ export class SyncService {
         this.logger.log(`[SYNC] Sync point=${event.pointId}`);
 
         try {
+            this.logger.log(
+                `[SYNC][UPSERT] point=${event.pointId} dim=${event.vector?.length ?? 'unknown'}`,
+            );
 
             await this.qdrantService.upsertVector(
                 event.pointId,
@@ -28,6 +31,9 @@ export class SyncService {
 
             this.logger.log(
                 `[SYNC] Qdrant synced point=${event.pointId}`,
+            );
+            this.logger.log(
+                `[QDRANT][SUCCESS] point=${event.pointId}`,
             );
 
             await this.rabbitmqProducer.emit(

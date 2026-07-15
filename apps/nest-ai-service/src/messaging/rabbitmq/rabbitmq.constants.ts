@@ -30,6 +30,8 @@ export const RABBITMQ = {
     EMBEDDING: 'embedding_queue',
 
     EMBEDDING_SYNC: 'embedding_sync_queue',
+
+    EMBEDDING_REINDEX: 'embedding_reindex_queue',
   },
 
   DLX: {
@@ -41,6 +43,8 @@ export const RABBITMQ = {
     NOTIFICATION: 'ai.events.failed',
 
     EMBEDDING: 'embedding.failed',
+
+    EMBEDDING_REINDEX: 'embedding.reindex.failed',
   },
 
   /**
@@ -62,6 +66,7 @@ export const RABBITMQ = {
     TRACE_EXPORTED: 'trace.exported',
     TRACE_EVENTS: 'trace.*',
     NOTIFICATION_SENT: 'notification.sent', // Warranty update notification
+    OWNERSHIP_TRANSFERRED: 'ownership.transferred',
 
     EMBEDDING_GENERATED: 'embedding.generated',
     EMBEDDING_COMPLETED: 'embedding.completed',
@@ -79,5 +84,6 @@ export const RABBITMQ = {
     PRODUCT_CREATED: 'product.created',
     OWNERSHIP_OTP: 'otp.ownership',
     NOTIFICATION_SENT: 'notification.sent',
+    OWNERSHIP_TRANSFERRED: 'ownership.transferred',
   },
 };

@@ -1,2 +1,7 @@
 fastapi
-uvicorn[standard]
+uvicorn
+pydantic
+
+torch
+sentence-transformers>=3.0.0
+transformers>=4.40.0

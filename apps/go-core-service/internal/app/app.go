@@ -174,9 +174,9 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Ownership Module
 	oRepo := ownershipRepo.NewOwnershipRepository(database)
-	oProductAdapter := ownershipAdapters.NewProductAdapter(database)
-	oEmailAdapter := ownershipAdapters.NewEmailAdapter(redisCache, pub)
-	oUserAdapter := ownershipAdapters.NewDummyUserAdapter(uRepo)
+	oProductAdapter := ownershipAdapters.NewRealProductAdapter(database, productItemsRepo, pRepo)
+	oEmailAdapter := ownershipAdapters.NewRealEmailAdapter()
+	oUserAdapter := ownershipAdapters.NewRealUserAdapter(uRepo)
 	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 

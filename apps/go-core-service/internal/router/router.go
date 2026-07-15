@@ -112,6 +112,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	profileGroup.Use(middleware.AuthMiddleware(uRepo))
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
+		profileGroup.PUT("/profile/change-password", uh.ChangePassword)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
 		profileGroup.GET("/search", uh.SearchUsers)
 	}
@@ -212,6 +213,7 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	{
 		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
 		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+		customerGroup.GET("/stream", oh.CustomerStream)
 	}
 
 	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
@@ -220,6 +222,9 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	{
 		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
 		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+		adminGroup.PUT("/approve", oh.ApproveOwnership)
+		adminGroup.PUT("/reject", oh.RejectOwnership)
+		adminGroup.GET("/stream", oh.AdminStream)
 	}
 
 	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu

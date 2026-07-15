@@ -1,0 +1,246 @@
+2026/07/15 21:16:06 [WARN] .env file not found, using system environment variables
+2026/07/15 21:16:06 Connecting PostgreSQL: host=postgres port=5432 db=product_trace_db user=postgres
+2026/07/15 21:16:06 PostgreSQL connected successfully
+2026/07/15 21:16:06 PostgreSQL GORM connected successfully
+2026/07/15 21:16:06 Connecting PostgreSQL: host=postgres port=5432 db=product_trace_db user=postgres
+2026/07/15 21:16:06 PostgreSQL raw connected successfully
+2026/07/15 21:16:06 Redis connected successfully
+2026/07/15 21:16:06 [RabbitMQ] Startup connection attempt 1/30 failed: rabbitmq dial: dial tcp 172.19.0.7:5672: connect: connection refused. Retrying in 2s...
+2026/07/15 21:16:09 RabbitMQ manager initialized successfully
+2026/07/15 21:16:09 Go service is running on port 8080
+[2026-07-15 21:16:12] GET /health 200 339.329µs
+[GIN] 2026/07/15 - 21:16:12 | 200 | 376.373µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:17] GET /health 200 23.249µs
+[GIN] 2026/07/15 - 21:16:17 | 200 | 135.59µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:22] GET /health 200 9.296844ms
+[GIN] 2026/07/15 - 21:16:22 | 200 |   9.51ms |             ::1 | GET      "/health"
+[2026-07-15 21:16:27] GET /health 200 42.049µs
+[GIN] 2026/07/15 - 21:16:27 | 200 | 102.587µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:32] GET /health 200 59.109µs
+[GIN] 2026/07/15 - 21:16:32 | 200 | 161.298µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:37] GET /health 200 53.979µs
+[GIN] 2026/07/15 - 21:16:37 | 200 | 114.082µs |             ::1 | GET      "/health"
+[AuthMiddleware] ValidateAccessToken error: token has invalid claims: token is expired
+[2026-07-15 21:16:38] GET /api/users/profile 401 8.705945ms
+[GIN] 2026/07/15 - 21:16:38 | 401 |    8.8ms |      172.19.0.1 | GET      "/api/users/profile"
+[AuthMiddleware] ValidateAccessToken error: token has invalid claims: token is expired
+[2026-07-15 21:16:38] GET /api/users/profile 401 724.755µs
+[GIN] 2026/07/15 - 21:16:38 | 401 |   1.92ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:16:39] POST /api/auth/refresh 200 145.51674ms
+[GIN] 2026/07/15 - 21:16:39 | 200 | 145.77ms |      172.19.0.1 | POST     "/api/auth/refresh"
+[2026-07-15 21:16:39] GET /api/users/profile 200 5.873161ms
+[GIN] 2026/07/15 - 21:16:39 | 200 |   5.99ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:16:39] GET /api/users/profile 200 3.771538ms
+[GIN] 2026/07/15 - 21:16:39 | 200 |   3.89ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:16:39] GET /api/ownership 200 130.9449ms
+[GIN] 2026/07/15 - 21:16:39 | 200 | 131.12ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=200"
+[2026-07-15 21:16:39] GET /api/products 200 139.464407ms
+[GIN] 2026/07/15 - 21:16:39 | 200 | 139.55ms |      172.19.0.1 | GET      "/api/products?page=1&limit=10&status=ACTIVE"
+[2026-07-15 21:16:39] GET /api/ownership 200 31.839705ms
+[GIN] 2026/07/15 - 21:16:39 | 200 |  31.95ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=200"
+[2026-07-15 21:16:39] GET /api/products 200 4.44825ms
+[GIN] 2026/07/15 - 21:16:39 | 200 |   4.51ms |      172.19.0.1 | GET      "/api/products?page=1&limit=10&status=ACTIVE"
+[2026-07-15 21:16:42] GET /health 200 92.089µs
+[GIN] 2026/07/15 - 21:16:42 | 200 | 156.054µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:47] GET /health 200 56.347µs
+[GIN] 2026/07/15 - 21:16:47 | 200 | 104.458µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:52] GET /health 200 92.596µs
+[GIN] 2026/07/15 - 21:16:52 | 200 | 295.983µs |             ::1 | GET      "/health"
+[2026-07-15 21:16:58] GET /health 200 901.359µs
+[GIN] 2026/07/15 - 21:16:58 | 200 |   1.27ms |             ::1 | GET      "/health"
+[2026-07-15 21:17:03] GET /health 200 26.71µs
+[GIN] 2026/07/15 - 21:17:03 | 200 |   4.38ms |             ::1 | GET      "/health"
+[2026-07-15 21:17:08] GET /health 200 268.706µs
+[GIN] 2026/07/15 - 21:17:08 | 200 | 409.745µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:14] GET /health 200 400.492µs
+[GIN] 2026/07/15 - 21:17:14 | 200 | 741.86µs |             ::1 | GET      "/health"
+[AuthMiddleware] ValidateAccessToken error: token has invalid claims: token is expired
+[2026-07-15 21:17:17] GET /api/users/profile 401 34.043859ms
+[GIN] 2026/07/15 - 21:17:17 | 401 |  35.86ms |      172.19.0.1 | GET      "/api/users/profile"
+[AuthMiddleware] ValidateAccessToken error: token has invalid claims: token is expired
+[2026-07-15 21:17:17] GET /api/users/profile 401 5.455568ms
+[GIN] 2026/07/15 - 21:17:17 | 401 |   5.53ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:17:17] POST /api/auth/refresh 200 181.202667ms
+[GIN] 2026/07/15 - 21:17:17 | 200 | 181.43ms |      172.19.0.1 | POST     "/api/auth/refresh"
+[2026-07-15 21:17:17] GET /api/users/profile 200 12.885889ms
+[GIN] 2026/07/15 - 21:17:17 | 200 |  13.23ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:17:17] GET /api/users/profile 200 14.043819ms
+[GIN] 2026/07/15 - 21:17:17 | 200 |  14.15ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:17:18] GET /api/dashboard/stats 200 141.295564ms
+[GIN] 2026/07/15 - 21:17:18 | 200 |  141.4ms |      172.19.0.1 | GET      "/api/dashboard/stats"
+[2026-07-15 21:17:18] GET /api/dashboard/activities 200 110.703778ms
+[GIN] 2026/07/15 - 21:17:18 | 200 |  110.8ms |      172.19.0.1 | GET      "/api/dashboard/activities?limit=10"
+[2026-07-15 21:17:18] GET /api/dashboard/alerts 200 120.192477ms
+[GIN] 2026/07/15 - 21:17:18 | 200 | 120.59ms |      172.19.0.1 | GET      "/api/dashboard/alerts"
+[2026-07-15 21:17:18] GET /api/dashboard/charts/production-sales 200 18.270451ms
+[GIN] 2026/07/15 - 21:17:18 | 200 |  18.38ms |      172.19.0.1 | GET      "/api/dashboard/charts/production-sales"
+[2026-07-15 21:17:19] GET /health 200 64.717µs
+[GIN] 2026/07/15 - 21:17:19 | 200 | 227.983µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:24] GET /health 200 100.374µs
+[GIN] 2026/07/15 - 21:17:24 | 200 | 272.142µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:27] GET /api/ownership 200 59.093577ms
+[GIN] 2026/07/15 - 21:17:27 | 200 |  59.17ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=20"
+[2026-07-15 21:17:27] GET /api/ownership 200 30.197687ms
+[GIN] 2026/07/15 - 21:17:27 | 200 |  30.31ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=20"
+[2026-07-15 21:17:29] GET /health 200 96.549µs
+[GIN] 2026/07/15 - 21:17:29 | 200 | 405.946µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:34] GET /health 200 155.511µs
+[GIN] 2026/07/15 - 21:17:34 | 200 | 478.036µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:40] GET /health 200 88.579µs
+[GIN] 2026/07/15 - 21:17:40 | 200 | 184.068µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:40] GET /api/ownership 200 32.281585ms
+[GIN] 2026/07/15 - 21:17:40 | 200 |  32.36ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=20"
+[2026-07-15 21:17:40] GET /api/ownership 200 42.30189ms
+[GIN] 2026/07/15 - 21:17:40 | 200 |  42.39ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=20"
+[2026-07-15 21:17:43] GET /api/ownership 200 30.80629ms
+[GIN] 2026/07/15 - 21:17:43 | 200 |  30.87ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=200"
+[2026-07-15 21:17:43] GET /api/products 200 33.152199ms
+[GIN] 2026/07/15 - 21:17:43 | 200 |  33.41ms |      172.19.0.1 | GET      "/api/products?page=1&limit=10&status=ACTIVE"
+[2026-07-15 21:17:43] GET /api/ownership 200 41.771867ms
+[GIN] 2026/07/15 - 21:17:43 | 200 |  41.92ms |      172.19.0.1 | GET      "/api/ownership?page=1&limit=200"
+[2026-07-15 21:17:43] GET /api/products 200 7.785953ms
+[GIN] 2026/07/15 - 21:17:43 | 200 |   7.97ms |      172.19.0.1 | GET      "/api/products?page=1&limit=10&status=ACTIVE"
+[2026-07-15 21:17:45] GET /health 200 179.022µs
+[GIN] 2026/07/15 - 21:17:45 | 200 | 320.21µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:50] GET /health 200 129.265µs
+[GIN] 2026/07/15 - 21:17:50 | 200 | 216.909µs |             ::1 | GET      "/health"
+[2026-07-15 21:17:55] GET /health 200 68.255µs
+[GIN] 2026/07/15 - 21:17:55 | 200 | 268.952µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:00] GET /health 200 255.295µs
+[GIN] 2026/07/15 - 21:18:00 | 200 | 372.44µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:05] GET /health 200 81.798µs
+[GIN] 2026/07/15 - 21:18:05 | 200 |   1.44ms |             ::1 | GET      "/health"
+[2026-07-15 21:18:11] GET /health 200 77.407µs
+[GIN] 2026/07/15 - 21:18:11 | 200 | 188.972µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:16] GET /health 200 85.826µs
+[GIN] 2026/07/15 - 21:18:16 | 200 | 166.57µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:21] GET /health 200 47.131µs
+[GIN] 2026/07/15 - 21:18:21 | 200 |  80.32µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:26] GET /health 200 132.21µs
+[GIN] 2026/07/15 - 21:18:26 | 200 | 351.293µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:31] GET /health 200 35.041µs
+[GIN] 2026/07/15 - 21:18:31 | 200 | 78.627µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:36] GET /health 200 72.839µs
+[GIN] 2026/07/15 - 21:18:36 | 200 | 185.971µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:38] GET /api/users/profile 200 111.632356ms
+[GIN] 2026/07/15 - 21:18:38 | 200 | 111.82ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:18:38] GET /api/users/profile 200 5.589156ms
+[GIN] 2026/07/15 - 21:18:38 | 200 |   7.28ms |      172.19.0.1 | GET      "/api/users/profile"
+[2026-07-15 21:18:41] GET /health 200 68.512µs
+[GIN] 2026/07/15 - 21:18:41 | 200 | 122.218µs |             ::1 | GET      "/health"
+
+2026/07/15 21:18:43 [31;1m/app/internal/modules/ownership/adapters/product_adapter.go:37 [35;1mrecord not found
+[0m[33m[23.218ms] [34;1m[rows:0][0m SELECT "id" FROM "product_items" WHERE is_deleted = false AND (item_code = 'SKU-TEST-0028' OR serial_number = 'SKU-TEST-0028' OR verification_token = 'SKU-TEST-0028') ORDER BY "product_items"."id" LIMIT 1
+[2026-07-15 21:18:43] POST /api/ownership/request-otp 400 71.236899ms
+[GIN] 2026/07/15 - 21:18:43 | 400 |  71.35ms |      172.19.0.1 | POST     "/api/ownership/request-otp"
+[2026-07-15 21:18:46] GET /health 200 90.049µs
+[GIN] 2026/07/15 - 21:18:46 | 200 | 165.416µs |             ::1 | GET      "/health"
+2026/07/15 21:18:47 [RealEmailAdapter - OTP TRACE LOG] MÃ OTP DÀNH CHO khanglh.ce191383@gmail.com LÀ: 311414
+2026/07/15 21:18:47 [RealEmailAdapter] Sending OTP Email to khanglh.ce191383@gmail.com via SendGrid...
+2026/07/15 21:18:48 [RealEmailAdapter] Email sent successfully to khanglh.ce191383@gmail.com
+[2026-07-15 21:18:48] POST /api/ownership/request-otp 200 1.615769479s
+[GIN] 2026/07/15 - 21:18:48 | 200 |    1.61s |      172.19.0.1 | POST     "/api/ownership/request-otp"
+[2026-07-15 21:18:51] GET /health 200 37.547µs
+[GIN] 2026/07/15 - 21:18:51 | 200 | 436.205µs |             ::1 | GET      "/health"
+[2026-07-15 21:18:57] GET /health 200 28.916µs
+[GIN] 2026/07/15 - 21:18:57 | 200 | 587.031µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:02] GET /health 200 54.532µs
+[GIN] 2026/07/15 - 21:19:02 | 200 | 112.747µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:07] GET /health 200 30.854µs
+[GIN] 2026/07/15 - 21:19:07 | 200 |  69.17µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:12] GET /health 200 41.043µs
+[GIN] 2026/07/15 - 21:19:12 | 200 | 89.966µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:17] GET /health 200 40.96µs
+[GIN] 2026/07/15 - 21:19:17 | 200 | 106.562µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:22] GET /health 200 3.226348ms
+[GIN] 2026/07/15 - 21:19:22 | 200 |   3.38ms |             ::1 | GET      "/health"
+[2026-07-15 21:19:27] GET /health 200 26.983µs
+[GIN] 2026/07/15 - 21:19:27 | 200 | 518.953µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:32] GET /health 200 89.034µs
+[GIN] 2026/07/15 - 21:19:32 | 200 | 171.304µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:38] GET /health 200 77.629µs
+[GIN] 2026/07/15 - 21:19:38 | 200 | 188.957µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:43] GET /health 200 73.135µs
+[GIN] 2026/07/15 - 21:19:43 | 200 | 291.279µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:48] GET /health 200 87.393µs
+[GIN] 2026/07/15 - 21:19:48 | 200 | 231.464µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:53] GET /health 200 28.489µs
+[GIN] 2026/07/15 - 21:19:53 | 200 | 539.335µs |             ::1 | GET      "/health"
+[2026-07-15 21:19:59] GET /health 200 107.511µs
+[GIN] 2026/07/15 - 21:19:59 | 200 | 323.248µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:04] GET /health 200 64.79µs
+[GIN] 2026/07/15 - 21:20:04 | 200 | 139.529µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:09] GET /health 200 136.075µs
+[GIN] 2026/07/15 - 21:20:09 | 200 | 178.066µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:14] GET /health 200 35.047µs
+[GIN] 2026/07/15 - 21:20:14 | 200 | 73.686µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:19] GET /health 200 29.685µs
+[GIN] 2026/07/15 - 21:20:19 | 200 | 74.592µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:24] GET /health 200 52.611µs
+[GIN] 2026/07/15 - 21:20:24 | 200 | 97.995µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:29] GET /health 200 98.364µs
+[GIN] 2026/07/15 - 21:20:29 | 200 | 305.593µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:34] GET /health 200 30.192µs
+[GIN] 2026/07/15 - 21:20:34 | 200 | 75.824µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:40] GET /health 200 68.586µs
+[GIN] 2026/07/15 - 21:20:40 | 200 | 643.106µs |             ::1 | GET      "/health"
+[2026-07-15 21:20:45] GET /health 200 1.902365ms
+[GIN] 2026/07/15 - 21:20:45 | 200 |   2.01ms |             ::1 | GET      "/health"
+[2026-07-15 21:20:50] GET /health 200 62.123µs
+[GIN] 2026/07/15 - 21:20:50 | 200 |   4.51ms |             ::1 | GET      "/health"
+[2026-07-15 21:20:55] GET /health 200 58.539µs
+[GIN] 2026/07/15 - 21:20:55 | 200 | 109.464µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:00] GET /health 200 55.61µs
+[GIN] 2026/07/15 - 21:21:00 | 200 | 244.907µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:05] GET /health 200 65.634µs
+[GIN] 2026/07/15 - 21:21:05 | 200 | 126.654µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:11] GET /health 200 183.167µs
+[GIN] 2026/07/15 - 21:21:11 | 200 | 324.652µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:16] GET /health 200 266.016µs
+[GIN] 2026/07/15 - 21:21:16 | 200 |   5.36ms |             ::1 | GET      "/health"
+[2026-07-15 21:21:21] GET /health 200 60.037µs
+[GIN] 2026/07/15 - 21:21:21 | 200 | 141.013µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:26] GET /health 200 156.751µs
+[GIN] 2026/07/15 - 21:21:26 | 200 |   4.03ms |             ::1 | GET      "/health"
+[2026-07-15 21:21:31] GET /health 200 50.562µs
+[GIN] 2026/07/15 - 21:21:31 | 200 | 111.257µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:36] GET /health 200 30.962µs
+[GIN] 2026/07/15 - 21:21:36 | 200 | 291.044µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:41] GET /health 200 19.181µs
+[GIN] 2026/07/15 - 21:21:41 | 200 | 140.605µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:47] GET /health 200 627.721µs
+[GIN] 2026/07/15 - 21:21:47 | 200 | 714.749µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:52] GET /health 200 68.099µs
+[GIN] 2026/07/15 - 21:21:52 | 200 | 194.103µs |             ::1 | GET      "/health"
+[2026-07-15 21:21:57] GET /health 200 82.748µs
+[GIN] 2026/07/15 - 21:21:57 | 200 | 225.652µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:02] GET /health 200 126.32µs
+[GIN] 2026/07/15 - 21:22:02 | 200 | 211.044µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:07] GET /health 200 27.345µs
+[GIN] 2026/07/15 - 21:22:07 | 200 | 380.124µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:12] GET /health 200 40.364µs
+[GIN] 2026/07/15 - 21:22:12 | 200 | 93.256µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:17] GET /health 200 47.572µs
+[GIN] 2026/07/15 - 21:22:17 | 200 | 89.744µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:22] GET /health 200 39.825µs
+[GIN] 2026/07/15 - 21:22:22 | 200 | 97.077µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:27] GET /health 200 84.1µs
+[GIN] 2026/07/15 - 21:22:27 | 200 | 194.876µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:33] GET /health 200 320.355µs
+[GIN] 2026/07/15 - 21:22:33 | 200 | 957.973µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:38] GET /health 200 84.798µs
+[GIN] 2026/07/15 - 21:22:38 | 200 | 173.971µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:43] GET /health 200 102.408µs
+[GIN] 2026/07/15 - 21:22:43 | 200 |   1.49ms |             ::1 | GET      "/health"
+[2026-07-15 21:22:48] GET /health 200 5.834797ms
+[GIN] 2026/07/15 - 21:22:48 | 200 |   5.99ms |             ::1 | GET      "/health"
+[2026-07-15 21:22:53] GET /health 200 78.613µs
+[GIN] 2026/07/15 - 21:22:53 | 200 | 159.525µs |             ::1 | GET      "/health"
+[2026-07-15 21:22:58] GET /health 200 98.186µs
+[GIN] 2026/07/15 - 21:22:58 | 200 | 212.533µs |             ::1 | GET      "/health"
+[2026-07-15 21:23:04] GET /health 200 729.288µs
+[GIN] 2026/07/15 - 21:23:04 | 200 | 835.336µs |             ::1 | GET      "/health"
+[2026-07-15 21:23:09] GET /health 200 425.799µs
+[GIN] 2026/07/15 - 21:23:09 | 200 | 514.361µs |             ::1 | GET      "/health"
+[2026-07-15 21:23:14] GET /health 200 125.515µs
+[GIN] 2026/07/15 - 21:23:14 | 200 | 587.067µs |             ::1 | GET      "/health"
