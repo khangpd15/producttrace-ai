@@ -21,6 +21,7 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
 	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
@@ -43,6 +44,7 @@ type RouterDependency struct {
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
+	WarrantyHandler              *warrantyHandler.WarrantyHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -73,6 +75,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
+	SetupWarrantyRouter(api, deps.WarrantyHandler, deps.UserRepo)
 	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
 	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
@@ -234,6 +237,23 @@ func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.Wa
 	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
 	{
 		warrantyClaims.POST("", wch.CreateWarrantyClaim)
+	}
+}
+
+// WARRANTY
+func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyGroup := api.Group("/warranties")
+	warrantyGroup.Use(middleware.AuthMiddleware(uRepo))
+	{
+		// Admin (or System) creates directly (legacy or specific use-case)
+		warrantyGroup.POST("", wh.ActivateWarranty)
+		// Customer requests warranty
+		warrantyGroup.POST("/request", wh.RequestWarranty)
+		// Admin lists warranties
+		warrantyGroup.GET("", wh.ListWarranties)
+		// Admin approves/rejects warranty
+		warrantyGroup.PUT("/:id/approve", wh.ApproveWarranty)
+		warrantyGroup.PUT("/:id/reject", wh.RejectWarranty)
 	}
 }
 
