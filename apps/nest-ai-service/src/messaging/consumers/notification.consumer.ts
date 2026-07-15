@@ -139,6 +139,16 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         this.logger.log(`[NotificationConsumer] Warranty update email sent to ${payload.email}`);
         break;
 
+      // ── Ownership Transferred ─────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.OWNERSHIP_TRANSFERRED:
+        await this.mailService.sendOwnershipTransferredEmail(
+          payload.email,
+          payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+        );
+        this.logger.log(`[NotificationConsumer] Ownership transferred email sent to ${payload.email}`);
+        break;
+
 
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:
