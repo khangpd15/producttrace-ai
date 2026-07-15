@@ -226,7 +226,7 @@ services:
     container_name: nest-ai-service
 
     environment:
-      PORT: ${NEST_PORT}
+      PORT: 3000
 
       GO_CORE_URL: ${GO_CORE_URL}
 

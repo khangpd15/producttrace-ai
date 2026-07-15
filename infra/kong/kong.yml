@@ -47,4 +47,4 @@ services:
       - name: nest-ai-route
         paths:
           - /ai
-        strip_path: false
+        strip_path: true

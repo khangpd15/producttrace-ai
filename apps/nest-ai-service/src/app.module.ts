@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { SyncModule } from './modules/sync/sync.module';
 import { EmbeddingModule } from './modules/embedding/embedding.module';
 import { ReindexModule } from './modules/reindex/reindex.module';
+import { SearchModule } from './modules/search/searcch.module';
 
 import { MailModule } from './modules/mail/mail.module';
 import { MockController } from './mock.controller';
@@ -24,6 +25,7 @@ import { RabbitMQModule } from './messaging/rabbitmq/rabbitmq.module';
     MailModule,
     AuthModule,
     RabbitMQModule,
+    SearchModule,
   ],
   controllers: [MockController],
 })

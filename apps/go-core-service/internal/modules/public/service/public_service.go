@@ -4,14 +4,13 @@ import (
 	"context"
 	"time"
 
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	itemRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/dto"
 	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
-	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
-	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
-	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/entity"
-	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
+	// warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
 )
 
 type PublicService interface {
@@ -22,16 +21,16 @@ type publicService struct {
 	itemRepo      itemRepo.ProductItemRepository
 	traceRepo     traceRepo.TraceRepository
 	ownershipRepo ownershipRepo.IOwnershipRepository
-	warrantyRepo  warrantyRepo.WarrantyClaimRepository
-	locationRepo  locationRepo.LocationRepository
-	userRepo      userRepo.UserRepositoryInterface
+	// warrantyRepo  warrantyRepo.WarrantyRepository
+	locationRepo locationRepo.LocationRepository
+	userRepo     userRepo.UserRepositoryInterface
 }
 
 func NewPublicService(
 	itemRepo itemRepo.ProductItemRepository,
 	traceRepo traceRepo.TraceRepository,
 	ownershipRepo ownershipRepo.IOwnershipRepository,
-	warrantyRepo warrantyRepo.WarrantyClaimRepository,
+	// warrantyRepo warrantyRepo.WarrantyRepository,
 	locationRepo locationRepo.LocationRepository,
 	userRepo userRepo.UserRepositoryInterface,
 ) PublicService {
@@ -39,9 +38,9 @@ func NewPublicService(
 		itemRepo:      itemRepo,
 		traceRepo:     traceRepo,
 		ownershipRepo: ownershipRepo,
-		warrantyRepo:  warrantyRepo,
-		locationRepo:  locationRepo,
-		userRepo:      userRepo,
+		// warrantyRepo:  warrantyRepo,
+		locationRepo: locationRepo,
+		userRepo:     userRepo,
 	}
 }
 
@@ -85,21 +84,19 @@ func (s *publicService) VerifyQR(ctx context.Context, itemCode string, token str
 	}
 
 	// 3. Fetch Warranty
-	var verifyWarranty *dto.VerifyQRWarranty
-	statuses := []warrantyEntity.WarrantyClaimStatus{
-		warrantyEntity.WarrantyClaimStatusApproved,
-		warrantyEntity.WarrantyClaimStatusProcessing,
-		warrantyEntity.WarrantyClaimStatusOpen,
-		warrantyEntity.WarrantyClaimStatusRejected,
-	}
-	warranty, err := s.warrantyRepo.FindByProductItemIDAndStatusList(ctx, row.ID, statuses)
-	if err == nil && warranty != nil {
-		verifyWarranty = &dto.VerifyQRWarranty{
-			ClaimNumber: warranty.ClaimNumber,
-			Status:      string(warranty.Status),
-			CreatedAt:   warranty.CreatedAt,
-		}
-	}
+	// var verifyWarranty *dto.VerifyQRWarranty
+	// warranty, err := s.warrantyRepo.GetWarrantyByProductItemID(ctx, row.ID)
+	// if err == nil && warranty != nil {
+	// 	verifyWarranty = &dto.VerifyQRWarranty{
+	// 		WarrantyID:    warranty.ID.String(),
+	// 		WarrantyType:  string(warranty.WarrantyType),
+	// 		StartDate:     warranty.StartDate,
+	// 		EndDate:       warranty.EndDate,
+	// 		Status:        string(warranty.Status),
+	// 		PurchasedAt:   warranty.PurchasedAt,
+	// 		PurchaserName: warranty.PurchaserName,
+	// 	}
+	// }
 
 	// 4. Fetch Location
 	var verifyLocation *dto.VerifyQRLocation
@@ -159,7 +156,6 @@ func (s *publicService) VerifyQR(ctx context.Context, itemCode string, token str
 			Barcode:      barcode,
 		},
 		Ownership:    verifyOwnership,
-		Warranty:     verifyWarranty,
 		Location:     verifyLocation,
 		TraceHistory: traceHistory,
 	}, nil

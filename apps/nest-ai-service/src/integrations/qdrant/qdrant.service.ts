@@ -25,9 +25,9 @@ export class QdrantService {
     const isDocker = fs.existsSync('/.dockerenv');
     const defaultBaseUrl = isDocker ? 'http://qdrant:6333' : 'http://localhost:6333';
     const envBaseUrl = this.configService.get('QDRANT_URL');
-    const resolvedBaseUrl = !isDocker && envBaseUrl?.includes('qdrant')
-      ? defaultBaseUrl
-      : envBaseUrl ?? defaultBaseUrl;
+    const resolvedBaseUrl = (envBaseUrl && envBaseUrl.trim() !== '')
+      ? envBaseUrl
+      : defaultBaseUrl;
     this.baseUrl = resolvedBaseUrl;
     this.apiKey = this.configService.get('QDRANT_API_KEY');
   }

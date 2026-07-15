@@ -21,7 +21,7 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
-	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
 )
 
 type RouterDependency struct {
@@ -31,7 +31,6 @@ type RouterDependency struct {
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
 	OwnershipHandler             *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
@@ -71,7 +70,6 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
-	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
 	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
 	return r
@@ -226,15 +224,6 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	ownerships.GET("", oh.SearchOwnerships)
 }
 
-// WARRANTY CLAIM
-func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
-	warrantyClaims := api.Group("/warranty-claims")
-	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
-	{
-		warrantyClaims.POST("", wch.CreateWarrantyClaim)
-	}
-}
-
 func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.LocationHandler, uRepo userRepo.UserRepositoryInterface) {
 	locations := api.Group("/locations")
 	{
@@ -250,6 +239,20 @@ func SetupLocationRouter(api *gin.RouterGroup, locationHandler *locationHandler.
 			adminGroup.PUT("/:id", locationHandler.Update)
 			adminGroup.DELETE("/:id", locationHandler.Delete)
 		}
+	}
+}
+
+func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandler, uRepo userRepo.UserRepositoryInterface) {
+	warranties := api.Group("/warranties")
+	warranties.Use(middleware.AuthMiddleware(uRepo))
+	{
+		warranties.GET("", wh.ListWarranties)
+		warranties.GET("/stats", wh.GetStats)
+		warranties.GET("/:id", wh.GetWarrantyByID)
+		warranties.POST("/request-activation", wh.RequestActivation)
+		warranties.POST("/confirm-activation/:id", wh.ConfirmActivation)
+		warranties.PUT("/:id", wh.UpdateWarranty)
+		warranties.DELETE("/:id", wh.DeleteWarranty)
 	}
 }
 
