@@ -288,4 +288,32 @@ export class MailService {
       await this.sendMail(to, subject, subject, html);
     }
   }
+
+  async sendOwnershipTransferredEmail(to: string, fullName: string, productName: string): Promise<void> {
+    const templateId = this.configService.get<string>('OWNERSHIP_TRANSFERRED_TEMPLATE_ID') || 'd-1f78adcf1e3644e6bee66c2ea402af69';
+    if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+      
+      const dynamicTemplateData = {
+        fullName,
+        productName,
+        frontendUrl,
+        year: new Date().getFullYear().toString(),
+      };
+      await this.sendEmailWithTemplate(to, templateId, dynamicTemplateData);
+    } else {
+      const subject = 'Thông báo chuyển quyền sở hữu sản phẩm - ProductTrace AI';
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+          <h2 style="color: #1976d2;">Thông báo chuyển quyền sở hữu</h2>
+          <p>Xin chào <strong>${fullName}</strong>,</p>
+          <p>Quyền sở hữu cho sản phẩm <strong>${productName}</strong> đã được chuyển cho bạn thành công trên hệ thống ProductTrace AI.</p>
+          <p>Vui lòng đăng nhập vào hệ thống để xem chi tiết thông tin sản phẩm của bạn.</p>
+          <p>Trân trọng,</p>
+          <p>Đội ngũ ProductTrace AI</p>
+        </div>
+      `;
+      await this.sendMail(to, subject, subject, html);
+    }
+  }
 }
