@@ -51,7 +51,9 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// Apply global Recovery, RequestID, and Logger middlewares
+	// Apply global middlewares — CORS must come first so preflight OPTIONS
+	// requests are handled before any auth middleware runs.
+	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())

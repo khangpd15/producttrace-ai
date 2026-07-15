@@ -102,7 +102,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
 	pRepo := productRepo.NewProductRepository(database)
-	uService := userService.NewUserService(uRepo, pRepo, pub)
+	uService := userService.NewUserService(uRepo, pRepo, pub, auditService)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
 	frontendURL := os.Getenv("FRONTEND_URL")
