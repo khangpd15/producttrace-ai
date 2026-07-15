@@ -3,8 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/rabbitmq"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
@@ -36,6 +40,7 @@ type OwnershipService struct {
 	productPort  IProductService
 	emailClient  IEmailOTPClient
 	userProvider IUserInfoProvider
+	pub          *publisher.Publisher
 }
 
 func NewOwnershipService(
@@ -43,12 +48,14 @@ func NewOwnershipService(
 	productPort IProductService,
 	emailClient IEmailOTPClient,
 	userProvider IUserInfoProvider,
+	pub *publisher.Publisher,
 ) IOwnershipService {
 	return &OwnershipService{
 		repo:         repo,
 		productPort:  productPort,
 		emailClient:  emailClient,
 		userProvider: userProvider,
+		pub:          pub,
 	}
 }
 
@@ -129,15 +136,26 @@ func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dt
 		return nil, err
 	}
 
-	newOwnership := entity.NewOwnership(req.ProductID, userID)
-	newOwnership.Status = entity.OwnershipStatusPending // Customers start as pending
+	var saved *entity.Ownership
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		txCtx := entity.WithTx(ctx, tx)
 
-	saved, err := s.repo.CreateOwnership(ctx, nil, newOwnership)
+		newOwnership := entity.NewOwnership(req.ProductID, userID)
+		newOwnership.Status = entity.OwnershipStatusPending // Customers start as pending
+
+		saved, err = s.repo.CreateOwnership(txCtx, tx, newOwnership)
+		if err != nil {
+			return err
+		}
+
+		if err := s.productPort.UpdateOwnershipStatus(txCtx, req.ProductID, string(entity.OwnershipStatusPending)); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return nil, err
-	}
-
-	if err := s.productPort.UpdateOwnershipStatus(ctx, req.ProductID, string(entity.OwnershipStatusPending)); err != nil {
 		return nil, err
 	}
 
@@ -194,14 +212,64 @@ func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.A
 		return nil, err
 	}
 
-	newOwnership := entity.NewOwnership(req.ProductID, ownerID)
-	saved, err := s.repo.CreateOwnership(ctx, nil, newOwnership)
+	var saved *entity.Ownership
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		txCtx := entity.WithTx(ctx, tx)
+
+		newOwnership := entity.NewOwnership(req.ProductID, ownerID)
+		newOwnership.Status = entity.OwnershipStatusActive // Admins register directly as Active
+
+		saved, err = s.repo.CreateOwnership(txCtx, tx, newOwnership)
+		if err != nil {
+			return err
+		}
+
+		if err := s.productPort.UpdateOwnershipStatus(txCtx, req.ProductID, string(entity.OwnershipStatusActive)); err != nil {
+			return err
+		}
+
+		// Insert Event to database
+		if tx != nil {
+			eventObj := map[string]interface{}{
+				"id":              uuid.New(),
+				"product_item_id": req.ProductID,
+				"actor_id":        adminID,
+				"event_type":      "REGISTERED",
+				"title":           "Đăng ký sở hữu",
+				"description":     "Admin đăng ký sở hữu trực tiếp cho khách hàng",
+				"created_at":      time.Now(),
+			}
+			if err := tx.Table("events").Create(&eventObj).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.productPort.UpdateOwnershipStatus(ctx, req.ProductID, string(entity.OwnershipStatusActive)); err != nil {
-		return nil, err
+	// Publish to RabbitMQ after commit
+	if s.pub != nil {
+		event := types.Event{
+			EventID:       uuid.NewString(),
+			EventType:     rabbitmq.OwnerCreatedRK,
+			EventVersion:  "1.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: uuid.NewString(),
+			Payload: map[string]interface{}{
+				"ownership_id":    saved.ID.String(),
+				"product_item_id": saved.ProductItemID.String(),
+				"owner_id":        saved.OwnerID.String(),
+				"status":          "ACTIVE",
+				"registered_by":   adminID.String(),
+				"registered_at":   time.Now().UTC(),
+			},
+		}
+		_ = s.pub.Publish(event)
 	}
 
 	return saved, nil
@@ -221,13 +289,60 @@ func (s *OwnershipService) ApproveOwnership(ctx context.Context, ownershipID uui
 		return errors.New("chỉ có thể duyệt quyền sở hữu đang ở trạng thái PENDING")
 	}
 
-	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, ownershipID, string(entity.OwnershipStatusActive))
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		txCtx := entity.WithTx(ctx, tx)
+
+		err = s.repo.UpdateOwnershipStatusAndEndedAt(txCtx, tx, ownershipID, string(entity.OwnershipStatusActive))
+		if err != nil {
+			return err
+		}
+
+		if err := s.productPort.UpdateOwnershipStatus(txCtx, own.ProductItemID, string(entity.OwnershipStatusActive)); err != nil {
+			return err
+		}
+
+		// Insert Event to database
+		if tx != nil {
+			eventObj := map[string]interface{}{
+				"id":              uuid.New(),
+				"product_item_id": own.ProductItemID,
+				"actor_id":        adminID,
+				"event_type":      "REGISTERED",
+				"title":           "Đăng ký sở hữu",
+				"description":     "Duyệt đăng ký sở hữu cho chủ sở hữu mới",
+				"created_at":      time.Now(),
+			}
+			if err := tx.Table("events").Create(&eventObj).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if err := s.productPort.UpdateOwnershipStatus(ctx, own.ProductItemID, string(entity.OwnershipStatusActive)); err != nil {
-		return err
+	// Publish to RabbitMQ after commit
+	if s.pub != nil {
+		event := types.Event{
+			EventID:       uuid.NewString(),
+			EventType:     rabbitmq.OwnerCreatedRK,
+			EventVersion:  "1.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: uuid.NewString(),
+			Payload: map[string]interface{}{
+				"ownership_id":    own.ID.String(),
+				"product_item_id": own.ProductItemID.String(),
+				"owner_id":        own.OwnerID.String(),
+				"status":          "ACTIVE",
+				"approved_by":     adminID.String(),
+				"approved_at":     time.Now().UTC(),
+			},
+		}
+		_ = s.pub.Publish(event)
 	}
 
 	return nil
@@ -243,14 +358,44 @@ func (s *OwnershipService) RejectOwnership(ctx context.Context, ownershipID uuid
 		return errors.New("chỉ có thể từ chối quyền sở hữu đang ở trạng thái PENDING")
 	}
 
-	// Reject by setting status to REVOKED or REJECTED.
-	err = s.repo.UpdateOwnershipStatusAndEndedAt(ctx, nil, ownershipID, string(entity.OwnershipStatusRevoked))
+	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
+		txCtx := entity.WithTx(ctx, tx)
+
+		// Reject by setting status to REVOKED.
+		err = s.repo.UpdateOwnershipStatusAndEndedAt(txCtx, tx, ownershipID, string(entity.OwnershipStatusRevoked))
+		if err != nil {
+			return err
+		}
+
+		if err := s.productPort.UpdateOwnershipStatus(txCtx, own.ProductItemID, "IN_STOCK"); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if err := s.productPort.UpdateOwnershipStatus(ctx, own.ProductItemID, "IN_STOCK"); err != nil {
-		return err
+	// Publish to RabbitMQ after commit
+	if s.pub != nil {
+		event := types.Event{
+			EventID:       uuid.NewString(),
+			EventType:     rabbitmq.OwnerDeletedRK,
+			EventVersion:  "1.0",
+			Timestamp:     time.Now().UTC(),
+			Producer:      "go-core-service",
+			CorrelationID: uuid.NewString(),
+			Payload: map[string]interface{}{
+				"ownership_id":    own.ID.String(),
+				"product_item_id": own.ProductItemID.String(),
+				"status":          "REVOKED",
+				"rejected_by":     adminID.String(),
+				"rejected_at":     time.Now().UTC(),
+			},
+		}
+		_ = s.pub.Publish(event)
 	}
 
 	return nil
@@ -284,9 +429,9 @@ func (s *OwnershipService) GetOwnershipDetail(ctx context.Context, productItemID
 	}
 
 	// 4. Lấy thông tin sản phẩm từ Product Module
-	pName, sku, err := s.productPort.GetProductItemDetail(ctx, own.ProductItemID)
+	pName, sku, serialNumber, err := s.productPort.GetProductItemDetail(ctx, own.ProductItemID)
 	if err != nil {
-		pName, sku = "Unknown Product", "N/A"
+		pName, sku, serialNumber = "Unknown Product", "N/A", "N/A"
 	}
 
 	// 5. Map history — Mỗi record trong history cần fetch thêm user info
@@ -319,6 +464,7 @@ func (s *OwnershipService) GetOwnershipDetail(ctx context.Context, productItemID
 		OwnerPhone:       phone,
 		ProductName:      pName,
 		ProductSKU:       sku,
+		SerialNumber:     serialNumber,
 		OwnershipHistory: historyItems,
 	}, nil
 }
@@ -466,9 +612,10 @@ func (s *OwnershipService) SearchOwnerships(ctx context.Context, req dto.SearchO
 		results[i].OwnerEmail = email
 		results[i].OwnerPhone = phone
 
-		prodName, prodSKU, _ := s.productPort.GetProductItemDetail(ctx, o.ProductItemID)
+		prodName, prodSKU, prodSerial, _ := s.productPort.GetProductItemDetail(ctx, o.ProductItemID)
 		results[i].ProductName = prodName
 		results[i].ProductSKU = prodSKU
+		results[i].SerialNumber = prodSerial
 	}
 
 	limit := req.Limit

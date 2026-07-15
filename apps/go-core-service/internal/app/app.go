@@ -58,16 +58,12 @@ import (
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
+	ownershipEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 
 	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
 	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
 	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
 	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
-
-	warrantyClaimAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/adapters"
-	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
-	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
-	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
 
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
@@ -177,29 +173,19 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	oProductAdapter := ownershipAdapters.NewRealProductAdapter(database, productItemsRepo, pRepo)
 	oEmailAdapter := ownershipAdapters.NewRealEmailAdapter()
 	oUserAdapter := ownershipAdapters.NewRealUserAdapter(uRepo)
-	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter)
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
-
-	// Warranty Claim Module
-	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
-	wcOwnershipAdapter := warrantyClaimAdapters.NewDbOwnershipAdapter(database)
-	wcProductAdapter := warrantyClaimAdapters.NewDbProductItemAdapter(database)
-	wcEventMock := &warrantyClaimAdapters.MockEventPort{}
-	wcAuditMock := &warrantyClaimAdapters.MockAuditLogPort{}
-	wcNotifMock := &warrantyClaimAdapters.MockNotificationPort{}
-	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wcOwnershipAdapter, wcProductAdapter, wcEventMock, wcAuditMock, wcNotifMock)
-	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
 
 	// Warranty Module
 	wRepo := warrantyRepo.NewWarrantyRepository(database)
-	wService := warrantyService.NewWarrantyService(wRepo)
+	wService := warrantyService.NewWarrantyService(wRepo, pub)
 	wHandler := warrantyHandler.NewWarrantyHandler(wService)
 
-	// AutoMigrate Warranty
-	_ = database.AutoMigrate(&warrantyEntity.Warranty{})
+	// AutoMigrate
+	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{})
 
 	// Initialize Public Module
-	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wcRepo, lRepo, uRepo)
+	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wRepo, lRepo, uRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
 
 	r := router.SetupRouter(router.RouterDependency{
@@ -221,7 +207,6 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductItemHandler:           piHandler,
 		OwnershipHandler:             oHandler,
 		WarrantyHandler:              wHandler,
-		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{

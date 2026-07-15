@@ -1,9 +1,11 @@
 package entity
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type OwnershipStatus string
@@ -38,4 +40,17 @@ func NewOwnership(productItemID uuid.UUID, ownerID uuid.UUID) *Ownership {
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}
+}
+
+type txKey struct{}
+
+func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
+	return context.WithValue(ctx, txKey{}, tx)
+}
+
+func GetTx(ctx context.Context, defaultDB *gorm.DB) *gorm.DB {
+	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
+		return tx
+	}
+	return defaultDB
 }

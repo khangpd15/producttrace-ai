@@ -180,7 +180,8 @@ async function ensureEmbeddingTopology() {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  // CORS is handled centrally at the Kong API Gateway level
+  // app.enableCors();
 
   app.useGlobalPipes(
     new ValidationPipe(),
