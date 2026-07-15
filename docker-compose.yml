@@ -25,11 +25,16 @@ services:
       - app-networks
 
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
     container_name: product-trace-redis
+
+    command: redis-server --appendonly yes
 
     ports:
       - "${REDIS_PORT}:6379"
+
+    volumes:
+      - redis-data:/data
 
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -154,8 +159,10 @@ services:
 
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
-      GIN_MODE: release
       JWT_SECRET: ${JWT_SECRET}
+      GIN_MODE: release
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
 
     ports:
       - "${GO_CORE_PORT}:8080"
@@ -276,5 +283,6 @@ networks:
 volumes:
   postgres-data:
   rabbitmq-data:
+  redis-data:
   qdrant-data:
 

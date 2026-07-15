@@ -137,7 +137,10 @@ func (h *UserHandler) SearchUsers(c *gin.Context) {
 }
 
 func (h *UserHandler) GetProfile(c *gin.Context) {
-	actorID := c.GetHeader("X-User-Id")
+	actorID := c.GetString("user_id")
+	if actorID == "" {
+		actorID = c.GetHeader("X-User-Id")
+	}
 	if actorID == "" {
 		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
 		return
@@ -158,7 +161,10 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 }
 
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
-	actorID := c.GetHeader("X-User-Id")
+	actorID := c.GetString("user_id")
+	if actorID == "" {
+		actorID = c.GetHeader("X-User-Id")
+	}
 	if actorID == "" {
 		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
 		return
@@ -182,6 +188,28 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(200, response.ResponseSuccess("Profile updated successfully", res))
+}
+
+func (h *UserHandler) ChangePassword(c *gin.Context) {
+	actorID := c.GetString("user_id")
+	if actorID == "" {
+		actorID = c.GetHeader("X-User-Id")
+	}
+	if actorID == "" {
+		apperror.HandleError(c, apperror.NewUnauthorized("Login required"))
+		return
+	}
+	var req request.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+	res, err := h.userService.ChangePassword(c.Request.Context(), actorID, &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+	c.JSON(200, response.ResponseSuccess("Password changed successfully", res))
 }
 
 func (h *UserHandler) LockAccount(c *gin.Context) {

@@ -9,6 +9,7 @@ import (
 type OwnershipStatus string
 
 const (
+	OwnershipStatusPending     OwnershipStatus = "PENDING"
 	OwnershipStatusActive      OwnershipStatus = "ACTIVE"
 	OwnershipStatusTransferred OwnershipStatus = "TRANSFERRED"
 	OwnershipStatusRevoked     OwnershipStatus = "REVOKED"

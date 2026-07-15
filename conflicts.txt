@@ -1,0 +1,11 @@
+apps/go-core-service/.env.example
+apps/go-core-service/internal/app/app.go
+apps/go-core-service/internal/modules/authen/service/authen_service.go
+apps/go-core-service/internal/modules/ownership/adapters/email_adapter.go
+apps/go-core-service/internal/modules/ownership/adapters/product_adapter.go
+apps/go-core-service/internal/modules/ownership/adapters/user_adapter.go
+apps/go-core-service/internal/modules/ownership/service/ownership_service_test.go
+apps/go-core-service/internal/modules/product_item/repositories/product_item_repository.go
+apps/go-core-service/internal/modules/user/handler/user_handler.go
+apps/go-core-service/internal/modules/user/service/user_service_test.go
+docker-compose.yml
