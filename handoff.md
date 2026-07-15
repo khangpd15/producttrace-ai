@@ -83,3 +83,354 @@ RESET_PASSWORD_TEMPLATE_ID=id_template_quên_mật_khẩu_ở_đây
 5. Check hộp thư đến, mở email và click vào nút "Xác nhận thay đổi mật khẩu".
 6. Điền mật khẩu mới trên form hiện ra.
 7. Reset thành công -> Kiểm tra file `users.json` sẽ thấy chuỗi băm `password` đã bị thay đổi, và `password-reset-tokens.json` đã rỗng. Mọi thứ hoạt động như một hệ thống thực thụ!
+
+---
+
+
+# Tài liệu Bàn giao: Module Thông Báo Bảo Hành (Warranty Notification)
+
+## Tổng quan
+
+Đã triển khai hoàn chỉnh tính năng gửi **email thông báo cập nhật trạng thái bảo hành** cho khách hàng thông qua hệ thống Event-Driven (RabbitMQ → NestJS Worker → SendGrid).
+
+- **Use Case**: `UC-P3-NOTI-01` — Gửi thông báo cập nhật bảo hành tới email khách hàng khi trạng thái thay đổi.
+- **Nhánh Git**: `feature/notification-warranty`
+- **PR**: [#90 → develop](https://github.com/khangpd15/producttrace-ai/pull/90) _(đang chờ review & approve)_
+- **SendGrid Template ID**: `d-aa9b56ba4bf64b54a72eddc7ba33ba03`
+
+---
+
+## 1. Phân chia trách nhiệm (Architecture: Event-Driven — Phương án A)
+
+| Service | Trách nhiệm |
+|---|---|
+| **Go Core Service** | Truy vấn PostgreSQL lấy thông tin bảo hành thật → Publish event `notification.sent` lên RabbitMQ với đầy đủ payload |
+| **NestJS (`nest-ai-service`)** | Lắng nghe event từ RabbitMQ → Gửi email qua SendGrid — **Đã hoàn thành** ✅ |
+
+> **NestJS không kết nối trực tiếp vào database.** Toàn bộ dữ liệu bảo hành (tên sản phẩm, trạng thái, ngày hết hạn...) được lấy từ Go Core Service thông qua payload RabbitMQ.
+
+---
+
+## 2. Luồng hoạt động (Event Flow)
+
+```
+[PostgreSQL] ← Go Core Service truy vấn bảng warranties + users + products
+     │
+     │  Publish RabbitMQ event:
+     │  Exchange: "product-trace.events"
+     │  Routing key: "notification.sent"
+     │  Payload: { event_type, data: { email, full_name, product_name, warranty_status, warranty_end_date } }
+     ▼
+RabbitMQ Queue: "ai.events"
+     │
+     ▼
+NotificationConsumer (NestJS Worker)  ← lắng nghe liên tục
+     │  case "notification.sent"
+     │  Trích xuất payload động
+     ▼
+MailService.sendWarrantyUpdateEmail()
+     │  Gọi SendGrid API với templateId + dynamicTemplateData
+     ▼
+Email đến hòm thư khách hàng  ✅
+```
+
+---
+
+## 3. Các file đã thay đổi trong `nest-ai-service`
+
+| File | Mô tả thay đổi |
+|---|---|
+| `src/messaging/rabbitmq/rabbitmq.constants.ts` | Thêm `NOTIFICATION_SENT: 'notification.sent'` vào `ROUTING_KEYS` và `EVENT_TYPES`; merge thêm các keys mới từ nhánh develop (`OWNERSHIP_OTP`, `TRACE_*`, `EMBEDDING_*`) |
+| `src/messaging/rabbitmq/rabbitmq.service.ts` | Thêm `NOTIFICATION_SENT` và `OWNERSHIP_OTP` vào danh sách `routingKeys` để tự động bind hàng đợi khi khởi tạo |
+| `src/messaging/consumers/notification.consumer.ts` | Thêm 3 trường động vào `NotificationPayload` (`product_name`, `warranty_status`, `warranty_end_date`); thêm `case "notification.sent"` trong switch để gọi `sendWarrantyUpdateEmail` |
+| `src/mail/mail.service.ts` | Method `sendWarrantyUpdateEmail(to, fullName, productName, status, endDate)` — gửi qua SendGrid Dynamic Template hoặc fallback HTML thuần |
+
+---
+
+## 4. Cấu trúc Payload RabbitMQ
+
+Go Core Service **bắt buộc** publish đúng schema sau:
+
+```json
+{
+  "event_type": "notification.sent",
+  "data": {
+    "email": "khachhang@gmail.com",
+    "full_name": "Nguyễn Văn A",
+    "product_name": "iPhone 15 Pro Max 256GB",
+    "warranty_status": "Đã hoàn tất sửa chữa",
+    "warranty_end_date": "24/10/2026"
+  }
+}
+```
+
+> **Lưu ý**: Tất cả 5 trường đều là dữ liệu thật (dynamic). Nếu thiếu trường nào, hệ thống có giá trị fallback mặc định để tránh crash — nhưng email sẽ thiếu thông tin.
+
+---
+
+## 5. Cấu hình SendGrid Template
+
+**Template ID**: `d-aa9b56ba4bf64b54a72eddc7ba33ba03`
+
+| Tên biến SendGrid | Dữ liệu truyền vào | Ví dụ |
+|---|---|---|
+| `{{fullName}}` | Tên khách hàng | `Nguyễn Văn A` |
+| `{{productName}}` | Tên sản phẩm | `iPhone 15 Pro Max 256GB` |
+| `{{status}}` | Trạng thái bảo hành | `Đã hoàn tất sửa chữa` |
+| `{{endDate}}` | Ngày hết hạn bảo hành | `24/10/2026` |
+| `{{frontendUrl}}` | Link hệ thống | `http://localhost:5173` |
+| `{{year}}` | Năm hiện tại (auto) | `2026` |
+
+---
+
+## 6. Cấu hình môi trường (.env)
+
+Thêm biến sau vào file `.env` của `apps/nest-ai-service`:
+
+```env
+# SendGrid
+SENDGRID_API_KEY=your_api_key
+SENDGRID_FROM_EMAIL=khangpd.ce191105@gmail.com
+
+# Template ID cho thông báo cập nhật bảo hành
+WARRANTY_UPDATE_TEMPLATE_ID=d-aa9b56ba4bf64b54a72eddc7ba33ba03
+```
+
+> Nếu `WARRANTY_UPDATE_TEMPLATE_ID` không được set, hệ thống dùng Template ID trên làm mặc định.
+> Nếu `SENDGRID_API_KEY` không được set, hệ thống chạy ở **MOCK mode** — chỉ log ra console.
+
+---
+
+## 7. Hướng dẫn Test (Tester / Dev khác)
+
+### Test thủ công qua RabbitMQ Management UI
+1. Mở `http://localhost:15672` (đăng nhập: `admin` / `admin123`).
+2. Vào **Exchanges** → chọn exchange `product-trace.events`.
+3. Tìm mục **Publish message**, điền:
+   - **Routing key**: `notification.sent`
+   - **Payload**:
+     ```json
+     {
+       "event_type": "notification.sent",
+       "data": {
+         "email": "test@gmail.com",
+         "full_name": "Nguyễn Văn A",
+         "product_name": "iPhone 15 Pro Max",
+         "warranty_status": "ACTIVE",
+         "warranty_end_date": "24/10/2026"
+       }
+     }
+     ```
+4. Nhấn **Publish message**.
+5. Kiểm tra log của `nest-ai-service`:
+   ```
+   [NotificationConsumer] Warranty update email sent to test@gmail.com
+   ```
+6. Kiểm tra hòm thư nhận email với giao diện từ SendGrid template.
+
+---
+
+## 8. Điểm quan trọng cho Dev tiếp nhận
+
+### Dev Go Core Service cần làm:
+- Sau khi cập nhật trạng thái bảo hành trong PostgreSQL, publish event lên RabbitMQ với:
+  - **Exchange**: `product-trace.events`
+  - **Routing key**: `notification.sent`
+  - **Payload**: JSON đúng schema mục 4 ở trên
+- Tham khảo các routing key đã có trong `apps/go-core-service/internal/events/rabbitmq/constants.go`
+
+### Dev NestJS KHÔNG cần sửa gì thêm khi:
+- Go Core Service thay đổi nội dung bảo hành — chỉ cần đảm bảo payload JSON đúng schema.
+
+### Để thêm loại thông báo mới (ví dụ: `warranty.expired`):
+1. Thêm constant mới vào `rabbitmq.constants.ts`
+2. Bind routing key mới vào `rabbitmq.service.ts`
+3. Thêm `case` mới vào `notification.consumer.ts`
+4. Thêm method mới vào `mail.service.ts`
+
+### Template fallback:
+Nếu chưa setup SendGrid Template, hệ thống tự động gửi email HTML thuần có đầy đủ thông tin (không bị lỗi/crash).
+
+---
+
+## 9. Lịch sử thay đổi
+
+| Ngày | Nội dung |
+|---|---|
+| 14/07/2026 | Khởi tạo module, implement `sendWarrantyUpdateEmail` với 5 tham số động |
+| 14/07/2026 | Bind routing key `notification.sent` vào `rabbitmq.service.ts` |
+| 14/07/2026 | Giải quyết merge conflict với nhánh `develop` (thêm `OWNERSHIP_OTP`, `TRACE_*`, `EMBEDDING_*` keys) |
+| 14/07/2026 | Khởi tạo module, implement `sendWarrantyUpdateEmail` với 5 tham số động |
+| 14/07/2026 | Bind routing key `notification.sent` vào `rabbitmq.service.ts` |
+| 14/07/2026 | Giải quyết merge conflict với nhánh `develop` (thêm `OWNERSHIP_OTP`, `TRACE_*`, `EMBEDDING_*` keys) |
+| 14/07/2026 | Tạo PR #90 → `develop`, đang chờ review |
+
+---
+
+# Tài liệu Bàn giao: Module Thông Báo Chuyển Quyền Sở Hữu (Ownership Notification Worker)
+
+## Tổng quan
+
+Đã triển khai hoàn chỉnh tính năng gửi **email thông báo chuyển quyền sở hữu sản phẩm** cho khách hàng thông qua hệ thống Event-Driven (RabbitMQ → NestJS Worker → SendGrid).
+
+- **Use Case**: Gửi email thông báo cho người nhận khi quyền sở hữu sản phẩm được chuyển giao thành công.
+- **Nhánh Git**: `feature/notification-ownership`
+- **PR**: [Mở PR → develop](https://github.com/khangpd15/producttrace-ai/compare/develop...feature/notification-ownership?expand=1) _(đang chờ review & approve)_
+- **SendGrid Template ID**: `d-1f78adcf1e3644e6bee66c2ea402af69`
+
+---
+
+## 1. Phân chia trách nhiệm (Architecture: Event-Driven — Queue chung)
+
+| Service | Trách nhiệm |
+|---|---|
+| **Go Core Service** | Sau khi chuyển quyền sở hữu thành công trong PostgreSQL → Publish event `ownership.transferred` lên RabbitMQ với đầy đủ payload |
+| **NestJS (`nest-ai-service`)** | Lắng nghe event từ RabbitMQ queue `ai.events` → Gửi email qua SendGrid — **Đã hoàn thành** ✅ |
+
+> **Hệ thống sử dụng chung queue `ai.events`** (queue dùng chung cho toàn bộ hệ thống notification), không tạo thêm queue riêng để tránh phân mảnh cấu trúc RabbitMQ.
+
+---
+
+## 2. Luồng hoạt động (Event Flow)
+
+```
+[PostgreSQL] ← Go Core Service cập nhật bảng ownership
+     │
+     │  Publish RabbitMQ event:
+     │  Exchange: "product-trace.events"
+     │  Routing key: "ownership.transferred"
+     │  Payload: { event_id, event_type, payload: { email, full_name, product_name } }
+     ▼
+RabbitMQ Queue: "ai.events"
+     │
+     ▼
+NotificationConsumer (NestJS Worker)  ← lắng nghe liên tục
+     │  case "ownership.transferred"
+     ▼
+MailService.sendOwnershipTransferredEmail()
+     │  Gọi SendGrid API với templateId + dynamicTemplateData
+     ▼
+Email đến hòm thư khách hàng  ✅
+```
+
+---
+
+## 3. Các file đã thay đổi trong `nest-ai-service`
+
+| File | Mô tả thay đổi |
+|---|---|
+| `src/messaging/rabbitmq/rabbitmq.constants.ts` | Thêm `OWNERSHIP_TRANSFERRED: 'ownership.transferred'` vào `ROUTING_KEYS` và `EVENT_TYPES` |
+| `src/messaging/rabbitmq/rabbitmq.service.ts` | Thêm `OWNERSHIP_TRANSFERRED` vào mảng `routingKeys` để tự động bind routing key mới vào queue `ai.events` khi khởi tạo |
+| `src/messaging/consumers/notification.consumer.ts` | Thêm `case RABBITMQ.EVENT_TYPES.OWNERSHIP_TRANSFERRED` trong switch để gọi `sendOwnershipTransferredEmail` |
+| `src/modules/mail/mail.service.ts` | Thêm method `sendOwnershipTransferredEmail(to, fullName, productName)` — gửi qua SendGrid Dynamic Template hoặc fallback HTML thuần |
+| `.env.example` | Thêm `OWNERSHIP_TRANSFERRED_TEMPLATE_ID` cùng toàn bộ template IDs thực tế đang dùng |
+| `docker-compose.yml` | Thêm biến `OWNERSHIP_TRANSFERRED_TEMPLATE_ID` vào environment của `nest-ai-service` và sửa `RABBITMQ_URL` đúng địa chỉ container |
+
+---
+
+## 4. Cấu trúc Payload RabbitMQ
+
+Go Core Service **bắt buộc** publish đúng schema sau:
+
+```json
+{
+  "event_id": "uuid-duy-nhat",
+  "event_type": "ownership.transferred",
+  "payload": {
+    "email": "nguoidung@gmail.com",
+    "full_name": "Nguyễn Văn A",
+    "product_name": "iPhone 16 Pro Max 256GB"
+  }
+}
+```
+
+> **Lưu ý**: Nếu thiếu `full_name` hoặc `product_name`, hệ thống có giá trị fallback mặc định (`'User'`, `'Sản phẩm của bạn'`) để tránh crash — nhưng email sẽ thiếu thông tin.
+
+---
+
+## 5. Cấu hình SendGrid Template
+
+**Template ID**: `d-1f78adcf1e3644e6bee66c2ea402af69`
+
+| Tên biến SendGrid | Dữ liệu truyền vào | Ví dụ |
+|---|---|---|
+| `{{fullName}}` | Tên người nhận sở hữu | `Nguyễn Văn A` |
+| `{{productName}}` | Tên sản phẩm được chuyển | `iPhone 16 Pro Max 256GB` |
+| `{{frontendUrl}}` | Link hệ thống | `http://localhost:5173` |
+| `{{year}}` | Năm hiện tại (auto) | `2026` |
+
+---
+
+## 6. Cấu hình môi trường (.env)
+
+Thêm biến sau vào file `.env` (đã có sẵn trong `.env.example`):
+
+```env
+OWNERSHIP_TRANSFERRED_TEMPLATE_ID=d-1f78adcf1e3644e6bee66c2ea402af69
+```
+
+> Nếu `OWNERSHIP_TRANSFERRED_TEMPLATE_ID` không được set, hệ thống dùng Template ID trên làm mặc định (đã hardcode fallback trong code).
+> Nếu `SENDGRID_API_KEY` không được set, hệ thống chạy ở **MOCK mode** — chỉ log ra console.
+
+---
+
+## 7. Hướng dẫn Test (Tester / Dev khác)
+
+### Test thủ công qua RabbitMQ Management UI
+1. Mở `http://localhost:15672` (đăng nhập: `guest` / `guest`).
+2. Vào **Exchanges** → chọn exchange `product-trace.events`.
+3. Tìm mục **Publish message**, điền:
+   - **Routing key**: `ownership.transferred`
+   - **Payload**:
+     ```json
+     {
+       "event_id": "test-ownership-001",
+       "event_type": "ownership.transferred",
+       "payload": {
+         "email": "test@gmail.com",
+         "full_name": "Nguyễn Văn A",
+         "product_name": "iPhone 16 Pro Max 256GB"
+       }
+     }
+     ```
+4. Nhấn **Publish message**.
+5. Kiểm tra log của `nest-ai-service`:
+   ```
+   [NotificationConsumer] Ownership transferred email sent to test@gmail.com
+   [NotificationConsumer] [Success] Event Type: ownership.transferred | Acknowledged.
+   ```
+6. Kiểm tra hòm thư nhận email với giao diện từ SendGrid template.
+
+---
+
+## 8. Điểm quan trọng cho Dev tiếp nhận
+
+### Dev Go Core Service cần làm:
+- Sau khi chuyển quyền sở hữu thành công trong PostgreSQL, publish event lên RabbitMQ với:
+  - **Exchange**: `product-trace.events`
+  - **Routing key**: `ownership.transferred`
+  - **Payload**: JSON đúng schema mục 4 ở trên
+- Thêm constant `OwnershipTransferredRK = "ownership.transferred"` vào `apps/go-core-service/internal/events/rabbitmq/constants.go`
+
+### Dev NestJS KHÔNG cần sửa gì thêm khi:
+- Go Core Service thay đổi nội dung payload — chỉ cần đảm bảo `email`, `full_name`, `product_name` trong `payload` object.
+
+### Để thêm loại thông báo mới:
+1. Thêm constant mới vào `rabbitmq.constants.ts`
+2. Bind routing key mới vào `rabbitmq.service.ts`
+3. Thêm `case` mới vào `notification.consumer.ts`
+4. Thêm method mới vào `mail.service.ts`
+
+---
+
+## 9. Lịch sử thay đổi
+
+| Ngày | Nội dung |
+|---|---|
+| 15/07/2026 | Khởi tạo module, implement `sendOwnershipTransferredEmail` với fallback HTML thuần |
+| 15/07/2026 | Thêm constant `OWNERSHIP_TRANSFERRED` vào `rabbitmq.constants.ts` và bind queue |
+| 15/07/2026 | Thêm `case` xử lý event `ownership.transferred` vào `notification.consumer.ts` |
+| 15/07/2026 | Thêm `OWNERSHIP_TRANSFERRED_TEMPLATE_ID` vào `.env.example` và `docker-compose.yml` |
+| 15/07/2026 | Test thành công end-to-end qua Docker — email gửi tới `nguyenzc17@gmail.com` ✅ |
+| 15/07/2026 | Push code lên nhánh `feature/notification-ownership`, tạo PR → `develop` |
+

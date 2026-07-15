@@ -26,6 +26,18 @@ export class NotificationPayload {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  product_name?: string;
+
+  @IsOptional()
+  @IsString()
+  warranty_status?: string;
+
+  @IsOptional()
+  @IsString()
+  warranty_end_date?: string;
 }
 
 @Injectable()
@@ -107,6 +119,36 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         );
         this.logger.log(`[NotificationConsumer] Verification-success email sent to ${payload.email}`);
         break;
+
+      // ── Product Created ───────────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.PRODUCT_CREATED: // "product.created"
+        this.logger.log(
+          `[NotificationConsumer] product.created event received — no email action configured. email="${payload.email}"`,
+        );
+        break;
+
+      // ── Warranty Update ───────────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.NOTIFICATION_SENT: // "notification.sent"
+        await this.mailService.sendWarrantyUpdateEmail(
+          payload.email,
+          payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+          payload.warranty_status || 'Đã cập nhật',
+          payload.warranty_end_date || 'Không xác định',
+        );
+        this.logger.log(`[NotificationConsumer] Warranty update email sent to ${payload.email}`);
+        break;
+
+      // ── Ownership Transferred ─────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.OWNERSHIP_TRANSFERRED:
+        await this.mailService.sendOwnershipTransferredEmail(
+          payload.email,
+          payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+        );
+        this.logger.log(`[NotificationConsumer] Ownership transferred email sent to ${payload.email}`);
+        break;
+
 
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:

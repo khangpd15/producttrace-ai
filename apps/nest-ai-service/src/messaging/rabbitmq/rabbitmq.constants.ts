@@ -60,11 +60,13 @@ export const RABBITMQ = {
     USER_REGISTERED: 'otp.registered',   // Go: OTPRegisterUserRK — sent after OTP generation
     PASSWORD_RESET: 'otp.forgot',        // Go: OTPForgotRK
     USER_VERIFIED: 'otp.verified',      // Go: OTPVerifiedRK
-    PRODUCT_CREATED: 'product.created',
+    PRODUCT_CREATED: 'product.created',   // Go: ProductCreatedRK
     OWNERSHIP_OTP: 'otp.ownership',
     TRACE_CREATED: 'trace.created',
     TRACE_EXPORTED: 'trace.exported',
     TRACE_EVENTS: 'trace.*',
+    NOTIFICATION_SENT: 'notification.sent', // Warranty update notification
+    OWNERSHIP_TRANSFERRED: 'ownership.transferred',
 
     EMBEDDING_GENERATED: 'embedding.generated',
     EMBEDDING_COMPLETED: 'embedding.completed',
@@ -81,5 +83,7 @@ export const RABBITMQ = {
     USER_VERIFIED: 'otp.verified',
     PRODUCT_CREATED: 'product.created',
     OWNERSHIP_OTP: 'otp.ownership',
+    NOTIFICATION_SENT: 'notification.sent',
+    OWNERSHIP_TRANSFERRED: 'ownership.transferred',
   },
 };
