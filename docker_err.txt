@@ -1,0 +1,5 @@
+failed to parse D:\Golang\producttrace-ai\docker-compose.yml: yaml: construct errors:
+  line 2: line 164: mapping key "JWT_SECRET" already defined at line 162
+
+[1mWhat's next:[0m
+    Debug this Compose error with Gordon → docker ai "help me fix this compose error"

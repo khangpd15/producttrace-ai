@@ -30,6 +30,7 @@ type UserServiceInterface interface {
 	UpdateProfile(ctx context.Context, actorID string, targetUserID string, req *request.UpdateProfileRequest) (*response.UserResponse, error)
 	LockAccount(ctx context.Context, id string) (*response.UserResponse, error)
 	UnlockAccount(ctx context.Context, id string) (*response.UserResponse, error)
+	ChangePassword(ctx context.Context, userID string, req *request.ChangePasswordRequest) (*response.UserResponse, error)
 }
 
 type UserService struct {
@@ -372,5 +373,38 @@ func (s *UserService) UnlockAccount(ctx context.Context, id string) (*response.U
 	if err != nil {
 		return nil, err
 	}
+	return mapToUserResponse(updatedUser), nil
+}
+
+func (s *UserService) ChangePassword(ctx context.Context, userID string, req *request.ChangePasswordRequest) (*response.UserResponse, error) {
+	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "User")
+	}
+	if user == nil {
+		return nil, apperror.NewNotFound("User")
+	}
+
+	if !utils.ComparePassword(user.PasswordHash, req.CurrentPassword) {
+		return nil, apperror.NewBadRequest("Mật khẩu hiện tại không chính xác")
+	}
+
+	if req.CurrentPassword == req.NewPassword {
+		return nil, apperror.NewBadRequest("Mật khẩu mới không được trùng với mật khẩu hiện tại")
+	}
+
+	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	user.PasswordHash = hashedPassword
+	user.UpdatedAt = time.Now()
+
+	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "User")
+	}
+
 	return mapToUserResponse(updatedUser), nil
 }
