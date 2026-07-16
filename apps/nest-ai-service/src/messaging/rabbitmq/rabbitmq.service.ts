@@ -155,6 +155,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       RABBITMQ.ROUTING_KEYS.NOTIFICATION_SENT, // "notification.sent"
       RABBITMQ.ROUTING_KEYS.OWNERSHIP_OTP,
       RABBITMQ.ROUTING_KEYS.OWNERSHIP_TRANSFERRED,
+      RABBITMQ.ROUTING_KEYS.WARRANTY_EXPIRED,
     ];
 
     for (const rk of routingKeys) {
