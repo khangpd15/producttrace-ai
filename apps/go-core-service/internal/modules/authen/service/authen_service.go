@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/consumer"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -129,18 +129,18 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 	}
 
 	// Check if status is pending verification
-	// if user.Status == UserEntity.StatusPending {
-	// 	return "", "", apperror.NewValidation("Please verify your account via OTP first")
-	// }
+	if user.Status == UserEntity.StatusPending {
+		return "", "", apperror.NewValidation("Please verify your account via OTP first")
+	}
 
-	// if user.Status != UserEntity.StatusActive {
-	// 	return "", "", apperror.NewUnauthorized("Account is not active")
-	// }
+	if user.Status != UserEntity.StatusActive {
+		return "", "", apperror.NewUnauthorized("Account is not active")
+	}
 
 	// Compare passwords
-	// if !utils.ComparePassword(user.PasswordHash, password) {
-	// 	return "", "", apperror.NewUnauthorized("Invalid credentials")
-	// }
+	if !utils.ComparePassword(user.PasswordHash, password) {
+		return "", "", apperror.NewUnauthorized("Invalid credentials")
+	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
@@ -325,7 +325,6 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 
 	return nil
 }
-
 
 func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
 
