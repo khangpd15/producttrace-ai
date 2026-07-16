@@ -169,17 +169,62 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 		return nil, err
 	}
 
+	var description string
+	if product.Description != nil {
+		description = *product.Description
+	}
+	var slug string
+	if product.Slug != nil {
+		slug = *product.Slug
+	}
+	var status string
+	if product.Status != nil {
+		status = *product.Status
+	}
+	var thumbnailURL string
+	if product.ThumbnailURL != nil {
+		thumbnailURL = *product.ThumbnailURL
+	}
+
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	metadata := req.Metadata
+	if metadata == nil {
+		metadata = map[string]interface{}{}
+	}
+
+	var createdByStr string
+	if product.CreatedBy != nil {
+		createdByStr = product.CreatedBy.String()
+	} else {
+		createdByStr = createdBy.String()
+	}
+
 	event := eventTypes.Event{
 		EventID:       uuid.New().String(),
 		EventType:     "product.created",
 		EventVersion:  "1.0",
-		Timestamp:     time.Now(),
+		Timestamp:     time.Now().UTC(),
 		Producer:      "go-core-service",
 		CorrelationID: product.ID.String(),
 		Payload: map[string]interface{}{
-			"product_id":  product.ID.String(),
-			"name":        product.Name,
-			"category_id": product.CategoryID,
+			"id":            product.ID.String(),
+			"productId":     product.ID.String(),
+			"name":          product.Name,
+			"description":   description,
+			"slug":          slug,
+			"status":        status,
+			"created_at":    product.CreatedAt,
+			"updated_at":    product.UpdatedAt,
+			"created_by":    createdByStr,
+			"updated_by":    createdByStr,
+			"tags":          tags,
+			"metadata":      metadata,
+			"thumbnail_url": thumbnailURL,
+			"variants":      req.Variants,
 		},
 	}
 
