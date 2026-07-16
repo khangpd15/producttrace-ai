@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,7 +15,16 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 
+		// Fallback to query param for EventSource (SSE) which doesn't support custom headers
 		if authHeader == "" {
+			queryToken := c.Query("token")
+			if queryToken != "" {
+				authHeader = "Bearer " + queryToken
+			}
+		}
+
+		if authHeader == "" {
+			fmt.Println("[AuthMiddleware] missing Authorization header")
 			c.JSON(http.StatusUnauthorized, Response.ResponseError(
 				"missing Authorization header",
 				"authorization header is required",
@@ -26,6 +36,7 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		if tokenString == authHeader {
+			fmt.Println("[AuthMiddleware] invalid Authorization format")
 			c.JSON(http.StatusUnauthorized, Response.ResponseError(
 				"invalid Authorization format",
 				"Authorization header must be in the format 'Bearer <token>'",
@@ -36,6 +47,7 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 
 		claims, err := Utils.ValidateAccessToken(tokenString)
 		if err != nil {
+			fmt.Println("[AuthMiddleware] ValidateAccessToken error:", err)
 			c.JSON(http.StatusUnauthorized, Response.ResponseError(
 				"invalid or expired token",
 				"token validation failed: "+err.Error(),
@@ -45,6 +57,7 @@ func AuthMiddleware(userRepo Repo.UserRepositoryInterface) gin.HandlerFunc {
 		}
 
 		if claims.UserID == "" {
+			fmt.Println("[AuthMiddleware] invalid user ID in JWT")
 			c.JSON(http.StatusUnauthorized, Response.ResponseError(
 				"invalid user ID",
 				"invalid user ID in token",

@@ -128,6 +128,7 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 		return "", "", apperror.NewUnauthorized("Invalid credentials")
 	}
 
+	// Check if status is pending verification
 	if user.Status == UserEntity.StatusPending {
 		return "", "", apperror.NewValidation("Please verify your account via OTP first")
 	}
@@ -136,6 +137,7 @@ func (s *AuthenService) LoginUser(ctx context.Context, email, password string) (
 		return "", "", apperror.NewUnauthorized("Account is not active")
 	}
 
+	// Compare passwords
 	if !utils.ComparePassword(user.PasswordHash, password) {
 		return "", "", apperror.NewUnauthorized("Invalid credentials")
 	}

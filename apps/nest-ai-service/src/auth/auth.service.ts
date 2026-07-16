@@ -29,11 +29,11 @@ export class AuthService {
       return successMessage;
     }
 
-    // Generate secure token
-    const token = crypto.randomBytes(32).toString('hex');
+    // Generate secure 6-digit OTP code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Hash token for secure storage
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    // Hash OTP for secure storage
+    const hashedToken = crypto.createHash('sha256').update(otp).digest('hex');
     
     // Expiration = 15 minutes
     const expiresAt = new Date();
@@ -42,12 +42,8 @@ export class AuthService {
     // Save hashed token
     await this.passwordResetRepository.saveToken(email, hashedToken, expiresAt);
 
-    // Build reset URL
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
-    const resetUrl = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
-
-    // Send email
-    await this.mailService.sendPasswordResetEmail(email, resetUrl, user.name);
+    // Send OTP email
+    await this.mailService.sendPasswordReset(email, user.name, otp);
 
     return successMessage;
   }
@@ -67,27 +63,27 @@ export class AuthService {
     return { valid: true, message: 'Token is valid.' };
   }
 
-  async resetPassword(email: string, resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
-    const { token, password } = resetPasswordDto;
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
+    const { email, otp_code, new_password } = resetPasswordDto;
 
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const hashedToken = crypto.createHash('sha256').update(otp_code).digest('hex');
     const record = await this.passwordResetRepository.findByTokenAndEmail(hashedToken, email);
 
     if (!record) {
-      throw new Error('Invalid or already used reset link.');
+      throw new Error('Mã OTP không hợp lệ hoặc đã sử dụng.');
     }
 
     if (new Date(record.expiresAt) < new Date()) {
-      throw new Error('This reset link has expired.');
+      throw new Error('Mã OTP đã hết hạn.');
     }
 
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
-      throw new Error('User not found.');
+      throw new Error('Người dùng không tồn tại.');
     }
 
     // Hash new password using bcrypt (12 rounds)
-    const newHashedPassword = await bcrypt.hash(password, 12);
+    const newHashedPassword = await bcrypt.hash(new_password, 12);
 
     // Update password
     await this.userRepository.updatePassword(user.id, newHashedPassword);

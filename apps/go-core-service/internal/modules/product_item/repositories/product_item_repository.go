@@ -14,6 +14,7 @@ import (
 
 type ProductItemRepository interface {
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) ([]*entities.ProductItem, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductItem, error)
 	FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error)
 	FindByItemCodeWithEvents(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error)
 	FindByCodeAndToken(ctx context.Context, itemCode string, token string) (*response.VerifyQRRow, error)
@@ -37,6 +38,18 @@ func (rp *productItemRepository) FindByBatchID(ctx context.Context, batchID uuid
 	}
 
 	return productItems, nil
+}
+
+func (rp *productItemRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductItem, error) {
+	var item entities.ProductItem
+	db := rp.db.WithContext(ctx)
+	if err := db.
+		Preload("Variant").
+		Where("id = ? AND is_deleted = false", id).
+		First(&item).Error; err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+	return &item, nil
 }
 
 func (rp *productItemRepository) FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error) {

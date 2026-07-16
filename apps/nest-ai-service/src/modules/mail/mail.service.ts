@@ -288,6 +288,7 @@ export class MailService {
       await this.sendMail(to, subject, subject, html);
     }
   }
+
   async sendWarrantyExpiredEmail(to: string, fullName: string, productName: string, endDate: string): Promise<void> {
     const templateId = this.configService.get<string>('WARRANTY_EXPIRED_TEMPLATE_ID') || 'd-ded28a6c91104c11bc548b08002c74f5';
     if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {

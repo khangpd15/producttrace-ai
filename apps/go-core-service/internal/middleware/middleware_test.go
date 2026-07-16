@@ -51,6 +51,9 @@ func (m *mockUserRepo) DeleteUser(ctx context.Context, id string) error {
 func (m *mockUserRepo) ListUsers(ctx context.Context, page, limit int, role, status, search string) ([]*UserEntity.User, int64, error) {
 	return nil, 0, nil
 }
+func (m *mockUserRepo) SearchUsers(ctx context.Context, name string, email string, phone string) ([]*UserEntity.User, error) {
+	return nil, nil
+}
 
 func TestAuthAndRoleMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
