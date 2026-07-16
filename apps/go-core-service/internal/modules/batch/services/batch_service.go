@@ -54,6 +54,7 @@ type BatchService interface {
 	//   - destination_location_id phải là UUID hợp lệ.
 	ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error)
 	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
+	GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error)
 	// UpdateBatchStatus cập nhật duy nhất field status của một Batch.
 	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
 	// DeleteBatch thực hiện soft-delete một Batch nếu không có product items hoặc events liên kết.
@@ -320,6 +321,15 @@ func (sb *batchService) GetBatchEvents(ctx context.Context, batchID uuid.UUID) (
 		return nil, err
 	}
 	return sb.repo.GetBatchEvents(ctx, batchID)
+}
+
+func (sb *batchService) GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error) {
+	// First check if batch exists
+	_, err := sb.repo.FindByID(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	return sb.repo.GetBatchProducts(ctx, batchID, req)
 }
 
 // UpdateBatchStatus cập nhật duy nhất field status của Batch.

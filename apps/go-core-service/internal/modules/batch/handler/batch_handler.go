@@ -99,6 +99,33 @@ func (hb *BatchHandler) GetBatchEvents(c *gin.Context) {
 	c.JSON(200, response.ResponseSuccess("get batch events successfully", events))
 }
 
+func (hb *BatchHandler) GetBatchProducts(c *gin.Context) {
+	batchIDStr := c.Param("id")
+	if batchIDStr == "" {
+		apperror.HandleError(c, apperror.NewBadRequest("batch_id is required"))
+		return
+	}
+	batchID, err := uuid.Parse(batchIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewBadRequest("invalid batch_id"))
+		return
+	}
+
+	var req request.GetBatchProductsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	products, err := hb.service.GetBatchProducts(c.Request.Context(), batchID, &req)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, response.ResponseSuccess("get batch products successfully", products))
+}
+
 func (hb *BatchHandler) ExportBatch(c *gin.Context) {
 	batchIDStr := c.Param("id")
 	if batchIDStr == "" {

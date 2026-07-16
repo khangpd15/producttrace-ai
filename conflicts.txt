@@ -1,0 +1,1 @@
+apps/go-core-service/internal/modules/user/service/user_service_test.go

@@ -1,0 +1,9 @@
+  khang
+* main
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/feature/batch-trace
+  remotes/origin/geo
+  remotes/origin/khang
+  remotes/origin/locations
+  remotes/origin/main
+  remotes/origin/vector-search

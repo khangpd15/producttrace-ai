@@ -67,6 +67,7 @@ export const RABBITMQ = {
     TRACE_EVENTS: 'trace.*',
     NOTIFICATION_SENT: 'notification.sent', // Warranty update notification
     OWNERSHIP_TRANSFERRED: 'ownership.transferred',
+    WARRANTY_EXPIRED: 'warranty.expired',
 
     EMBEDDING_GENERATED: 'embedding.generated',
     EMBEDDING_COMPLETED: 'embedding.completed',
@@ -85,5 +86,6 @@ export const RABBITMQ = {
     OWNERSHIP_OTP: 'otp.ownership',
     NOTIFICATION_SENT: 'notification.sent',
     OWNERSHIP_TRANSFERRED: 'ownership.transferred',
+    WARRANTY_EXPIRED: 'warranty.expired',
   },
 };

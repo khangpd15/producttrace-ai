@@ -71,21 +71,6 @@ services:
     networks:
       - app-networks
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: product-trace-zookeeper
-
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-    ports:
-      - "2181:2181"
-
-    networks:
-      - app-networks
-
-
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: product-trace-qdrant

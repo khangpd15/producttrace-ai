@@ -289,6 +289,35 @@ export class MailService {
     }
   }
 
+  async sendWarrantyExpiredEmail(to: string, fullName: string, productName: string, endDate: string): Promise<void> {
+    const templateId = this.configService.get<string>('WARRANTY_EXPIRED_TEMPLATE_ID') || 'd-ded28a6c91104c11bc548b08002c74f5';
+    if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+      
+      const dynamicTemplateData = {
+        fullName,
+        productName,
+        endDate,
+        frontendUrl,
+        year: new Date().getFullYear().toString(),
+      };
+      await this.sendEmailWithTemplate(to, templateId, dynamicTemplateData);
+    } else {
+      const subject = 'Thông báo hết hạn bảo hành - ProductTrace AI';
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+          <h2 style="color: #d32f2f;">Sản phẩm đã hết hạn bảo hành</h2>
+          <p>Xin chào <strong>${fullName}</strong>,</p>
+          <p>Chúng tôi xin thông báo sản phẩm <strong>${productName}</strong> của bạn đã hết hạn bảo hành vào ngày <strong>${endDate}</strong>.</p>
+          <p>Nếu bạn cần hỗ trợ kỹ thuật hoặc có bất kỳ câu hỏi nào, vui lòng liên hệ với bộ phận hỗ trợ khách hàng của chúng tôi hoặc truy cập vào hệ thống để biết thêm thông tin chi tiết.</p>
+          <p>Trân trọng,</p>
+          <p>Đội ngũ ProductTrace AI</p>
+        </div>
+      `;
+      await this.sendMail(to, subject, subject, html);
+    }
+  }
+
   async sendOwnershipTransferredEmail(to: string, fullName: string, productName: string): Promise<void> {
     const templateId = this.configService.get<string>('OWNERSHIP_TRANSFERRED_TEMPLATE_ID') || 'd-1f78adcf1e3644e6bee66c2ea402af69';
     if (templateId && !templateId.includes('your_') && !templateId.includes('your-')) {

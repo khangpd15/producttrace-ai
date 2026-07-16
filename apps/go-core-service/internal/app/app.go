@@ -65,6 +65,11 @@ import (
 	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
 	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
 
+	warrantyClaimEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/entity"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -108,7 +113,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	qrGenerator := qr.NewGenerator()
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
-		frontendURL = os.Getenv("BASE_URL")
+		frontendURL = string("https://frontend-producttrace-ai.vercel.app")
 	}
 	pdfGenerator := qr.NewPDFGenerator(qrGenerator, frontendURL)
 
@@ -147,7 +152,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
 	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
 	// khi tạo/cập nhật product)
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, auditService)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub)
 	pHandler := productHandler.NewProductHandler(pService)
 
 	// Initialize Dashboard Module
@@ -181,8 +186,13 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	wService := warrantyService.NewWarrantyService(wRepo, pub, auditService)
 	wHandler := warrantyHandler.NewWarrantyHandler(wService)
 
+	// Warranty Claim Module
+	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wRepo)
+	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
+
 	// AutoMigrate
-	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{})
+	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{}, &warrantyClaimEntity.WarrantyClaim{})
 
 	// Initialize Public Module
 	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wRepo, lRepo, uRepo)
@@ -207,6 +217,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductItemHandler:           piHandler,
 		OwnershipHandler:             oHandler,
 		WarrantyHandler:              wHandler,
+		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{

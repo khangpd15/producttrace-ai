@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"sync"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/dto"
@@ -11,6 +13,7 @@ import (
 )
 
 type SSEBroker struct {
+	mu              sync.RWMutex
 	AdminClients    map[chan string]bool
 	CustomerClients map[string]map[chan string]bool // map[userID] -> map[chan]bool
 }
@@ -131,6 +134,7 @@ func (h *OwnershipHandler) CustomerVerifyAndRegister(c *gin.Context) {
 	}
 
 	// Broadcast to active Admin SSE clients
+	h.broker.mu.RLock()
 	for client := range h.broker.AdminClients {
 		select {
 		case client <- "NEW_OWNERSHIP_REQUEST":
@@ -138,6 +142,7 @@ func (h *OwnershipHandler) CustomerVerifyAndRegister(c *gin.Context) {
 			// Client channel is full or blocked, skip to prevent hanging handler
 		}
 	}
+	h.broker.mu.RUnlock()
 
 	c.JSON(200, response.ResponseSuccess("Đăng ký quyền sở hữu thành công", res))
 }
@@ -289,6 +294,7 @@ func (h *OwnershipHandler) ApproveOwnership(c *gin.Context) {
 	// Try to find the ownership to notify the correct customer
     // We would need the customer ID to target the exact channel, but it's simpler to broadcast 
     // to all customers and let FE filter, since it's just a demo.
+	h.broker.mu.RLock()
     for _, userChans := range h.broker.CustomerClients {
         for client := range userChans {
 			select {
@@ -297,6 +303,7 @@ func (h *OwnershipHandler) ApproveOwnership(c *gin.Context) {
 			}
         }
     }
+	h.broker.mu.RUnlock()
 
 	c.JSON(200, response.ResponseSuccess("Đã duyệt đăng ký sở hữu thành công", nil))
 }
@@ -318,6 +325,7 @@ func (h *OwnershipHandler) RejectOwnership(c *gin.Context) {
 		return
 	}
 
+	h.broker.mu.RLock()
     for _, userChans := range h.broker.CustomerClients {
         for client := range userChans {
 			select {
@@ -326,6 +334,7 @@ func (h *OwnershipHandler) RejectOwnership(c *gin.Context) {
 			}
         }
     }
+	h.broker.mu.RUnlock()
 
 	c.JSON(200, response.ResponseSuccess("Đã từ chối đăng ký sở hữu", nil))
 }
@@ -334,16 +343,25 @@ func (h *OwnershipHandler) AdminStream(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no") // Prevent nginx / vite proxy buffering
+
+	// Send an immediate initial event to establish the connection
+	c.Writer.Write([]byte("data: CONNECTED\n\n"))
+	c.Writer.Flush()
 
 	messageChan := make(chan string, 10)
+	h.broker.mu.Lock()
 	h.broker.AdminClients[messageChan] = true
+	h.broker.mu.Unlock()
 
 	defer func() {
+		h.broker.mu.Lock()
 		delete(h.broker.AdminClients, messageChan)
+		h.broker.mu.Unlock()
 		close(messageChan)
 	}()
 
-	clientGone := c.Writer.CloseNotify()
+	clientGone := c.Request.Context().Done()
 	for {
 		select {
 		case <-clientGone:
@@ -364,17 +382,21 @@ func (h *OwnershipHandler) CustomerStream(c *gin.Context) {
 	if !ok { return }
 
 	messageChan := make(chan string, 10)
+	h.broker.mu.Lock()
 	if h.broker.CustomerClients[userID.String()] == nil {
 		h.broker.CustomerClients[userID.String()] = make(map[chan string]bool)
 	}
 	h.broker.CustomerClients[userID.String()][messageChan] = true
+	h.broker.mu.Unlock()
 
 	defer func() {
+		h.broker.mu.Lock()
 		delete(h.broker.CustomerClients[userID.String()], messageChan)
+		h.broker.mu.Unlock()
 		close(messageChan)
 	}()
 
-	clientGone := c.Writer.CloseNotify()
+	clientGone := c.Request.Context().Done()
 	for {
 		select {
 		case <-clientGone:

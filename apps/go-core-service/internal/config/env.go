@@ -13,10 +13,10 @@ type DBConfig struct {
 
 func NewDBConfig() *DBConfig {
 	return &DBConfig{
-		Host:     utils.GetEnv("POSTGRES_HOST", "postgres"),
+		Host:     utils.GetEnv("POSTGRES_HOST", "localhost"),
 		Port:     utils.GetEnv("POSTGRES_PORT", "5432"),
 		User:     utils.GetEnv("POSTGRES_USER", "postgres"),
-		Password: utils.GetEnv("POSTGRES_PASSWORD", ""),
+		Password: utils.GetEnv("POSTGRES_PASSWORD", "123456"),
 		DBName:   utils.GetEnv("POSTGRES_DB", "product_trace_db"),
 		SSLMode:  utils.GetEnv("POSTGRES_SSLMODE", "disable"),
 	}
