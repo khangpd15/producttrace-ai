@@ -36,6 +36,8 @@ type AuthenServiceInterface interface {
 	Logout(ctx context.Context, refreshToken string) error
 	ReSendOTP(ctx context.Context, email string) error
 	ConsumerOTPEvent(ctx context.Context) error
+	ForgotPassword(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, email, otpCode, newPassword string) error
 }
 
 type AuthenService struct {
@@ -59,6 +61,11 @@ type userRegisteredPayload struct {
 	Email    string `json:"email"`
 	FullName string `json:"full_name"`
 	Phone    string `json:"phone,omitempty"`
+	OTPCode  string `json:"otp_code,omitempty"`
+}
+type userForgotPasswordPayload struct {
+	Email    string `json:"email"`
+	FullName string `json:"full_name,omitempty"`
 	OTPCode  string `json:"otp_code,omitempty"`
 }
 
@@ -326,6 +333,91 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
+func (s *AuthenService) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.userRepository.GetUserByEmail(ctx, email)
+	if err != nil {
+		log.Printf("[ForgotPassword] db lookup error for %s: %v", email, err)
+		// Do not expose internal errors; return success silently
+		return nil
+	}
+
+	// Security: do not reveal whether email exists
+	if user == nil {
+		log.Printf("[ForgotPassword] email not found (silently succeed): %s", email)
+		return nil
+	}
+
+	event := types.Event{
+		EventID:       uuid.New().String(),
+		EventType:     rabbitmq.UserPasswordForgotRK,
+		EventVersion:  "1.0.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.New().String(),
+		Payload: map[string]interface{}{
+			"email":     user.Email,
+			"full_name": user.FullName,
+		},
+	}
+
+	ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
+	defer cancel()
+
+	if err := s.publisher.PublishWithContext(ctxPub, event); err != nil {
+		log.Printf("[ForgotPassword] failed to publish otp.forgot event: %v", err)
+		return err
+	}
+
+	log.Printf("[ForgotPassword] OTP event published for email=%s", email)
+	return nil
+}
+
+// ResetPassword validates OTP from Redis, updates the password, and invalidates all refresh tokens.
+func (s *AuthenService) ResetPassword(ctx context.Context, email, otpCode, newPassword string) error {
+	redisKey := fmt.Sprintf("otp:forgot-password:%s", email)
+
+	storedOTP, err := s.cache.Get(ctx, redisKey)
+	if err != nil {
+		if errors.Is(err, redis.Nil) || err.Error() == "redis: nil" {
+			return apperror.NewValidation("OTP has expired or is invalid")
+		}
+		return err
+	}
+
+	if storedOTP != otpCode {
+		return apperror.NewValidation("Incorrect OTP code")
+	}
+
+	user, err := s.userRepository.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return apperror.NewNotFound("User not found")
+	}
+
+	hashedPassword, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	if err := s.userRepository.UpdatePassword(ctx, user.ID.String(), hashedPassword); err != nil {
+		return err
+	}
+
+	// Delete OTP from Redis after successful reset
+	_ = s.cache.Delete(ctx, redisKey)
+
+	// Invalidate all active refresh tokens for this user
+	refreshPattern := fmt.Sprintf("refresh_token:%s:*", user.ID.String())
+	if err := s.cache.DeletePattern(ctx, refreshPattern); err != nil {
+		log.Printf("[ResetPassword] failed to invalidate refresh tokens for user=%s: %v", user.ID.String(), err)
+	}
+
+	log.Printf("[ResetPassword] password reset successful for email=%s", email)
+	return nil
+}
+
 func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
 
 	return s.consumer.StartConsumer(&consumer.ConsumerSpec{
@@ -340,52 +432,98 @@ func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
 			}
 
 			// FIX: use Data.EventType properly
-			if envelope.Data.EventType != rabbitmq.UserRegisteredRK {
+			switch envelope.Data.EventType {
+			case rabbitmq.UserRegisteredRK:
+
+				var payload userRegisteredPayload
+				if err := json.Unmarshal(envelope.Data.Payload, &payload); err != nil {
+					return err
+				}
+				if payload.Email == "" {
+					return errors.New("missing email")
+				}
+
+				otpCode, err := utils.GenerateOTP()
+				if err != nil {
+					return err
+				}
+
+				if err := s.cache.Set(ctx,
+					fmt.Sprintf("otp:email:%s", payload.Email),
+					otpCode,
+					5*time.Minute,
+				); err != nil {
+					return err
+				}
+
+				// OTP → AI EVENT
+				event := types.Event{
+					EventID:       uuid.New().String(),
+					EventType:     rabbitmq.OTPRegisterUserRK,
+					EventVersion:  "1.0.0",
+					Timestamp:     time.Now().UTC(),
+					Producer:      "otp-worker",
+					CorrelationID: envelope.Data.CorrelationID,
+					Payload: map[string]interface{}{
+						"email":     payload.Email,
+						"full_name": payload.FullName,
+						"phone":     payload.Phone,
+						"otp_code":  otpCode,
+					},
+				}
+
+				ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
+				defer cancel()
+
+				return s.publisher.PublishWithContext(ctxPub, event)
+
+			case rabbitmq.UserPasswordForgotRK:
+				var payload userForgotPasswordPayload
+				if err := json.Unmarshal(envelope.Data.Payload, &payload); err != nil {
+					return fmt.Errorf("unmarshal payload: %w", err)
+				}
+
+				if payload.Email == "" {
+					return errors.New("missing email")
+				}
+
+				otpCode, err := utils.GenerateOTP()
+				if err != nil {
+					return err
+				}
+
+				if err := s.cache.Set(
+					ctx,
+					fmt.Sprintf("otp:forgot-password:%s", payload.Email),
+					otpCode,
+					5*time.Minute,
+				); err != nil {
+					return err
+				}
+
+				eventForgot := types.Event{
+					EventID:       uuid.NewString(),
+					EventType:     rabbitmq.OTPForgotRK,
+					EventVersion:  "1.0.0",
+					Timestamp:     time.Now().UTC(),
+					Producer:      "otp-worker",
+					CorrelationID: envelope.Data.CorrelationID,
+					Payload: map[string]any{
+						"email":     payload.Email,
+						"full_name": payload.FullName,
+						"otp_code":  otpCode,
+					},
+				}
+
+				ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
+				defer cancel()
+
+				return s.publisher.PublishWithContext(ctxPub, eventForgot)
+
+			default:
 				return nil
 			}
 
-			var payload userRegisteredPayload
-			if err := json.Unmarshal(envelope.Data.Payload, &payload); err != nil {
-				return err
-			}
-
-			if payload.Email == "" {
-				return errors.New("missing email")
-			}
-
-			otpCode, err := utils.GenerateOTP()
-			if err != nil {
-				return err
-			}
-
-			if err := s.cache.Set(ctx,
-				fmt.Sprintf("otp:email:%s", payload.Email),
-				otpCode,
-				5*time.Minute,
-			); err != nil {
-				return err
-			}
-
-			// OTP → AI EVENT
-			event := types.Event{
-				EventID:       uuid.New().String(),
-				EventType:     rabbitmq.OTPRegisterUserRK,
-				EventVersion:  "1.0.0",
-				Timestamp:     time.Now().UTC(),
-				Producer:      "otp-worker",
-				CorrelationID: envelope.Data.CorrelationID,
-				Payload: map[string]interface{}{
-					"email":     payload.Email,
-					"full_name": payload.FullName,
-					"phone":     payload.Phone,
-					"otp_code":  otpCode,
-				},
-			}
-
-			ctxPub, cancel := context.WithTimeout(ctx, asyncPublishTimeout)
-			defer cancel()
-
-			return s.publisher.PublishWithContext(ctxPub, event)
 		},
 	})
 }

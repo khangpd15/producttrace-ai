@@ -99,6 +99,8 @@ func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 		auth.POST("/resend-otp", ah.ResendOTP)
 		auth.POST("/refresh", ah.RefreshToken)
 		auth.POST("/logout", ah.Logout)
+		auth.POST("/forgot-password", ah.ForgotPassword)
+		auth.POST("/reset-password", ah.ResetPassword)
 	}
 }
 
