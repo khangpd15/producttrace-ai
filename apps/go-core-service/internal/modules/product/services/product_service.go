@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
+	eventPublisher "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
+	eventTypes "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/types"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/response"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/entities"
@@ -40,6 +43,7 @@ type productService struct {
 	attrValRepo  attrValRepos.AttributeValueRepository
 	attrRepo     attrRepos.AttributeRepository
 	categoryRepo categoryRepos.ProductCategoryRepository
+	publisher    *eventPublisher.Publisher
 }
 
 func NewProductService(
@@ -49,6 +53,7 @@ func NewProductService(
 	attrValRepo attrValRepos.AttributeValueRepository,
 	attrRepo attrRepos.AttributeRepository,
 	categoryRepo categoryRepos.ProductCategoryRepository,
+	publisher *eventPublisher.Publisher,
 ) ProductService {
 	return &productService{
 		db:           db,
@@ -57,6 +62,7 @@ func NewProductService(
 		attrValRepo:  attrValRepo,
 		attrRepo:     attrRepo,
 		categoryRepo: categoryRepo,
+		publisher:    publisher,
 	}
 }
 
@@ -156,6 +162,24 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 
 	if err != nil {
 		return nil, err
+	}
+
+	event := eventTypes.Event{
+		EventID:       uuid.New().String(),
+		EventType:     "product.created",
+		EventVersion:  "1.0",
+		Timestamp:     time.Now(),
+		Producer:      "go-core-service",
+		CorrelationID: product.ID.String(),
+		Payload: map[string]interface{}{
+			"product_id":  product.ID.String(),
+			"name":        product.Name,
+			"category_id": product.CategoryID,
+		},
+	}
+
+	if err := s.publisher.Publish(event); err != nil {
+		log.Printf("failed to publish event: %v", err)
 	}
 
 	return s.loadProductDetail(ctx, product.ID)
