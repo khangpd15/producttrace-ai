@@ -166,6 +166,7 @@ export class EmbeddingService {
 
   private buildPayload(event: Event): Record<string, unknown> {
     return {
+      ...(event.payload as Record<string, unknown>),
       productId: this.extractProductId(event),
       eventType: event.event_type,
       timestamp: event.timestamp,
