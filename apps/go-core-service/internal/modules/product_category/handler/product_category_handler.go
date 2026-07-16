@@ -9,6 +9,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/mapper"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -37,7 +38,9 @@ func (h *ProductCategoryHandler) CreateCategory(c *gin.Context) {
 		return
 	}
 
-	category, err := h.categoryService.CreateCategory(c.Request.Context(), req)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	category, err := h.categoryService.CreateCategory(ctx, req)
 	if err != nil {
 		handleError(c, err)
 		return
@@ -60,7 +63,9 @@ func (h *ProductCategoryHandler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	category, err := h.categoryService.UpdateCategory(c.Request.Context(), id, req)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	category, err := h.categoryService.UpdateCategory(ctx, id, req)
 	if err != nil {
 		handleError(c, err)
 		return
@@ -77,7 +82,9 @@ func (h *ProductCategoryHandler) DeleteCategory(c *gin.Context) {
 		return
 	}
 
-	if err := h.categoryService.DeleteCategory(c.Request.Context(), id); err != nil {
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	if err := h.categoryService.DeleteCategory(ctx, id); err != nil {
 		handleError(c, err)
 		return
 	}

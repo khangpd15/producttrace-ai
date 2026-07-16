@@ -8,7 +8,9 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/entities"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"gorm.io/gorm"
 )
 
@@ -22,10 +24,11 @@ type ProductCategoryService interface {
 
 type productCategoryService struct {
 	categoryRepo repositories.ProductCategoryRepository
+	auditLog     auditlog.AuditLogService
 }
 
-func NewProductCategoryService(categoryRepo repositories.ProductCategoryRepository) ProductCategoryService {
-	return &productCategoryService{categoryRepo: categoryRepo}
+func NewProductCategoryService(categoryRepo repositories.ProductCategoryRepository, auditLog auditlog.AuditLogService) ProductCategoryService {
+	return &productCategoryService{categoryRepo: categoryRepo, auditLog: auditLog}
 }
 
 func (s *productCategoryService) CreateCategory(ctx context.Context, req request.CreateCategoryRequest) (*entities.ProductCategory, error) {
@@ -84,6 +87,17 @@ func (s *productCategoryService) CreateCategory(ctx context.Context, req request
 		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to create category"))
 	}
 
+	var actorUUIDPtr *uuid.UUID
+	actorID := utils.GetActorID(ctx)
+	if actorID != "" {
+		if u, err := uuid.Parse(actorID); err == nil {
+			actorUUIDPtr = &u
+		}
+	}
+	if s.auditLog != nil {
+		_ = s.auditLog.LogCreate(ctx, actorUUIDPtr, "Category", category.ID, category)
+	}
+
 	return category, nil
 }
 
@@ -96,6 +110,8 @@ func (s *productCategoryService) UpdateCategory(ctx context.Context, id uuid.UUI
 		}
 		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to find category"))
 	}
+
+	oldCategory := *category
 
 	// Validate name unique (trừ chính nó)
 	if req.Name != nil {
@@ -163,12 +179,23 @@ func (s *productCategoryService) UpdateCategory(ctx context.Context, id uuid.UUI
 		return nil, apperror.Wrap(err, apperror.NewInternal("Failed to update category"))
 	}
 
+	var actorUUIDPtr *uuid.UUID
+	actorID := utils.GetActorID(ctx)
+	if actorID != "" {
+		if u, err := uuid.Parse(actorID); err == nil {
+			actorUUIDPtr = &u
+		}
+	}
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUIDPtr, "Category", category.ID, oldCategory, category)
+	}
+
 	return category, nil
 }
 
 func (s *productCategoryService) DeleteCategory(ctx context.Context, id uuid.UUID) error {
 	// Check tồn tại
-	_, err := s.categoryRepo.FindByID(ctx, id)
+	category, err := s.categoryRepo.FindByID(ctx, id)
 	if err != nil {
 		return apperror.NewNotFound("category")
 	}
@@ -185,6 +212,17 @@ func (s *productCategoryService) DeleteCategory(ctx context.Context, id uuid.UUI
 	// Soft delete
 	if err := s.categoryRepo.SoftDelete(ctx, id); err != nil {
 		return apperror.Wrap(err, apperror.NewInternal("Failed to delete category"))
+	}
+
+	var actorUUIDPtr *uuid.UUID
+	actorID := utils.GetActorID(ctx)
+	if actorID != "" {
+		if u, err := uuid.Parse(actorID); err == nil {
+			actorUUIDPtr = &u
+		}
+	}
+	if s.auditLog != nil {
+		_ = s.auditLog.LogDelete(ctx, actorUUIDPtr, "Category", id, category)
 	}
 
 	return nil

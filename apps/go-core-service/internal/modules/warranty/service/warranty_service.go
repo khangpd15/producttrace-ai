@@ -192,7 +192,9 @@ func (s *warrantyService) ActivateWarranty(ctx context.Context, req dto.CreateWa
 	}
 
 	actorUUID := getActorUUID(ctx)
-	_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
+	}
 
 	resp := dto.FromWarrantyEntity(warranty)
 	return &resp, nil
@@ -233,7 +235,9 @@ func (s *warrantyService) RequestWarranty(ctx context.Context, req dto.CustomerR
 	}
 
 	actorUUID := getActorUUID(ctx)
-	_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
+	}
 
 	resp := dto.FromWarrantyEntity(warranty)
 	return &resp, nil
@@ -329,7 +333,9 @@ func (s *warrantyService) ApproveWarranty(ctx context.Context, id uuid.UUID, req
 	}
 
 	actorUUID := getActorUUID(ctx)
-	_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	}
 
 	resp := dto.FromWarrantyEntity(warranty)
 	return &resp, nil
@@ -358,7 +364,9 @@ func (s *warrantyService) RejectWarranty(ctx context.Context, id uuid.UUID, req 
 	}
 
 	actorUUID := getActorUUID(ctx)
-	_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	}
 
 	resp := dto.FromWarrantyEntity(warranty)
 	return &resp, nil
@@ -460,7 +468,9 @@ func (s *warrantyService) VoidWarranty(ctx context.Context, id uuid.UUID, reason
 	}
 
 	actorUUID := getActorUUID(ctx)
-	_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
+	}
 
 	// Publish to RabbitMQ after commit
 	if s.pub != nil {

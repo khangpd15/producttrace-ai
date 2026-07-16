@@ -124,7 +124,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Product category & attribute modules
 	pCategoryRepo := categoryRepo.NewProductCategoryRepository(database)
-	cService := categoryService.NewProductCategoryService(pCategoryRepo)
+	cService := categoryService.NewProductCategoryService(pCategoryRepo, auditService)
 	cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pAttrRepo := attributeRepo.NewAttributeRepository(database)
 	pAttrService := attributeService.NewAttributeService(pAttrRepo, pCategoryRepo)
@@ -152,7 +152,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
 	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
 	// khi tạo/cập nhật product)
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub, auditService)
 	pHandler := productHandler.NewProductHandler(pService)
 
 	// Initialize Dashboard Module
