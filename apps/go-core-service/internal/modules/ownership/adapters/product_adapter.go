@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
 	productRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/repositories"
 	productItemsRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_item/repositories"
@@ -46,17 +47,52 @@ func (a *RealProductAdapter) FindProductByQR(ctx context.Context, qrCode string)
 }
 
 func (a *RealProductAdapter) ValidateProductOwnershipStatus(ctx context.Context, productID uuid.UUID) error {
+	var item struct {
+		Status string
+	}
+	err := entity.GetTx(ctx, a.db).WithContext(ctx).Table("product_items").
+		Select("status").
+		Where("id = ? AND is_deleted = false", productID).
+		First(&item).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperror.NewNotFound("Sản phẩm")
+		}
+		return err
+	}
+	status := item.Status
+	if status == "REGISTERED" || status == "WARRANTY_ACTIVE" || status == "WARRANTY_CLAIMED" {
+		return apperror.NewBadRequest("Sản phẩm đã được đăng ký sở hữu hoặc đang trong thời gian bảo hành.")
+	}
 	return nil
 }
 
 func (a *RealProductAdapter) UpdateOwnershipStatus(ctx context.Context, productID uuid.UUID, status string) error {
+	db := entity.GetTx(ctx, a.db)
+	
+	var dbStatus string
+	switch status {
+	case "ACTIVE":
+		dbStatus = "REGISTERED"
+	case "PENDING":
+		return nil
+	default:
+		dbStatus = status
+	}
+
+	err := db.WithContext(ctx).Table("product_items").
+		Where("id = ? AND is_deleted = false", productID).
+		Update("status", dbStatus).Error
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (a *RealProductAdapter) GetProductItemDetail(ctx context.Context, productItemID uuid.UUID) (string, string, error) {
+func (a *RealProductAdapter) GetProductItemDetail(ctx context.Context, productItemID uuid.UUID) (string, string, string, error) {
 	item, err := a.productItemRepo.FindByID(ctx, productItemID)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	sku := item.Variant.SKU
@@ -72,7 +108,7 @@ func (a *RealProductAdapter) GetProductItemDetail(ctx context.Context, productIt
 		productName = item.ItemCode
 	}
 
-	return productName, sku, nil
+	return productName, sku, item.SerialNumber, nil
 }
 
 func (a *RealProductAdapter) SearchProductItemIDs(ctx context.Context, productName string, productCode string) ([]uuid.UUID, error) {

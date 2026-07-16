@@ -31,7 +31,7 @@ services:
     command: redis-server --appendonly yes
 
     ports:
-      - "${REDIS_PORT}:6379"
+      - "6380:6379"
 
     volumes:
       - redis-data:/data
@@ -87,11 +87,12 @@ services:
 
 
   qdrant:
-    image: qdrant/qdrant:v1.0.0
+    image: qdrant/qdrant:v1.7.4
     container_name: product-trace-qdrant
 
     ports:
       - "6333:6333"
+      - "6334:6334"
 
     volumes:
       - qdrant-data:/qdrant/storage
@@ -110,7 +111,7 @@ services:
       - "8000"
 
     environment:
-      MODEL_NAME: 'bge-m3'
+      MODEL_NAME: 'BAAI/bge-m3'
 
     networks:
       - app-networks
@@ -239,7 +240,7 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
 
-      RABBITMQ_URL: ${RABBITMQ_URL}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       QDRANT_URL: ${QDRANT_URL}
       EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
@@ -252,6 +253,7 @@ services:
       WELCOME_TEMPLATE_ID: ${WELCOME_TEMPLATE_ID}
       SEND_EMAIL_FORGOTPASSWORD: ${SEND_EMAIL_FORGOTPASSWORD}
       OWNERSHIP_REGISTER: ${OWNERSHIP_REGISTER}
+      OWNERSHIP_TRANSFERRED_TEMPLATE_ID: ${OWNERSHIP_TRANSFERRED_TEMPLATE_ID}
 
     ports:
       - "${NEST_PORT}:3000"

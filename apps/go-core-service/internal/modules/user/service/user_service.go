@@ -17,6 +17,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 )
 
 type UserServiceInterface interface {
@@ -37,13 +38,15 @@ type UserService struct {
 	userRepo    repository.UserRepositoryInterface
 	productRepo repositories.ProductRepository
 	pub         *publisher.Publisher
+	auditLog    audit_log.AuditLogService
 }
 
-func NewUserService(userRepo repository.UserRepositoryInterface, productRepo repositories.ProductRepository, pub *publisher.Publisher) UserServiceInterface {
+func NewUserService(userRepo repository.UserRepositoryInterface, productRepo repositories.ProductRepository, pub *publisher.Publisher, auditLog audit_log.AuditLogService) UserServiceInterface {
 	return &UserService{
 		userRepo:    userRepo,
 		productRepo: productRepo,
 		pub:         pub,
+		auditLog:    auditLog,
 	}
 }
 
@@ -85,6 +88,10 @@ func (s *UserService) CreateUser(ctx context.Context, req *request.CreateUserReq
 		return nil, err
 	}
 
+	if err := s.auditLog.LogCreate(ctx, nil, "User", savedUser.ID, savedUser); err != nil {
+		fmt.Printf("Audit log failed (CreateUser): %v\n", err)
+	}
+
 	return mapToUserResponse(savedUser), nil
 }
 
@@ -119,6 +126,8 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *request.Up
 		}
 	}
 
+	oldUser := *user
+
 	user.Email = req.Email
 	user.Phone = req.Phone
 	user.FullName = req.FullName
@@ -139,6 +148,8 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *request.Up
 		return nil, err
 	}
 
+	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+
 	return mapToUserResponse(updatedUser), nil
 }
 
@@ -151,7 +162,13 @@ func (s *UserService) DeleteUser(ctx context.Context, id string) error {
 		return apperror.NewNotFound("User")
 	}
 
-	return s.userRepo.DeleteUser(ctx, id)
+	err = s.userRepo.DeleteUser(ctx, id)
+	if err == nil {
+		if auditErr := s.auditLog.LogDelete(ctx, nil, "User", user.ID, user); auditErr != nil {
+			fmt.Printf("Audit log failed (DeleteUser): %v\n", auditErr)
+		}
+	}
+	return err
 }
 
 func (s *UserService) ListUsers(ctx context.Context, page, limit int, role, status, search string) (*response.UserListResponse, error) {
@@ -255,6 +272,8 @@ func (s *UserService) UpdateProfile(ctx context.Context, actorID string, targetU
 		return nil, apperror.NewNotFound("User")
 	}
 
+	oldUser := *user
+
 	if req.FullName != nil {
 		if *req.FullName == "" {
 			return nil, apperror.NewValidation("Full name cannot be empty")
@@ -296,6 +315,11 @@ func (s *UserService) UpdateProfile(ctx context.Context, actorID string, targetU
 	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		return nil, apperror.WrapDBError(err, "User")
+	}
+
+	actorUUID, _ := uuid.Parse(actorID)
+	if err := s.auditLog.LogUpdate(ctx, &actorUUID, "User", updatedUser.ID, oldUser, updatedUser); err != nil {
+		fmt.Printf("Audit log failed (UpdateProfile): %v\n", err)
 	}
 
 	avatar := ""
@@ -350,12 +374,16 @@ func (s *UserService) LockAccount(ctx context.Context, id string) (*response.Use
 		return nil, apperror.NewBadRequest("Cannot lock account while user owns products")
 	}
 
+	oldUser := *user
 	user.Status = entity.StatusBanned
 	user.UpdatedAt = time.Now()
 	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
+
+	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+
 	return mapToUserResponse(updatedUser), nil
 }
 
@@ -367,12 +395,17 @@ func (s *UserService) UnlockAccount(ctx context.Context, id string) (*response.U
 	if user == nil {
 		return nil, apperror.NewNotFound("User")
 	}
+
+	oldUser := *user
 	user.Status = entity.StatusActive
 	user.UpdatedAt = time.Now()
 	updatedUser, err := s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
+
+	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+
 	return mapToUserResponse(updatedUser), nil
 }
 
