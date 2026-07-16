@@ -140,6 +140,28 @@ export class NotificationConsumer extends BaseConsumer<NotificationPayload> {
         break;
 
 
+      // ── Warranty Expired ──────────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.WARRANTY_EXPIRED: // "warranty.expired"
+        await this.mailService.sendWarrantyExpiredEmail(
+          payload.email,
+          payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+          payload.warranty_end_date || 'Không xác định',
+        );
+        this.logger.log(`[NotificationConsumer] Warranty expired email sent to ${payload.email}`);
+        break;
+
+      // ── Ownership Transferred ─────────────────────────────────────────────
+      case RABBITMQ.EVENT_TYPES.OWNERSHIP_TRANSFERRED:
+        await this.mailService.sendOwnershipTransferredEmail(
+          payload.email,
+          payload.full_name || 'User',
+          payload.product_name || 'Sản phẩm của bạn',
+        );
+        this.logger.log(`[NotificationConsumer] Ownership transferred email sent to ${payload.email}`);
+        break;
+
+
       // ── Unknown / unhandled ───────────────────────────────────────────────
       default:
         this.logger.warn(
