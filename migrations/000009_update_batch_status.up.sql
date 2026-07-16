@@ -1,6 +1,9 @@
 ALTER TABLE batches
 DROP CONSTRAINT IF EXISTS chk_batches_status;
 
+UPDATE batches SET status = 'IN_STOCK' WHERE status = 'ACTIVE';
+UPDATE batches SET status = 'CLOSED' WHERE status = 'INACTIVE';
+
 ALTER TABLE batches
 ADD CONSTRAINT chk_batches_status
 CHECK (status IN (
