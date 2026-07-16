@@ -1,5 +1,0 @@
-# github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler
-internal\modules\user\handler\user_handler.go:202:18: undefined: request.ChangePasswordRequest
-internal\modules\user\handler\user_handler.go:207:28: h.userService.ChangePassword undefined (type service.UserServiceInterface has no field or method ChangePassword)
-# github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters
-internal\modules\ownership\adapters\user_adapter.go:18:9: cannot use &RealUserAdapter{…} (value of type *RealUserAdapter) as service.IUserInfoProvider value in return statement: *RealUserAdapter does not implement service.IUserInfoProvider (missing method GetUserByEmail)
