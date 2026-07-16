@@ -26,3 +26,6 @@ Thumbs.db
 
 # Log
 *.log
+
+# Handoff (internal, not for repo)
+handoff.md
