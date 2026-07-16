@@ -1,22 +1,19 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { QdrantClient } from '@qdrant/qdrant-js';
-import { SearchResult } from '../../modules/search/interfaces/search-result.interface';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config/dist/config.service';
+import { QdrantClient } from '@qdrant/js-client-rest';
 
 @Injectable()
 export class QdrantService implements OnModuleInit {
-  private readonly logger = new Logger(QdrantService.name);
   private client: QdrantClient;
   private readonly collectionName = 'product_embeddings';
   private readonly vectorSize = 1024; // Cập nhật theo model BGE-M3
   private collectionReady = false;
   private ensureCollectionPromise: Promise<void> | null = null;
 
-  constructor(private readonly configService: ConfigService) {
-    this.client = new QdrantClient({
-      url: this.configService.get('QDRANT_URL'),
-      apiKey: this.configService.get('QDRANT_API_KEY'),
-    });
+  constructor(private configService: ConfigService) {
+    const qdrantUrl = this.configService.get<string>('QDRANT_URL') || 'http://localhost:6333';
+    this.collectionName = 'producttrace_geo_collection'; 
+    this.client = new QdrantClient({ url: qdrantUrl });
   }
 
   async onModuleInit() {
@@ -41,10 +38,9 @@ export class QdrantService implements OnModuleInit {
       const collections = await this.client.getCollections();
       const exists = collections.collections.some((c) => c.name === this.collectionName);
 
-      if (!exists) {
-        this.logger.log(`Initializing collection: ${this.collectionName}`);
+      if (!hasCollection) {
         await this.client.createCollection(this.collectionName, {
-          vectors: { size: this.vectorSize, distance: 'Cosine' },
+          vectors: {}, 
         });
         await this.client.createPayloadIndex(this.collectionName, { field_name: 'location', field_schema: 'geo' });
         await this.client.createPayloadIndex(this.collectionName, { field_name: 'type', field_schema: 'keyword' });
@@ -85,30 +81,63 @@ export class QdrantService implements OnModuleInit {
     return this.findLocationsByRadius(lat, lon, radiusMeters, 'store');
   }
 
-  async findLocationsByRadius(lat: number, lon: number, radiusMeters: number, type: 'store' | 'service_center') {
-    const result = await this.client.scroll(this.collectionName, {
-      filter: {
-        must: [
-          { key: 'type', match: { value: type } },
-          { key: 'location', geo_radius: { center: { lat, lon }, radius: radiusMeters } },
-        ],
-      },
-      with_payload: true,
-    });
-    return result.points;
+  // Tìm địa điểm theo vị trí địa lý và loại thực thể
+  async findLocationsByRadius(
+    lat: number,
+    lng: number,
+    radiusMeters: number,
+    type: 'store' | 'service_center',
+  ) {
+    try {
+      const result = await this.client.scroll(this.collectionName, {
+        filter: {
+          must: [
+            { key: 'type', match: { value: type } }, 
+            {
+              key: 'location',
+              geo_radius: {
+                center: { lat, lon: lng }, 
+                radius: radiusMeters,
+              },
+            },
+          ],
+        },
+        with_payload: true,
+      });
+      return result.points; 
+    } catch (error) {
+      console.error(`[QdrantService] Error in findLocationsByRadius for ${type}:`, error);
+      throw error;
+    }
   }
 
-  async findProductsByRadius(lat: number, lon: number, radiusMeters: number, productId?: string) {
-    const filters: any[] = [
-      { key: 'location', geo_radius: { center: { lat, lon }, radius: radiusMeters } },
-    ];
-    if (productId) filters.push({ key: 'products', match: { value: productId } });
+  // Tìm địa điểm chứa sản phẩm cụ thể
+  async findProductsByRadius(lat: number, lng: number, radiusMeters: number, productId?: string) {
+    try {
+      const filters: any[] = [
+        {
+          key: 'location',
+          geo_radius: {
+            center: { lat, lon: lng }, 
+            radius: radiusMeters,
+          },
+        },
+      ];
 
-    const result = await this.client.scroll(this.collectionName, {
-      filter: { must: filters },
-      with_payload: true,
-    });
-    return result.points;
+      if (productId) {
+        filters.push({ key: 'products', match: { value: productId } });
+      }
+
+      const result = await this.client.scroll(this.collectionName, {
+        filter: { must: filters },
+        with_payload: true,
+      });
+
+      return result.points;
+    } catch (error) {
+      console.error('[QdrantService] Error in findProductsByRadius:', error);
+      throw error;
+    }
   }
 
   // =========================
@@ -121,7 +150,7 @@ export class QdrantService implements OnModuleInit {
         id: data.id,
         payload: {
           name: data.name,
-          type: 'store',
+          type: data.type || 'store',
           location: { lat: data.latitude, lon: data.longitude },
           address: data.address,
           products: data.products || [],
@@ -131,6 +160,7 @@ export class QdrantService implements OnModuleInit {
     });
   }
 
+  // Hàm bọc lưu/cập nhật thông tin Product 
   async upsertProduct(data: any) {
     return this.client.upsert(this.collectionName, {
       wait: true,
