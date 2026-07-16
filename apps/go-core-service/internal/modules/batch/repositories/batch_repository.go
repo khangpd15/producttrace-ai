@@ -27,6 +27,7 @@ type BatchRepository interface {
 	FindByCode(ctx context.Context, batchCode string) (*response.BatchDetailResponse, error)
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) (*response.BatchDetailResponse, error)
 	GetBatchEvents(ctx context.Context, batchID uuid.UUID) ([]response.BatchEventDTO, error)
+	GetBatchProducts(ctx context.Context, batchID uuid.UUID, req *request.GetBatchProductsRequest) (*response.GetBatchProductsResponse, error)
 	// FindByID trả về entity đầy đủ (kể cả đã soft-delete) để service tự kiểm tra is_deleted.
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.Batch, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
@@ -404,10 +405,11 @@ func (r *batchRepository) GetBatchEvents(ctx context.Context, batchID uuid.UUID)
 
 	err := r.db.WithContext(ctx).
 		Table("events e").
-		Select("e.event_type as event_name, e.description as detail, e.created_at").
+		Select("e.event_type as event_name, e.description as detail, MAX(e.created_at) as created_at").
 		Joins("JOIN product_items p ON e.product_item_id = p.id").
-		Where("p.batch_id = ? AND p.is_deleted = false", batchID).
-		Order("e.created_at DESC").
+		Where("p.batch_id = ? AND p.is_deleted = false AND e.is_deleted = false", batchID).
+		Group("e.event_type, e.description").
+		Order("created_at DESC").
 		Scan(&events).Error
 
 	if err != nil {
