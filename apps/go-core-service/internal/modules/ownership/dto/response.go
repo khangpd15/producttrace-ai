@@ -32,8 +32,9 @@ type OwnershipDetailRes struct {
 	OwnerPhone string    `json:"owner_phone"`
 
 	// --- Thông tin sản phẩm (fetch từ Product Module) ---
-	ProductName string `json:"product_name"`
-	ProductSKU  string `json:"product_sku"`
+	ProductName  string `json:"product_name"`
+	ProductSKU   string `json:"product_sku"`
+	SerialNumber string `json:"serial_number"`
 
 	// --- Lịch sử đăng ký quyền sở hữu (AC-002) ---
 	OwnershipHistory []OwnershipHistoryItem `json:"ownership_history"`
@@ -50,8 +51,9 @@ type OwnershipSummaryRes struct {
 	OwnerEmail string `json:"owner_email"`
 	OwnerPhone string `json:"owner_phone"`
 
-	ProductName string `json:"product_name"`
-	ProductSKU  string `json:"product_sku"`
+	ProductName  string `json:"product_name"`
+	ProductSKU   string `json:"product_sku"`
+	SerialNumber string `json:"serial_number"`
 }
 
 // PaginatedOwnershipsRes chứa danh sách quyền sở hữu kèm thông tin phân trang (FR-040, FR-042)

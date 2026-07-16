@@ -8,8 +8,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/dto"
 	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
-	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
-	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/entity"
+	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
 	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 )
@@ -22,7 +21,7 @@ type publicService struct {
 	itemRepo      itemRepo.ProductItemRepository
 	traceRepo     traceRepo.TraceRepository
 	ownershipRepo ownershipRepo.IOwnershipRepository
-	warrantyRepo  warrantyRepo.WarrantyClaimRepository
+	warrantyRepo  warrantyRepo.WarrantyRepository
 	locationRepo  locationRepo.LocationRepository
 	userRepo      userRepo.UserRepositoryInterface
 }
@@ -31,7 +30,7 @@ func NewPublicService(
 	itemRepo itemRepo.ProductItemRepository,
 	traceRepo traceRepo.TraceRepository,
 	ownershipRepo ownershipRepo.IOwnershipRepository,
-	warrantyRepo warrantyRepo.WarrantyClaimRepository,
+	warrantyRepo warrantyRepo.WarrantyRepository,
 	locationRepo locationRepo.LocationRepository,
 	userRepo userRepo.UserRepositoryInterface,
 ) PublicService {
@@ -86,18 +85,12 @@ func (s *publicService) VerifyQR(ctx context.Context, itemCode string, token str
 
 	// 3. Fetch Warranty
 	var verifyWarranty *dto.VerifyQRWarranty
-	statuses := []warrantyEntity.WarrantyClaimStatus{
-		warrantyEntity.WarrantyClaimStatusApproved,
-		warrantyEntity.WarrantyClaimStatusProcessing,
-		warrantyEntity.WarrantyClaimStatusOpen,
-		warrantyEntity.WarrantyClaimStatusRejected,
-	}
-	warranty, err := s.warrantyRepo.FindByProductItemIDAndStatusList(ctx, row.ID, statuses)
-	if err == nil && warranty != nil {
+	warranties, err := s.warrantyRepo.FindBySerialNumber(ctx, row.SerialNumber)
+	if err == nil && len(warranties) > 0 {
 		verifyWarranty = &dto.VerifyQRWarranty{
-			ClaimNumber: warranty.ClaimNumber,
-			Status:      string(warranty.Status),
-			CreatedAt:   warranty.CreatedAt,
+			ClaimNumber: warranties[0].WarrantyCode,
+			Status:      string(warranties[0].Status),
+			CreatedAt:   warranties[0].CreatedAt,
 		}
 	}
 

@@ -22,7 +22,6 @@ import (
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
-	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
 type RouterDependency struct {
@@ -32,7 +31,6 @@ type RouterDependency struct {
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
 	OwnershipHandler             *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
@@ -48,14 +46,13 @@ type RouterDependency struct {
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
 
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// Apply global middlewares — CORS must come first so preflight OPTIONS
-	// requests are handled before any auth middleware runs.
-	r.Use(middleware.CORSMiddleware())
+	// Apply global middlewares — CORS is handled centrally at the Kong Gateway,
+	// so we disable the Gin CORS middleware here to avoid duplicate headers.
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())
@@ -76,7 +73,6 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
 	SetupWarrantyRouter(api, deps.WarrantyHandler, deps.UserRepo)
-	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
 	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
 	return r
@@ -236,29 +232,30 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	ownerships.GET("", oh.SearchOwnerships)
 }
 
-// WARRANTY CLAIM
-func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
-	warrantyClaims := api.Group("/warranty-claims")
-	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
-	{
-		warrantyClaims.POST("", wch.CreateWarrantyClaim)
-	}
-}
 
 // WARRANTY
 func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandler, uRepo userRepo.UserRepositoryInterface) {
 	warrantyGroup := api.Group("/warranties")
 	warrantyGroup.Use(middleware.AuthMiddleware(uRepo))
 	{
-		// Admin (or System) creates directly (legacy or specific use-case)
-		warrantyGroup.POST("", wh.ActivateWarranty)
+		// Admin (or System) creates directly
+		warrantyGroup.POST("", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ActivateWarranty)
 		// Customer requests warranty
-		warrantyGroup.POST("/request", wh.RequestWarranty)
+		warrantyGroup.POST("/request", middleware.RoleMiddleware("CUSTOMER"), wh.RequestWarranty)
 		// Admin lists warranties
-		warrantyGroup.GET("", wh.ListWarranties)
+		warrantyGroup.GET("", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ListWarranties)
 		// Admin approves/rejects warranty
-		warrantyGroup.PUT("/:id/approve", wh.ApproveWarranty)
-		warrantyGroup.PUT("/:id/reject", wh.RejectWarranty)
+		warrantyGroup.PUT("/:id/approve", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ApproveWarranty)
+		warrantyGroup.PUT("/:id/reject", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.RejectWarranty)
+
+		// List my warranties
+		warrantyGroup.GET("/my", middleware.RoleMiddleware("CUSTOMER"), wh.ListMyWarranties)
+		// Get warranty detail by ID
+		warrantyGroup.GET("/:id", wh.GetWarrantyByID)
+		// Get warranty by Product Item ID
+		warrantyGroup.GET("/product-item/:product_item_id", wh.GetWarrantyByProductItemID)
+		// Void warranty
+		warrantyGroup.PUT("/:id/void", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.VoidWarranty)
 	}
 }
 
