@@ -21,6 +21,7 @@ type IOwnershipRepository interface {
 	
 	// Transaction Support
 	BeginTx(ctx context.Context) *gorm.DB
+	Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error
 	
 	// Search & List
 	SearchOwnerships(ctx context.Context, filter SearchFilter) ([]entity.Ownership, int64, error)
@@ -90,6 +91,10 @@ func (r *OwnershipRepository) BeginTx(ctx context.Context) *gorm.DB {
 	return r.db.WithContext(ctx).Begin()
 }
 
+func (r *OwnershipRepository) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return r.db.WithContext(ctx).Transaction(fn)
+}
+
 // GetOwnershipByID lấy Ownership record bằng primary ID
 func (r *OwnershipRepository) GetOwnershipByID(ctx context.Context, id uuid.UUID) (*entity.Ownership, error) {
 	var ownership entity.Ownership
@@ -106,13 +111,18 @@ func (r *OwnershipRepository) UpdateOwnershipStatusAndEndedAt(ctx context.Contex
 		db = tx
 	}
 	
-	// gorm hooks or updates multiple fields securely via map
+	updates := map[string]interface{}{
+		"status": status,
+	}
+	if status == "ACTIVE" {
+		updates["ended_at"] = nil
+	} else {
+		updates["ended_at"] = gorm.Expr("CURRENT_TIMESTAMP")
+	}
+
 	return db.WithContext(ctx).Model(&entity.Ownership{}).
 		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"status":   status,
-			"ended_at": gorm.Expr("CURRENT_TIMESTAMP"),
-		}).Error
+		Updates(updates).Error
 }
 
 // SearchOwnerships API danh sách + bộ lọc tìm kiếm

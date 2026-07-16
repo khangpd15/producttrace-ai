@@ -46,6 +46,9 @@ func SetupTopology(ch *amqp.Channel) error {
 	}
 	routingNestKeys := []string{
 		OTPRegisterUserRK,
+		OTPForgotRK,
+		OTPVerifiedRK,
+		OTPOwnership,
 	}
 
 	for _, rk := range routingNestKeys {
@@ -102,7 +105,7 @@ func SetupTopology(ch *amqp.Channel) error {
 
 	routingOTPKeys := []string{
 		UserRegisteredRK,
-		UserPasswordResetRK,
+		UserPasswordForgotRK,
 	}
 	for _, rk := range routingOTPKeys {
 		err = ch.QueueBind(

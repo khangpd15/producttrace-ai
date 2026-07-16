@@ -47,10 +47,39 @@ import (
 	// Cache pkg
 	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 
+	// Location Module
+
+	locationHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/handler"
+	locationRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/repository"
+	locationService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/location/service"
+
+	//
+	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
+	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
+	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
+	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
+	ownershipEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
+
+	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
+	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
+	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
+	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
 	dashboardService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/services"
+
+	// Trace
+	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
+	traceRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/repositories"
+	traceService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/services"
+
+	// Middleware
+	middleware "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/middleware"
+	// Public
+	publicHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/handler"
+	publicService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/public/service"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/cache"
 )
@@ -74,10 +103,14 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// Initialize User Module
 	uRepo := userRepo.NewUserRepository(database)
 	pRepo := productRepo.NewProductRepository(database)
-	uService := userService.NewUserService(uRepo, pRepo, pub)
+	uService := userService.NewUserService(uRepo, pRepo, pub, auditService)
 	uHandler := userHandler.NewUserHandler(uService)
 	qrGenerator := qr.NewGenerator()
-	pdfGenerator := qr.NewPDFGenerator(qrGenerator, os.Getenv("BASE_URL"))
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = os.Getenv("BASE_URL")
+	}
+	pdfGenerator := qr.NewPDFGenerator(qrGenerator, frontendURL)
 
 	bRepo := batchRepo.NewBatchRepository(database)
 
@@ -86,8 +119,8 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Product category & attribute modules
 	pCategoryRepo := categoryRepo.NewProductCategoryRepository(database)
-	cService := categoryService.NewProductCategoryService(pCategoryRepo)  
-cHandler := categoryHandler.NewProductCategoryHandler(cService)
+	cService := categoryService.NewProductCategoryService(pCategoryRepo)
+	cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pAttrRepo := attributeRepo.NewAttributeRepository(database)
 	pAttrService := attributeService.NewAttributeService(pAttrRepo, pCategoryRepo)
 	pAttrHandler := attributeHandler.NewAttributeHandler(pAttrService)
@@ -117,11 +150,6 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
 	pHandler := productHandler.NewProductHandler(pService)
 
-	// Initialize Location Module
-	locRepo := locationRepo.NewLocationRepository(database)
-	locService := locationService.NewLocationService(locRepo)
-	locHandler := locationHandler.NewLocationHandler(locService)
-
 	// Initialize Dashboard Module
 	dbRepo := dashboardRepo.NewDashboardRepository(database)
 	dbService := dashboardService.NewDashboardService(dbRepo)
@@ -130,24 +158,44 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	piService := productItemsService.NewProductItemService(productItemsRepo, bRepo, pVariantRepo, nil)
 	piHandler := productItemsHandler.NewProductItemHandler(piService)
 
+	// Location module
+	lRepo := locationRepo.NewLocationRepository(database)
+	lService := locationService.NewLocationService(lRepo)
+	lHandler := locationHandler.NewLocationHandler(lService)
 	// Initialize Trace Module
 	tRepo := traceRepo.NewTraceRepository(database)
 	tService := traceService.NewTraceService(tRepo, redisClient, pub, auditService, os.Getenv("BASE_URL"))
 	tHandler := traceHandler.NewTraceHandler(tService)
 	rateLimiter := middleware.NewRateLimiter(redisClient)
 
+	// Ownership Module
+	oRepo := ownershipRepo.NewOwnershipRepository(database)
+	oProductAdapter := ownershipAdapters.NewRealProductAdapter(database, productItemsRepo, pRepo)
+	oEmailAdapter := ownershipAdapters.NewRealEmailAdapter()
+	oUserAdapter := ownershipAdapters.NewRealUserAdapter(uRepo)
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub)
+	oHandler := ownershipHandler.NewOwnershipHandler(oService)
+
+	// Warranty Module
+	wRepo := warrantyRepo.NewWarrantyRepository(database)
+	wService := warrantyService.NewWarrantyService(wRepo, pub)
+	wHandler := warrantyHandler.NewWarrantyHandler(wService)
+
+	// AutoMigrate
+	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{})
+
 	// Initialize Public Module
-	pubService := publicService.NewPublicService(productItemsRepo)
+	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wRepo, lRepo, uRepo)
 	pubHandler := publicHandler.NewPublicHandler(pubService)
 
 	r := router.SetupRouter(router.RouterDependency{
 		BatchHandler:                 batchHandler,
-		ProductHandler:               pHandler,
-		CategoryHandler:              cHandler,
-		UserHandler:                  uHandler,
 		AuthHandler:                  aHandler,
+		UserHandler:                  uHandler,
+		ProductHandler:               pHandler,
+		ProductCategoryHandler:       cHandler,
 		AuditHandler:                 auditHandler,
-		LocationHandler:              locHandler,
+		LocationHandler:              lHandler,
 		DashboardHandler:             dbHandler,
 		UserRepo:                     uRepo,
 		ProductVariantHandler:        vHandler,
@@ -157,6 +205,8 @@ cHandler := categoryHandler.NewProductCategoryHandler(cService)
 		PublicHandler:                pubHandler,
 		RateLimiter:                  rateLimiter,
 		ProductItemHandler:           piHandler,
+		OwnershipHandler:             oHandler,
+		WarrantyHandler:              wHandler,
 	})
 
 	return &App{

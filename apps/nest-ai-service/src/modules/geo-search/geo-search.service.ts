@@ -24,12 +24,8 @@ export class GeoSearchService {
   }
 
   // HÀM: Xử lý map dữ liệu, tính khoảng cách, gán note và sắp xếp từ gần đến xa
-  private processAndSortLocations(rawLocations: any, userLat: number, userLng: number) {
-    const points = Array.isArray(rawLocations) 
-      ? rawLocations 
-      : (rawLocations?.points || []);
-
-    console.log(`[DEBUG] Tổng số bản ghi thô nhận từ Qdrant: ${points.length}`);
+ private processAndSortLocations(rawLocations: any, userLat: number, userLng: number) {
+    const points = Array.isArray(rawLocations) ? rawLocations : (rawLocations?.points || []);
 
     const processed = points
       .map((point: any) => {
@@ -38,13 +34,7 @@ export class GeoSearchService {
 
         const storeLat = payload.location.lat;
         const storeLng = payload.location.lon;
-
         const distanceInMeters = this.calculateDistance(userLat, userLng, storeLat, storeLng);
-
-        const distanceNote =
-          distanceInMeters >= 1000
-            ? `Cách vị trí của bạn ${(distanceInMeters / 1000).toFixed(2)} km`
-            : `Cách vị trí của bạn ${distanceInMeters} mét`;
 
         return {
           id: point.id,
@@ -52,13 +42,16 @@ export class GeoSearchService {
           type: payload.type || 'unknown',
           address: payload.address || 'Không có địa chỉ',
           products: payload.products || undefined,
-          distanceMeters: distanceInMeters, 
-          note: distanceNote,
+          distanceMeters: distanceInMeters,
+          // Đã thêm trường distance (km) để Frontend hiển thị trực tiếp
+          distance: parseFloat((distanceInMeters / 1000).toFixed(2)), 
+          note: distanceInMeters >= 1000 
+            ? `Cách ${(distanceInMeters / 1000).toFixed(2)} km` 
+            : `Cách ${distanceInMeters} mét`
         };
       })
       .filter((item: any) => item !== null);
 
-    //  sắp xếp từ gần nhất đến xa nhất
     return [...processed].sort((a: any, b: any) => a.distanceMeters - b.distanceMeters);
   }
 

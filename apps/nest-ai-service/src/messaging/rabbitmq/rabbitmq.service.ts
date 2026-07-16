@@ -20,12 +20,12 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private channel: amqp.Channel | null = null;
 
   private isConnecting = false;
-  private isDestroyed  = false;
+  private isDestroyed = false;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly notificationConsumer: NotificationConsumer,
-  ) {}
+  ) { }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (!this.channel) return;
 
     const ch = this.channel;
-    const queueName   = RABBITMQ.QUEUES.NOTIFICATION;     // "ai.events"
+    const queueName = RABBITMQ.QUEUES.NOTIFICATION;     // "ai.events"
     const failedQueue = `${queueName}.failed`;             // "ai.events.failed"
 
     // 1. Assert main exchange (idempotent — must match Go's declaration)
@@ -140,7 +140,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await ch.assertQueue(queueName, {
       durable: true,
       arguments: {
-        'x-dead-letter-exchange':    RABBITMQ.DLX_EXCHANGE,
+        'x-dead-letter-exchange': RABBITMQ.DLX_EXCHANGE,
         'x-dead-letter-routing-key': failedQueue,
       },
     });
@@ -151,6 +151,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       RABBITMQ.ROUTING_KEYS.USER_REGISTERED, // "otp.registered"
       RABBITMQ.ROUTING_KEYS.PASSWORD_RESET,  // "otp.forgot"
       RABBITMQ.ROUTING_KEYS.USER_VERIFIED,   // "otp.verified"
+      RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED, // "product.created"
+      RABBITMQ.ROUTING_KEYS.NOTIFICATION_SENT, // "notification.sent"
+      RABBITMQ.ROUTING_KEYS.OWNERSHIP_OTP,
+      RABBITMQ.ROUTING_KEYS.OWNERSHIP_TRANSFERRED,
     ];
 
     for (const rk of routingKeys) {
@@ -181,7 +185,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     if (this.isDestroyed) return;
 
     this.connection = null;
-    this.channel    = null;
+    this.channel = null;
 
     setTimeout(() => this.connect(), 5000);
   }

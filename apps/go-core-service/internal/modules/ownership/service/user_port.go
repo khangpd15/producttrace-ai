@@ -15,6 +15,8 @@ type IUserInfoProvider interface {
 	// If not found, it creates a placeholder/guest user account so we can link ownership.
 	EnsureUserExists(ctx context.Context, email, fullName, phone string) (ownerID uuid.UUID, err error)
 
+	GetUserByEmail(ctx context.Context, email string) (userID uuid.UUID, status string, err error)
+
 	// SearchUserIDs dùng để filter search ownership (FR-042)
 	SearchUserIDs(ctx context.Context, name string, email string, phone string) ([]uuid.UUID, error)
 }

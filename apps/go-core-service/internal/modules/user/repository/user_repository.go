@@ -18,6 +18,7 @@ type UserRepositoryInterface interface {
 	CreateUser(ctx context.Context, user *UserEntity.User) (*UserEntity.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*UserEntity.User, error)
 	GetUserByID(ctx context.Context, id string) (*UserEntity.User, error)
+	SearchUsers(ctx context.Context, name string, email string, phone string) ([]*UserEntity.User, error)
 	UpdateUserStatus(ctx context.Context, id string, status UserEntity.Status) error
 	CheckEmailExists(ctx context.Context, email string) (bool, error)
 	CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error)
@@ -129,6 +130,27 @@ func (r *UserRepository) ListUsers(ctx context.Context, page, limit int, role, s
 	}
 
 	return users, total, nil
+}
+
+func (r *UserRepository) SearchUsers(ctx context.Context, name string, email string, phone string) ([]*UserEntity.User, error) {
+	db := r.getDB(ctx).Model(&UserEntity.User{}).Where("is_deleted = ?", false)
+
+	if name != "" {
+		db = db.Where("full_name ILIKE ?", "%"+name+"%")
+	}
+	if email != "" {
+		db = db.Where("email ILIKE ?", "%"+email+"%")
+	}
+	if phone != "" {
+		db = db.Where("phone ILIKE ?", "%"+phone+"%")
+	}
+
+	var users []*UserEntity.User
+	if err := db.Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 func (r *UserRepository) CheckPhoneExists(ctx context.Context, phone string, excludeUserID string) (bool, error) {

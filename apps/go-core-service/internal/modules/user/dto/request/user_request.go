@@ -23,6 +23,11 @@ type UpdateProfileRequest struct {
 	Avatar   *string `json:"avatar"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
+}
+
 type SearchUserRequest struct {
 	Keyword string `form:"keyword" binding:"max=255"`
 	Role    string `form:"role" binding:"omitempty,oneof=ADMIN CUSTOMER STAFF DEALER"`

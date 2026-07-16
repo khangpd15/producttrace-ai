@@ -5,7 +5,10 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 @Injectable()
 export class QdrantService implements OnModuleInit {
   private client: QdrantClient;
-  private collectionName = 'producttrace_geo_collection';
+  private readonly collectionName = 'product_embeddings';
+  private readonly vectorSize = 1024; // Cập nhật theo model BGE-M3
+  private collectionReady = false;
+  private ensureCollectionPromise: Promise<void> | null = null;
 
   constructor(private configService: ConfigService) {
     const qdrantUrl = this.configService.get<string>('QDRANT_URL') || 'http://localhost:6333';
@@ -14,29 +17,68 @@ export class QdrantService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    await this.ensureCollection();
+  }
+
+  // =========================
+  // SINGLETON ENSURE COLLECTION
+  // =========================
+  private async ensureCollection(): Promise<void> {
+    if (this.collectionReady) return;
+    if (!this.ensureCollectionPromise) {
+      this.ensureCollectionPromise = this.doEnsureCollection().finally(() => {
+        this.ensureCollectionPromise = null;
+      });
+    }
+    return this.ensureCollectionPromise;
+  }
+
+  private async doEnsureCollection(): Promise<void> {
     try {
       const collections = await this.client.getCollections();
-      const hasCollection = collections.collections.some(c => c.name === this.collectionName);
+      const exists = collections.collections.some((c) => c.name === this.collectionName);
 
       if (!hasCollection) {
         await this.client.createCollection(this.collectionName, {
           vectors: {}, 
         });
-        
-        await this.client.createPayloadIndex(this.collectionName, {
-          field_name: 'location',
-          field_schema: 'geo',
-          wait: true,
-        });
-        console.log(`[QdrantService] Geo collection initialized with geo index.`);
+        await this.client.createPayloadIndex(this.collectionName, { field_name: 'location', field_schema: 'geo' });
+        await this.client.createPayloadIndex(this.collectionName, { field_name: 'type', field_schema: 'keyword' });
       }
+      this.collectionReady = true;
     } catch (error) {
-      console.error('[QdrantService] Failed to initialize Qdrant collection:', error);
+      this.logger.error('Failed to initialize collection:', error);
+      throw error;
     }
   }
 
-  async findStoresByRadius(lat: number, lng: number, radiusMeters: number) {
-    return this.findLocationsByRadius(lat, lng, radiusMeters, 'store');
+  // =========================
+  // VECTOR SEARCH & UPSERT
+  // =========================
+  async upsertVector(id: string, vector: number[], payload: Record<string, unknown>): Promise<void> {
+    await this.ensureCollection();
+    await this.client.upsert(this.collectionName, {
+      wait: true,
+      points: [{ id, vector, payload }],
+    });
+  }
+
+  async vectorSearch(vector: number[], filter?: Record<string, unknown>, limit = 10): Promise<SearchResult[]> {
+    await this.ensureCollection();
+    const result = await this.client.search(this.collectionName, {
+      vector,
+      filter: filter as any,
+      limit,
+      with_payload: true,
+    });
+    return result as unknown as SearchResult[];
+  }
+
+  // =========================
+  // GEO & PRODUCT SEARCH
+  // =========================
+  async findStoresByRadius(lat: number, lon: number, radiusMeters: number) {
+    return this.findLocationsByRadius(lat, lon, radiusMeters, 'store');
   }
 
   // Tìm địa điểm theo vị trí địa lý và loại thực thể
@@ -97,7 +139,10 @@ export class QdrantService implements OnModuleInit {
       throw error;
     }
   }
-  // Hàm bọc lưu/cập nhật thông tin Store 
+
+  // =========================
+  // UPSERT ENTITIES
+  // =========================
   async upsertStoreToQdrant(data: any) {
     return this.client.upsert(this.collectionName, {
       wait: true,
@@ -110,7 +155,7 @@ export class QdrantService implements OnModuleInit {
           address: data.address,
           products: data.products || [],
         },
-        vector: {},
+        vector: Array(this.vectorSize).fill(0), // Cần khởi tạo mảng vector rỗng đúng size
       }],
     });
   }
@@ -127,7 +172,7 @@ export class QdrantService implements OnModuleInit {
           productId: data.productId,
           metadata: data.metadata || {},
         },
-        vector: {},
+        vector: Array(this.vectorSize).fill(0),
       }],
     });
   }
