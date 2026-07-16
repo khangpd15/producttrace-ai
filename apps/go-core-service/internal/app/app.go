@@ -55,15 +55,15 @@ import (
 
 	//
 	ownershipAdapters "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/adapters"
+	ownershipEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 	ownershipHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/handler"
 	ownershipRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	ownershipService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
-	ownershipEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 
+	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
 	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
 	warrantyRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
 	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
-	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
 
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
@@ -147,7 +147,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
 	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
 	// khi tạo/cập nhật product)
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, auditService)
 	pHandler := productHandler.NewProductHandler(pService)
 
 	// Initialize Dashboard Module
@@ -173,12 +173,12 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	oProductAdapter := ownershipAdapters.NewRealProductAdapter(database, productItemsRepo, pRepo)
 	oEmailAdapter := ownershipAdapters.NewRealEmailAdapter()
 	oUserAdapter := ownershipAdapters.NewRealUserAdapter(uRepo)
-	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub)
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub, auditService)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 
 	// Warranty Module
 	wRepo := warrantyRepo.NewWarrantyRepository(database)
-	wService := warrantyService.NewWarrantyService(wRepo, pub)
+	wService := warrantyService.NewWarrantyService(wRepo, pub, auditService)
 	wHandler := warrantyHandler.NewWarrantyHandler(wService)
 
 	// AutoMigrate

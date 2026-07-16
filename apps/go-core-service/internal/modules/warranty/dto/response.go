@@ -4,6 +4,8 @@ import "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modul
 
 type WarrantyResponse struct {
 	ID                string `json:"id"`
+	ProductItemID     string `json:"product_item_id"`
+	OwnerID           string `json:"owner_id,omitempty"`
 	ItemCode          string `json:"itemCode"`
 	ItemName          string `json:"itemName"`
 	SerialNumber      string `json:"serialNumber"`
@@ -23,8 +25,14 @@ type WarrantyResponse struct {
 }
 
 func FromWarrantyEntity(w *entity.Warranty) WarrantyResponse {
+	ownerID := ""
+	if w.OwnerID != nil {
+		ownerID = w.OwnerID.String()
+	}
 	return WarrantyResponse{
 		ID:                w.ID.String(),
+		ProductItemID:     w.ProductItemID.String(),
+		OwnerID:           ownerID,
 		ItemCode:          w.ItemCode,
 		ItemName:          w.ItemName,
 		SerialNumber:      w.SerialNumber,

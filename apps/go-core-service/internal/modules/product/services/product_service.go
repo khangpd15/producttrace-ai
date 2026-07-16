@@ -18,7 +18,9 @@ import (
 	categoryRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_category/repositories"
 	variantEntities "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/entities"
 	variantRepos "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product_variant/repositories"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/dbctx"
 	pkgResponse "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 	"gorm.io/datatypes"
@@ -40,6 +42,7 @@ type productService struct {
 	attrValRepo  attrValRepos.AttributeValueRepository
 	attrRepo     attrRepos.AttributeRepository
 	categoryRepo categoryRepos.ProductCategoryRepository
+	auditLog     auditlog.AuditLogService
 }
 
 func NewProductService(
@@ -49,6 +52,7 @@ func NewProductService(
 	attrValRepo attrValRepos.AttributeValueRepository,
 	attrRepo attrRepos.AttributeRepository,
 	categoryRepo categoryRepos.ProductCategoryRepository,
+	auditLog auditlog.AuditLogService,
 ) ProductService {
 	return &productService{
 		db:           db,
@@ -57,6 +61,7 @@ func NewProductService(
 		attrValRepo:  attrValRepo,
 		attrRepo:     attrRepo,
 		categoryRepo: categoryRepo,
+		auditLog:     auditLog,
 	}
 }
 
@@ -157,6 +162,19 @@ func (s *productService) CreateProduct(ctx context.Context, req request.CreatePr
 	if err != nil {
 		return nil, err
 	}
+
+	// Ghi nhận Audit Log
+	var actorUUIDPtr *uuid.UUID
+	actorID := utils.GetActorID(ctx)
+	if actorID != "" {
+		if u, err := uuid.Parse(actorID); err == nil {
+			actorUUIDPtr = &u
+		}
+	}
+	if actorUUIDPtr == nil {
+		actorUUIDPtr = &createdBy
+	}
+	_ = s.auditLog.LogCreate(ctx, actorUUIDPtr, "Product", product.ID, product)
 
 	return s.loadProductDetail(ctx, product.ID)
 }

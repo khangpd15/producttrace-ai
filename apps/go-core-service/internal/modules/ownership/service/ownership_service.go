@@ -13,6 +13,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/repository"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"gorm.io/gorm"
 )
 
@@ -41,6 +42,7 @@ type OwnershipService struct {
 	emailClient  IEmailOTPClient
 	userProvider IUserInfoProvider
 	pub          *publisher.Publisher
+	auditLog     auditlog.AuditLogService
 }
 
 func NewOwnershipService(
@@ -49,6 +51,7 @@ func NewOwnershipService(
 	emailClient IEmailOTPClient,
 	userProvider IUserInfoProvider,
 	pub *publisher.Publisher,
+	auditLog auditlog.AuditLogService,
 ) IOwnershipService {
 	return &OwnershipService{
 		repo:         repo,
@@ -56,6 +59,7 @@ func NewOwnershipService(
 		emailClient:  emailClient,
 		userProvider: userProvider,
 		pub:          pub,
+		auditLog:     auditLog,
 	}
 }
 
@@ -159,6 +163,8 @@ func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dt
 		return nil, err
 	}
 
+	_ = s.auditLog.LogCreate(ctx, &userID, "Ownership", saved.ID, saved)
+
 	return saved, nil
 }
 
@@ -251,6 +257,8 @@ func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.A
 		return nil, err
 	}
 
+	_ = s.auditLog.LogCreate(ctx, &adminID, "Ownership", saved.ID, saved)
+
 	// Publish to RabbitMQ after commit
 	if s.pub != nil {
 		event := types.Event{
@@ -324,6 +332,10 @@ func (s *OwnershipService) ApproveOwnership(ctx context.Context, ownershipID uui
 		return err
 	}
 
+	if updatedOwn, err := s.repo.GetOwnershipByID(ctx, ownershipID); err == nil && updatedOwn != nil {
+		_ = s.auditLog.LogUpdate(ctx, &adminID, "Ownership", own.ID, own, updatedOwn)
+	}
+
 	// Publish to RabbitMQ after commit
 	if s.pub != nil {
 		event := types.Event{
@@ -376,6 +388,10 @@ func (s *OwnershipService) RejectOwnership(ctx context.Context, ownershipID uuid
 
 	if err != nil {
 		return err
+	}
+
+	if updatedOwn, err := s.repo.GetOwnershipByID(ctx, ownershipID); err == nil && updatedOwn != nil {
+		_ = s.auditLog.LogUpdate(ctx, &adminID, "Ownership", own.ID, own, updatedOwn)
 	}
 
 	// Publish to RabbitMQ after commit
