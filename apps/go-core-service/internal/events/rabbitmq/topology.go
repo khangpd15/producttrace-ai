@@ -49,6 +49,15 @@ func SetupTopology(ch *amqp.Channel) error {
 		OTPForgotRK,
 		OTPVerifiedRK,
 		OTPOwnership,
+		ProductCreatedRK,
+		ProductUpdatedRK,
+		ProductDeletedRK,
+		ProductImageUpdatedRK,
+		ProductAttributeUpdatedRK,
+		ProductAttributeValueUpdatedRK,
+		ProductVariantCreatedRK,
+		ProductVariantUpdatedRK,
+		ProductVariantDeletedRK,
 	}
 
 	for _, rk := range routingNestKeys {

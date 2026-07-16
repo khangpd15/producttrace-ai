@@ -14,9 +14,15 @@ const (
 	UserLoggedInRK       = "user.logged_in"
 
 	// Product routing keys
-	ProductCreatedRK = "product.created"
-	ProductUpdatedRK = "product.updated"
-	ProductDeletedRK = "product.deleted"
+	ProductCreatedRK               = "product.created"
+	ProductUpdatedRK               = "product.updated"
+	ProductDeletedRK               = "product.deleted"
+	ProductImageUpdatedRK          = "product_image.updated"
+	ProductAttributeUpdatedRK      = "product_attribute.updated"
+	ProductAttributeValueUpdatedRK = "product_attribute_value.updated"
+	ProductVariantCreatedRK        = "product_variant.created"
+	ProductVariantUpdatedRK        = "product_variant.updated"
+	ProductVariantDeletedRK        = "product_variant.deleted"
 
 	// Batch routing keys
 	BatchCreatedRK       = "batch.created"
