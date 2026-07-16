@@ -14,6 +14,7 @@ import (
 
 type ProductItemRepository interface {
 	FindByBatchID(ctx context.Context, batchID uuid.UUID) ([]*entities.ProductItem, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductItem, error)
 	FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error)
 	FindByItemCodeWithEvents(ctx context.Context, itemCode string) (*response.ProductItemDetailDTO, error)
 	FindByCodeAndToken(ctx context.Context, itemCode string, token string) (*response.VerifyQRRow, error)
@@ -37,6 +38,18 @@ func (rp *productItemRepository) FindByBatchID(ctx context.Context, batchID uuid
 	}
 
 	return productItems, nil
+}
+
+func (rp *productItemRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.ProductItem, error) {
+	var item entities.ProductItem
+	db := rp.db.WithContext(ctx)
+	if err := db.
+		Preload("Variant").
+		Where("id = ? AND is_deleted = false", id).
+		First(&item).Error; err != nil {
+		return nil, apperror.WrapDBError(err, "product_items")
+	}
+	return &item, nil
 }
 
 func (rp *productItemRepository) FindAllWithFilter(ctx context.Context, req *request.GetProductItemListRequest) (*response.ProductItemListResponse, error) {
@@ -140,6 +153,9 @@ func (rp *productItemRepository) FindByCodeAndToken(ctx context.Context, itemCod
 	err := rp.db.WithContext(ctx).
 		Table("product_items pi").
 		Select(`
+			pi.id,
+			pi.batch_id,
+			pi.current_location_id,
 			pi.item_code,
 			pi.serial_number,
 			pi.status AS item_status,
@@ -152,12 +168,17 @@ func (rp *productItemRepository) FindByCodeAndToken(ctx context.Context, itemCod
 			b.production_place,
 			b.status AS batch_status,
 			p.name AS product_name,
+			p.description AS product_description,
+			p.thumbnail_url AS product_thumbnail_url,
+			pc.name AS category_name,
 			pv.name AS variant_name,
-			pv.sku AS variant_sku
+			pv.sku AS variant_sku,
+			pv.barcode AS variant_barcode
 		`).
 		Joins("JOIN batches b ON pi.batch_id = b.id").
 		Joins("JOIN product_variants pv ON b.variant_id = pv.id").
 		Joins("JOIN products p ON pv.product_id = p.id").
+		Joins("LEFT JOIN product_categories pc ON p.category_id = pc.id").
 		Where("pi.item_code = ? AND pi.verification_token = ? AND pi.is_deleted = false", itemCode, token).
 		First(&row).Error
 

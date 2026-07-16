@@ -41,18 +41,25 @@ type ProductItemDetailDTO struct {
 }
 
 type VerifyQRRow struct {
-	ItemCode         string     `json:"item_code"`
-	SerialNumber     string     `json:"serial_number"`
-	ItemStatus       string     `json:"item_status"`
-	BatchCode        string     `json:"batch_code"`
-	ManufactureDate  *time.Time `json:"manufacture_date"`
-	ExpiryDate       *time.Time `json:"expiry_date"`
-	ManufacturerName string     `json:"manufacturer_name"`
-	SupplierName     string     `json:"supplier_name"`
-	OriginCountry    string     `json:"origin_country"`
-	ProductionPlace  string     `json:"production_place"`
-	BatchStatus      string     `json:"batch_status"`
-	ProductName      string     `json:"product_name"`
-	VariantName      string     `json:"variant_name"`
-	VariantSKU       string     `json:"variant_sku"`
+	ID                  uuid.UUID  `json:"id"`
+	BatchID             *uuid.UUID `json:"batch_id"`
+	CurrentLocationID   *uuid.UUID `json:"current_location_id"`
+	ItemCode            string     `json:"item_code"`
+	SerialNumber        string     `json:"serial_number"`
+	ItemStatus          string     `json:"item_status"`
+	BatchCode           string     `json:"batch_code"`
+	ManufactureDate     *time.Time `json:"manufacture_date"`
+	ExpiryDate          *time.Time `json:"expiry_date"`
+	ManufacturerName    string     `json:"manufacturer_name"`
+	SupplierName        string     `json:"supplier_name"`
+	OriginCountry       string     `json:"origin_country"`
+	ProductionPlace     string     `json:"production_place"`
+	BatchStatus         string     `json:"batch_status"`
+	ProductName         string     `json:"product_name"`
+	ProductDescription  *string    `json:"product_description"`
+	ProductThumbnailURL *string    `json:"product_thumbnail_url"`
+	CategoryName        string     `json:"category_name"`
+	VariantName         string     `json:"variant_name"`
+	VariantSKU          string     `json:"variant_sku"`
+	VariantBarcode      *string    `json:"variant_barcode"`
 }

@@ -30,12 +30,9 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  async resetPassword(@Query('email') email: string, @Body() resetPasswordDto: ResetPasswordDto) {
-    if (!email) {
-      throw new BadRequestException('Email query parameter is required');
-    }
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     try {
-      return await this.authService.resetPassword(email, resetPasswordDto);
+      return await this.authService.resetPassword(resetPasswordDto);
     } catch (error: any) {
       throw new HttpException(error.message || 'Bad Request', HttpStatus.BAD_REQUEST);
     }

@@ -21,7 +21,7 @@ import (
 	traceHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/trace/handler"
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
-	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
 )
 
 type RouterDependency struct {
@@ -31,7 +31,6 @@ type RouterDependency struct {
 	UserHandler                  *userHandler.UserHandler
 	ProductHandler               *productHandler.ProductHandler
 	OwnershipHandler             *ownershipHandler.OwnershipHandler
-	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 	UserRepo                     userRepo.UserRepositoryInterface
 	LocationHandler              *locationHandler.LocationHandler
 	DashboardHandler             *dashboardHandler.DashboardHandler
@@ -43,15 +42,17 @@ type RouterDependency struct {
 	ProductAttributeHandler      *attributeHandler.AttributeHandler           // new
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
+	WarrantyHandler              *warrantyHandler.WarrantyHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
 
 	// Disable proxy trusting by default to resolve the security warning
 	_ = r.SetTrustedProxies(nil)
 
-	// Apply global Recovery, RequestID, and Logger middlewares
+	// Apply global middlewares — CORS is handled centrally at the Kong Gateway,
+	// so we disable the Gin CORS middleware here to avoid duplicate headers.
 	r.Use(middleware.RecoveryMiddleware())
 	r.Use(middleware.RequestIDMiddleware())
 	r.Use(middleware.LoggerMiddleware())
@@ -71,10 +72,18 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupProductCategoryRouter(api, deps.ProductCategoryHandler, deps.UserRepo)
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
-	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
+	SetupWarrantyRouter(api, deps.WarrantyHandler, deps.UserRepo)
 	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
 	return r
+}
+
+// PUBLIC
+func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
+	public := api.Group("/public")
+	{
+		public.GET("/verify", ph.VerifyQR)
+	}
 }
 
 // AUTH
@@ -99,6 +108,7 @@ func SetupUserRouter(api *gin.RouterGroup, uh *userHandler.UserHandler, uRepo us
 	profileGroup.Use(middleware.AuthMiddleware(uRepo))
 	{
 		profileGroup.GET("/profile", uh.GetProfile)
+		profileGroup.PUT("/profile/change-password", uh.ChangePassword)
 		profileGroup.PUT("/profile/:id", uh.UpdateProfile)
 		profileGroup.GET("/search", uh.SearchUsers)
 	}
@@ -145,7 +155,6 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 			// Legacy single-batch export: POST /batches/:id/export — giữ lại để backward compat.
 			exportGroup.POST("/:id/export", bh.ExportBatch)
 		}
-
 
 		// ADMIN and MANUFACTURER roles can export QR PDF, and create/update/delete batches
 		staffGroup := protectedBatches.Group("")
@@ -200,6 +209,7 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	{
 		customerGroup.POST("/request-otp", oh.CustomerRequestOTP)
 		customerGroup.POST("/register", oh.CustomerVerifyAndRegister)
+		customerGroup.GET("/stream", oh.CustomerStream)
 	}
 
 	// Admin routes: Admin điền đầy đủ thông tin thay cho khách hàng
@@ -208,6 +218,9 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	{
 		adminGroup.POST("/request-otp", oh.AdminRequestOTP)
 		adminGroup.POST("/register", oh.AdminVerifyAndRegister)
+		adminGroup.PUT("/approve", oh.ApproveOwnership)
+		adminGroup.PUT("/reject", oh.RejectOwnership)
+		adminGroup.GET("/stream", oh.AdminStream)
 	}
 
 	// Detail route: Tất cả user đã auth đều có thể xem thông tin sở hữu
@@ -219,12 +232,30 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	ownerships.GET("", oh.SearchOwnerships)
 }
 
-// WARRANTY CLAIM
-func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
-	warrantyClaims := api.Group("/warranty-claims")
-	warrantyClaims.Use(middleware.AuthMiddleware(uRepo))
+
+// WARRANTY
+func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandler, uRepo userRepo.UserRepositoryInterface) {
+	warrantyGroup := api.Group("/warranties")
+	warrantyGroup.Use(middleware.AuthMiddleware(uRepo))
 	{
-		warrantyClaims.POST("", wch.CreateWarrantyClaim)
+		// Admin (or System) creates directly
+		warrantyGroup.POST("", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ActivateWarranty)
+		// Customer requests warranty
+		warrantyGroup.POST("/request", middleware.RoleMiddleware("CUSTOMER"), wh.RequestWarranty)
+		// Admin lists warranties
+		warrantyGroup.GET("", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ListWarranties)
+		// Admin approves/rejects warranty
+		warrantyGroup.PUT("/:id/approve", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.ApproveWarranty)
+		warrantyGroup.PUT("/:id/reject", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.RejectWarranty)
+
+		// List my warranties
+		warrantyGroup.GET("/my", middleware.RoleMiddleware("CUSTOMER"), wh.ListMyWarranties)
+		// Get warranty detail by ID
+		warrantyGroup.GET("/:id", wh.GetWarrantyByID)
+		// Get warranty by Product Item ID
+		warrantyGroup.GET("/product-item/:product_item_id", wh.GetWarrantyByProductItemID)
+		// Void warranty
+		warrantyGroup.PUT("/:id/void", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.VoidWarranty)
 	}
 }
 
@@ -408,13 +439,5 @@ func SetupProductItemRouter(api *gin.RouterGroup, pih *productItemHandler.Produc
 	{
 		productItems.GET("", pih.GetProductItemList)
 		productItems.GET("/:item_code", pih.GetProductItemDetail)
-	}
-}
-
-// PUBLIC
-func SetupPublicRouter(api *gin.RouterGroup, ph *publicHandler.PublicHandler) {
-	public := api.Group("/public")
-	{
-		public.GET("/verify", ph.VerifyQR)
 	}
 }

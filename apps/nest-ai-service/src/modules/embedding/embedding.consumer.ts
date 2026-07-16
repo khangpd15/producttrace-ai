@@ -25,25 +25,7 @@ export class EmbeddingConsumer implements OnModuleInit, OnModuleDestroy {
     this.connection = await amqp.connect(RABBITMQ.URL);
     this.channel = await this.connection.createChannel();
 
-    await this.channel.assertExchange(RABBITMQ.EXCHANGE, RABBITMQ.EXCHANGE_TYPE, {
-      durable: true,
-    });
 
-    await this.channel.assertQueue(RABBITMQ.QUEUES.EMBEDDING, {
-      durable: true,
-      arguments: {
-        'x-dead-letter-exchange': RABBITMQ.DLX.EMBEDDING,
-        'x-dead-letter-routing-key': RABBITMQ.DLQ_ROUTING_KEYS.EMBEDDING,
-      },
-    });
-
-    for (const routingKey of [
-      RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED,
-      RABBITMQ.ROUTING_KEYS.TRACE_CREATED,
-      RABBITMQ.ROUTING_KEYS.TRACE_EXPORTED,
-    ]) {
-      await this.channel.bindQueue(RABBITMQ.QUEUES.EMBEDDING, RABBITMQ.EXCHANGE, routingKey);
-    }
 
     await this.channel.consume(
       RABBITMQ.QUEUES.EMBEDDING,
@@ -70,7 +52,7 @@ export class EmbeddingConsumer implements OnModuleInit, OnModuleDestroy {
           this.logger.error(
             `Embedding consumer failed: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
           );
-          this.channel?.nack(message, false, true);
+          this.channel?.nack(message, false, false);
         }
       },
       { noAck: false },

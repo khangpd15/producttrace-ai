@@ -48,8 +48,6 @@ func SetupTopology(ch *amqp.Channel) error {
 		OTPRegisterUserRK,
 		OTPForgotRK,
 		OTPVerifiedRK,
-		ProductCreatedRK,
-		TraceExportedRK,
 		OTPOwnership,
 	}
 

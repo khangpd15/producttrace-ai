@@ -2,31 +2,76 @@ package dto
 
 import "time"
 
-// VerifyQRBatchInfo thông tin lô hàng trả về khi scan QR.
-type VerifyQRBatchInfo struct {
-	BatchCode        string     `json:"batch_code"`
-	ManufactureDate  *time.Time `json:"manufacture_date"`
-	ExpiryDate       *time.Time `json:"expiry_date"`
-	ManufacturerName string     `json:"manufacturer_name"`
-	SupplierName     string     `json:"supplier_name"`
-	OriginCountry    string     `json:"origin_country"`
-	ProductionPlace  string     `json:"production_place"`
-	Status           string     `json:"batch_status"`
-}
+// ─── Sub-DTOs ────────────────────────────────────────────────────────────────
 
 // VerifyQRProductInfo thông tin sản phẩm trả về khi scan QR.
 type VerifyQRProductInfo struct {
-	ProductName string `json:"product_name"`
-	VariantName string `json:"variant_name"`
-	VariantSKU  string `json:"variant_sku"`
+	ProductName  string `json:"productName"`
+	Description  string `json:"description"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	CategoryName string `json:"categoryName"`
+	VariantName  string `json:"variantName"`
+	VariantSKU   string `json:"variantSku"`
+	Barcode      string `json:"barcode"`
 }
+
+// VerifyQRBatchInfo thông tin lô hàng trả về khi scan QR.
+type VerifyQRBatchInfo struct {
+	BatchCode        string     `json:"batchCode"`
+	ManufactureDate  *time.Time `json:"manufactureDate"`
+	ExpiryDate       *time.Time `json:"expiryDate"`
+	ManufacturerName string     `json:"manufacturerName"`
+	SupplierName     string     `json:"supplierName"`
+	OriginCountry    string     `json:"originCountry"`
+	ProductionPlace  string     `json:"productionPlace"`
+	Status           string     `json:"batchStatus"`
+}
+
+// VerifyQROwnership thông tin chủ sở hữu hiện tại.
+type VerifyQROwnership struct {
+	OwnerName     string    `json:"ownerName"`
+	RegisteredAt  time.Time `json:"registeredAt"`
+	OwnershipType string    `json:"ownershipType"`
+	Status        string    `json:"status"`
+}
+
+// VerifyQRWarranty thông tin bảo hành.
+type VerifyQRWarranty struct {
+	ClaimNumber string    `json:"claimNumber"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// VerifyQRLocation vị trí hiện tại của sản phẩm.
+type VerifyQRLocation struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Address string `json:"address"`
+	City    string `json:"city"`
+}
+
+// VerifyQREvent một sự kiện trong lịch sử truy vết.
+type VerifyQREvent struct {
+	EventType   string    `json:"eventType"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Location    string    `json:"location"`
+	ActorName   string    `json:"actorName"`
+	OccurredAt  time.Time `json:"occurredAt"`
+}
+
+// ─── Main Response ───────────────────────────────────────────────────────────
 
 // VerifyQRResponse là DTO trả về sau khi xác thực QR code thành công.
 type VerifyQRResponse struct {
-	ItemCode     string              `json:"item_code"`
-	SerialNumber string              `json:"serial_number"`
-	Status       string              `json:"item_status"`
-	ScannedAt    time.Time           `json:"scanned_at"`
-	Batch        VerifyQRBatchInfo   `json:"batch"`
+	ItemCode     string              `json:"itemCode"`
+	SerialNumber string              `json:"serialNumber"`
+	Status       string              `json:"itemStatus"`
+	ScannedAt    time.Time           `json:"scannedAt"`
 	Product      VerifyQRProductInfo `json:"product"`
+	Batch        VerifyQRBatchInfo   `json:"batch"`
+	Ownership    *VerifyQROwnership  `json:"ownership"`     // null nếu chưa đăng ký
+	Warranty     *VerifyQRWarranty   `json:"warranty"`      // null nếu không có
+	Location     *VerifyQRLocation   `json:"location"`      // null nếu chưa có
+	TraceHistory []VerifyQREvent     `json:"traceHistory"`  // empty array nếu chưa có
 }

@@ -152,7 +152,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       RABBITMQ.ROUTING_KEYS.PASSWORD_RESET,  // "otp.forgot"
       RABBITMQ.ROUTING_KEYS.USER_VERIFIED,   // "otp.verified"
       RABBITMQ.ROUTING_KEYS.PRODUCT_CREATED, // "product.created"
+      RABBITMQ.ROUTING_KEYS.NOTIFICATION_SENT, // "notification.sent"
       RABBITMQ.ROUTING_KEYS.OWNERSHIP_OTP,
+      RABBITMQ.ROUTING_KEYS.OWNERSHIP_TRANSFERRED,
     ];
 
     for (const rk of routingKeys) {
