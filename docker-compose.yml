@@ -70,6 +70,10 @@ services:
 
     networks:
       - app-networks
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -84,7 +88,10 @@ services:
 
     networks:
       - app-networks
-
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   qdrant:
     image: qdrant/qdrant:v1.7.4
@@ -99,7 +106,10 @@ services:
 
     networks:
       - app-networks
-
+    deploy:
+      resources:
+        limits:
+          memory: 1G
   embedding-service:
     build:
       context: ./apps/nest-ai-service/embedding-service
