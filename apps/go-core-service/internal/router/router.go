@@ -143,6 +143,7 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
 		protectedBatches.GET("/search", bh.SearchBatch)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
+		protectedBatches.GET("/:id/products", bh.GetBatchProducts)
 
 		// MANAGER and WAREHOUSE can export batch
 		exportGroup := protectedBatches.Group("")
