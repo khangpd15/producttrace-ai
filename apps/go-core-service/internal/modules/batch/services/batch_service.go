@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,20 +24,34 @@ import (
 
 // validBatchStatuses là tập hợp các status hợp lệ khi cập nhật (UpdateBatchStatus).
 var validBatchStatuses = map[string]struct{}{
-	"ACTIVE":   {},
-	"EXPIRED":  {},
-	"RECALLED": {},
-	"BLOCKED":  {},
+	"ACTIVE":     {},
+	"EXPIRED":    {},
+	"RECALLED":   {},
+	"BLOCKED":    {},
+	"IN_STOCK":   {},
+	"IN_TRANSIT": {},
+	"CREATED":    {},
+	"SHIPPED":    {},
+	"DELIVERED":  {},
+	"SOLD_OUT":   {},
+	"CLOSED":     {},
 }
 
 // validFilterStatuses là tập hợp các status hợp lệ khi lọc danh sách batch (Filter API).
 // Bao gồm DRAFT và BLOCKED theo UC-P2-BATCH-04.
 var validFilterStatuses = map[string]struct{}{
-	"DRAFT":    {},
-	"ACTIVE":   {},
-	"EXPIRED":  {},
-	"RECALLED": {},
-	"BLOCKED":  {},
+	"DRAFT":      {},
+	"ACTIVE":     {},
+	"EXPIRED":    {},
+	"RECALLED":   {},
+	"BLOCKED":    {},
+	"IN_STOCK":   {},
+	"IN_TRANSIT": {},
+	"CREATED":    {},
+	"SHIPPED":    {},
+	"DELIVERED":  {},
+	"SOLD_OUT":   {},
+	"CLOSED":     {},
 }
 
 type BatchService interface {
@@ -59,6 +74,8 @@ type BatchService interface {
 	UpdateBatchStatus(ctx context.Context, batchID uuid.UUID, req *request.UpdateBatchStatusRequest, userID *uuid.UUID) (*response.BatchStatusResponse, error)
 	// DeleteBatch thực hiện soft-delete một Batch nếu không có product items hoặc events liên kết.
 	DeleteBatch(ctx context.Context, batchID uuid.UUID, userID *uuid.UUID) error
+	GetIncomingBatches(ctx context.Context, currentUserID uuid.UUID) ([]response.BatchListItemDTO, error)
+	ImportBatches(ctx context.Context, req *request.ImportBatchesRequest, currentUserID uuid.UUID) error
 }
 
 type batchService struct {
@@ -103,7 +120,7 @@ func (sb *batchService) GetBatchList(ctx context.Context, req *request.GetBatchL
 	if req.Status != "" && req.Status != "ALL" {
 		if _, ok := validFilterStatuses[req.Status]; !ok {
 			return nil, apperror.NewValidation(
-				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, BLOCKED",
+				"Giá trị bộ lọc trạng thái không hợp lệ. Các giá trị hợp lệ: DRAFT, ACTIVE, EXPIRED, RECALLED, BLOCKED, IN_STOCK, IN_TRANSIT, CREATED, SHIPPED, DELIVERED, SOLD_OUT, CLOSED",
 			)
 		}
 
@@ -151,6 +168,43 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 	// để "apl", "APL", " Apl " đều tạo ra cùng lock key APL-2026.
 	req.Prefix = strings.ToUpper(strings.TrimSpace(req.Prefix))
 
+	if req.Prefix == "" {
+		return nil, apperror.NewValidation("Prefix is required")
+	}
+	matched, _ := regexp.MatchString(`^[A-Z0-9]{2,20}$`, req.Prefix)
+	if !matched {
+		return nil, apperror.NewValidation("Prefix must be alphanumeric and between 2 to 20 characters")
+	}
+
+	if req.Quantity <= 0 {
+		return nil, apperror.NewValidation("Quantity must be greater than 0")
+	}
+	if req.Quantity > 100000 {
+		return nil, apperror.NewValidation("Quantity must not exceed 100,000 items")
+	}
+
+	if req.ManufactureDate == nil {
+		return nil, apperror.NewValidation("Manufacture date is required")
+	}
+	if req.ManufactureDate.After(time.Now()) {
+		return nil, apperror.NewValidation("Manufacture date cannot be in the future")
+	}
+
+	if req.ExpiryDate == nil {
+		return nil, apperror.NewValidation("Expiry date is required")
+	}
+	if req.ExpiryDate.Before(*req.ManufactureDate) || req.ExpiryDate.Equal(*req.ManufactureDate) {
+		return nil, apperror.NewValidation("Expiry date must be greater than manufacture date")
+	}
+
+	if req.OriginCountry == nil || strings.TrimSpace(*req.OriginCountry) == "" {
+		return nil, apperror.NewValidation("Origin country is required")
+	}
+
+	if req.ProductionPlace == nil || strings.TrimSpace(*req.ProductionPlace) == "" {
+		return nil, apperror.NewValidation("Production place (factory address) is required")
+	}
+
 	// FK check: variant_id phải tồn tại trong bảng product_variants.
 	variantExists, err := sb.variantRepo.ExistsByID(ctx, req.VariantID)
 	if err != nil {
@@ -158,24 +212,6 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 	}
 	if !variantExists {
 		return nil, apperror.NewNotFound("product_variant")
-	}
-
-	// Business rule: expiry_date phải >= manufacture_date.
-	// Kiểm tra sớm ở tầng service để trả lỗi rõ ràng hơn là đợi DB reject.
-	if req.ExpiryDate != nil && req.ManufactureDate != nil {
-
-		if req.ManufactureDate.After(time.Now()) {
-			return nil, apperror.NewValidation("manufacture_date must not be in the future")
-		}
-
-		if req.ExpiryDate.Before(*req.ManufactureDate) {
-			return nil, apperror.NewValidation("expiry_date must be greater than or equal to manufacture_date")
-		}
-	}
-
-	if req.Quantity <= 0 {
-		return nil, apperror.NewValidation("Quantity must be greater than 0")
-
 	}
 
 	batchRes, err := sb.retryCreateBatch(ctx, req, currenUserID)
@@ -332,6 +368,37 @@ func (sb *batchService) GetBatchProducts(ctx context.Context, batchID uuid.UUID,
 	return sb.repo.GetBatchProducts(ctx, batchID, req)
 }
 
+func (sb *batchService) GetIncomingBatches(ctx context.Context, currentUserID uuid.UUID) ([]response.BatchListItemDTO, error) {
+	return sb.repo.GetIncomingBatches(ctx, currentUserID)
+}
+
+func (sb *batchService) ImportBatches(ctx context.Context, req *request.ImportBatchesRequest, currentUserID uuid.UUID) error {
+	for _, idStr := range req.BatchIDs {
+		if _, err := uuid.Parse(idStr); err != nil {
+			return apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", idStr))
+		}
+	}
+
+	err := sb.repo.ImportBatches(ctx, req, currentUserID)
+	if err != nil {
+		return err
+	}
+
+	// Publish event batch.imported (fire-and-forget)
+	event := types.Event{
+		EventID:       uuid.NewString(),
+		EventType:     "batch.imported",
+		EventVersion:  "1.0",
+		Timestamp:     time.Now().UTC(),
+		Producer:      "go-core-service",
+		CorrelationID: uuid.NewString(),
+		Payload:       req,
+	}
+	_ = sb.publisher.Publish(event)
+
+	return nil
+}
+
 // UpdateBatchStatus cập nhật duy nhất field status của Batch.
 // Business rules:
 //   - Batch phải tồn tại
@@ -349,7 +416,7 @@ func (sb *batchService) UpdateBatchStatus(
 	newStatus := strings.ToUpper(strings.TrimSpace(req.Status))
 	if _, ok := validBatchStatuses[newStatus]; !ok {
 		return nil, apperror.NewValidation(
-			fmt.Sprintf("invalid status '%s': must be one of ACTIVE, EXPIRED, RECALLED, BLOCKED", req.Status),
+			fmt.Sprintf("invalid status '%s': must be one of ACTIVE, EXPIRED, RECALLED, BLOCKED, IN_STOCK, IN_TRANSIT, CREATED, SHIPPED, DELIVERED, SOLD_OUT, CLOSED", req.Status),
 		)
 	}
 
