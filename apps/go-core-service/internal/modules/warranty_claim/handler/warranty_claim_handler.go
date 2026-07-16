@@ -36,13 +36,13 @@ func toAppError(err error) error {
 }
 
 func getUserID(c *gin.Context) (uuid.UUID, error) {
-	val, exists := c.Get("userId")
+	val, exists := c.Get("user_id")
 	if !exists {
-		return uuid.Nil, errors.New("unauthorized: missing userId in context")
+		return uuid.Nil, errors.New("unauthorized: missing user_id in context")
 	}
 	idStr, ok := val.(string)
 	if !ok {
-		return uuid.Nil, errors.New("unauthorized: invalid userId type")
+		return uuid.Nil, errors.New("unauthorized: invalid user_id type")
 	}
 	return uuid.Parse(idStr)
 }

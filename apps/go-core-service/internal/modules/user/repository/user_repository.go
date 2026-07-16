@@ -26,6 +26,7 @@ type UserRepositoryInterface interface {
 	UpdateUser(ctx context.Context, user *UserEntity.User) (*UserEntity.User, error)
 	DeleteUser(ctx context.Context, id string) error
 	ListUsers(ctx context.Context, page, limit int, role, status, search string) ([]*UserEntity.User, int64, error)
+	UpdatePassword(ctx context.Context, userID, newPasswordHash string) error
 }
 
 type UserRepository struct {
@@ -52,6 +53,11 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *UserEntity.User) 
 		return nil, err
 	}
 	return user, nil
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, userID, newPasswordHash string) error {
+	db := r.getDB(ctx)
+	return db.Model(&UserEntity.User{}).Where("id = ? AND is_deleted = ?", userID, false).Update("password_hash", newPasswordHash).Error
 }
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*UserEntity.User, error) {

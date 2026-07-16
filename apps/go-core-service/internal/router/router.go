@@ -99,6 +99,8 @@ func SetupAuthRouter(api *gin.RouterGroup, ah *authHandler.AuthenHandler) {
 		auth.POST("/resend-otp", ah.ResendOTP)
 		auth.POST("/refresh", ah.RefreshToken)
 		auth.POST("/logout", ah.Logout)
+		auth.POST("/forgot-password", ah.ForgotPassword)
+		auth.POST("/reset-password", ah.ResetPassword)
 	}
 }
 
@@ -236,7 +238,6 @@ func SetupOwnershipRouter(api *gin.RouterGroup, oh *ownershipHandler.OwnershipHa
 	ownerships.GET("", oh.SearchOwnerships)
 }
 
-
 // WARRANTY
 func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandler, uRepo userRepo.UserRepositoryInterface) {
 	warrantyGroup := api.Group("/warranties")
@@ -277,7 +278,7 @@ func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.Wa
 		claimsGroup.GET("", middleware.RoleMiddleware("ADMIN", "STAFF"), wch.ListAllClaims)
 		// Admin updates claim status
 		claimsGroup.PUT("/:id/status", middleware.RoleMiddleware("ADMIN", "STAFF"), wch.UpdateClaimStatus)
-		
+
 		// Detail route
 		claimsGroup.GET("/:id", wch.GetClaimByID)
 	}
