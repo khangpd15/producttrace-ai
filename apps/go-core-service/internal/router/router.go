@@ -148,6 +148,8 @@ func SetupBatchRouter(api *gin.RouterGroup, bh *batchHandler.BatchHandler, uRepo
 		// Search batches — UC-P2-BATCH-03: GET /api/v1/batches/search
 		// Gin ưu tiên static segment "/search" hơn parameterized "/:id".
 		protectedBatches.GET("/search", bh.SearchBatch)
+		protectedBatches.GET("/incoming", bh.GetIncomingBatches)
+		protectedBatches.POST("/import", bh.ImportBatches)
 		protectedBatches.GET("/:id/events", bh.GetBatchEvents)
 		protectedBatches.GET("/:id/products", bh.GetBatchProducts)
 

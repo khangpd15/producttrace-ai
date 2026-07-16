@@ -31,6 +31,7 @@ type BatchRepository interface {
 	// FindByID trả về entity đầy đủ (kể cả đã soft-delete) để service tự kiểm tra is_deleted.
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.Batch, error)
 	ExistsByID(ctx context.Context, id uuid.UUID) (bool, error)
+	GetIncomingBatches(ctx context.Context, currentUserID uuid.UUID) ([]response.BatchListItemDTO, error)
 
 	// --- Write ---
 	// Create sinh batch code tự động (advisory lock) và insert vào DB.
@@ -44,6 +45,7 @@ type BatchRepository interface {
 	// ExportBatches xuất nhiều batch trong một transaction (bulk export).
 	// All-or-nothing: rollback toàn bộ nếu bất kỳ batch nào lỗi.
 	ExportBatches(ctx context.Context, req *request.ExportBatchesRequest, currentUserID uuid.UUID) (*response.ExportBatchesResponse, error)
+	ImportBatches(ctx context.Context, req *request.ImportBatchesRequest, currentUserID uuid.UUID) error
 
 	// --- Constraint checks (dùng trước khi delete) ---
 	ExistsProductItems(ctx context.Context, batchID uuid.UUID) (bool, error)
@@ -115,8 +117,8 @@ func (r *batchRepository) FindAllWithFilter(ctx context.Context, req *request.Ge
 	// We must use case when to calculate stats
 	statsQuery.Select(`
 		COUNT(*) as total,
-		SUM(CASE WHEN b.status = 'ACTIVE' THEN 1 ELSE 0 END) as active,
-		SUM(CASE WHEN b.status = 'EXPIRED' THEN 1 ELSE 0 END) as expired,
+		SUM(CASE WHEN b.status IN ('ACTIVE', 'CREATED', 'IN_STOCK', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED') AND (b.expiry_date IS NULL OR b.expiry_date >= NOW()) THEN 1 ELSE 0 END) as active,
+		SUM(CASE WHEN b.status = 'EXPIRED' OR (b.expiry_date IS NOT NULL AND b.expiry_date < NOW() AND b.status NOT IN ('RECALLED', 'BLOCKED', 'CLOSED')) THEN 1 ELSE 0 END) as expired,
 		SUM(CASE WHEN b.status IN ('RECALLED', 'BLOCKED') THEN 1 ELSE 0 END) as recalled_blocked
 	`).Scan(&stats)
 
@@ -407,7 +409,7 @@ func (r *batchRepository) GetBatchEvents(ctx context.Context, batchID uuid.UUID)
 		Table("events e").
 		Select("e.event_type as event_name, e.description as detail, MAX(e.created_at) as created_at").
 		Joins("JOIN product_items p ON e.product_item_id = p.id").
-		Where("p.batch_id = ? AND p.is_deleted = false AND e.is_deleted = false", batchID).
+		Where("p.batch_id = ? AND p.is_deleted = false", batchID).
 		Group("e.event_type, e.description").
 		Order("created_at DESC").
 		Scan(&events).Error
@@ -483,7 +485,7 @@ func (r *batchRepository) Create(ctx context.Context, req *request.CreateBatchRe
 			OriginCountry:    derefString(req.OriginCountry),
 			ProductionPlace:  derefString(req.ProductionPlace),
 			Quantity:         req.Quantity,
-			Status:           "ACTIVE",
+			Status:           "IN_STOCK",
 			CreatedBy:        &currentUserID,
 			CreatedAt:        now,
 		}
@@ -545,34 +547,83 @@ func (r *batchRepository) ExportBatch(ctx context.Context, batchID uuid.UUID, ex
 			return apperror.WrapDBError(err, "batch")
 		}
 
-		if batch.Quantity < exportReq.Quantity {
-			return apperror.NewBadRequest("insufficient quantity to export")
+		if batch.Status == "IN_TRANSIT" {
+			return apperror.NewConflict("Batch already exported.")
+		}
+		if batch.Status != "IN_STOCK" {
+			return apperror.NewBadRequest("Batch status must be IN_STOCK to export.")
 		}
 
-		batch.Quantity -= exportReq.Quantity
-		if err := tx.Save(&batch).Error; err != nil {
+		destLocationID, parseErr := uuid.Parse(exportReq.DestinationLocation)
+		if parseErr != nil {
+			return apperror.NewValidation("destination_location must be a valid UUID")
+		}
+
+		var locationCount int64
+		if err := tx.Table("locations").Where("id = ? AND is_active = true", destLocationID).Count(&locationCount).Error; err != nil {
+			return apperror.WrapDBError(err, "location")
+		}
+		if locationCount == 0 {
+			return apperror.NewNotFound("destination location not found or inactive")
+		}
+
+		batch.Status = "IN_TRANSIT"
+		if err := tx.Model(&batch).Update("status", "IN_TRANSIT").Error; err != nil {
 			return apperror.WrapDBError(err, "batch")
 		}
 
-		// Because events table require product_item_id which may not be appropriate for a pure batch export
-		// (without selecting specific items), and there's no batch_events table.
-		// We insert an audit_log record for the export action.
+		var itemIDs []uuid.UUID
+		if err := tx.Table("product_items").
+			Select("id").
+			Where("batch_id = ? AND is_deleted = false", batch.ID).
+			Pluck("id", &itemIDs).Error; err != nil {
+			return apperror.WrapDBError(err, "product_items")
+		}
 
-		// Wait, user says "Create history/event. Create audit log."
-		// Since we don't have batch_id in events and user said status is just reference and event might not be strictly needed for batch,
-		// we will just insert an audit_log to represent the history.
-		// "audit_logs" schema from migration: id, action, entity_type, entity_id, user_id, old_values, new_values, ip_address, created_at
+		if len(itemIDs) == 0 {
+			return apperror.NewBadRequest("batch has no product items to export")
+		}
+
+		if err := tx.Table("product_items").
+			Where("id IN ?", itemIDs).
+			Updates(map[string]interface{}{
+				"current_location_id": destLocationID,
+				"status":              "IN_TRANSIT",
+				"updated_at":          time.Now().UTC(),
+			}).Error; err != nil {
+			return apperror.WrapDBError(err, "product_items")
+		}
+
+		events := make([]map[string]interface{}, 0, len(itemIDs))
+		now := time.Now().UTC()
+		for _, itemID := range itemIDs {
+			events = append(events, map[string]interface{}{
+				"id":              uuid.New(),
+				"product_item_id": itemID,
+				"batch_id":        batch.ID,
+				"actor_id":        currentUserID,
+				"location_id":     destLocationID,
+				"event_type":      "WAREHOUSE_OUT",
+				"title":           "Xuất lô hàng",
+				"description":     fmt.Sprintf("Batch %s exported to location %s. Note: %s", batch.BatchCode, exportReq.DestinationLocation, exportReq.Notes),
+				"created_at":      now,
+			})
+		}
+		if err := tx.Table("events").Create(&events).Error; err != nil {
+			return apperror.WrapDBError(err, "events")
+		}
+
 		auditLog := map[string]interface{}{
 			"id":          uuid.New(),
 			"action":      "EXPORT_BATCH",
-			"entity_type": "BATCH",
-			"entity_id":   batch.ID.String(),
+			"entity":      "BATCH",
+			"entity_id":   batch.ID,
 			"user_id":     currentUserID.String(),
-			"new_values":  fmt.Sprintf(`{"exported_quantity": %d, "destination": "%s", "operator": "%s", "notes": "%s"}`, exportReq.Quantity, exportReq.DestinationLocation, exportReq.OperatorName, exportReq.Notes),
-			"created_at":  time.Now(),
+			"new_data":    fmt.Sprintf(`{"destination_location_id":"%s","exported_item_count":%d,"note":"%s"}`, exportReq.DestinationLocation, len(itemIDs), exportReq.Notes),
+			"created_at":  now,
 		}
 
-		if err := tx.Table("audit_logs").Create(auditLog).Error; err != nil {
+		if err := tx.Table("audit_logs").Create(&auditLog).Error; err != nil {
 			return apperror.WrapDBError(err, "audit_log")
 		}
 
@@ -816,7 +867,7 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 			return apperror.NewValidation("destination_location_id must be a valid UUID")
 		}
 
-		// Validate destination location tồn tại
+		// Validate destination location exists
 		var locationCount int64
 		if err := tx.Table("locations").Where("id = ? AND is_active = true", destLocationID).Count(&locationCount).Error; err != nil {
 			return apperror.WrapDBError(err, "location")
@@ -833,7 +884,7 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 				return apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", batchIDStr))
 			}
 
-			// 1. Validate batch tồn tại và chưa bị xóa
+			// 1. Validate batch exists and is not deleted
 			var batch entities.Batch
 			if err := tx.Where("id = ? AND is_deleted = false", batchID).First(&batch).Error; err != nil {
 				if err == gorm.ErrRecordNotFound {
@@ -842,30 +893,34 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 				return apperror.WrapDBError(err, "batch")
 			}
 
-			// 2. Lấy tất cả ProductItems của batch này (chưa xóa)
-			type itemRow struct {
-				ID uuid.UUID
+			// 2. Validate current status
+			if batch.Status == "IN_TRANSIT" {
+				return apperror.NewConflict(fmt.Sprintf("Batch %s already exported.", batch.BatchCode))
 			}
-			var items []itemRow
+			if batch.Status != "IN_STOCK" {
+				return apperror.NewBadRequest(fmt.Sprintf("Batch %s must be IN_STOCK to export (current status: %s).", batch.BatchCode, batch.Status))
+			}
+
+			// 3. Update batch status
+			batch.Status = "IN_TRANSIT"
+			if err := tx.Model(&batch).Update("status", "IN_TRANSIT").Error; err != nil {
+				return apperror.WrapDBError(err, "batch")
+			}
+
+			// 4. Get all product items of this batch
+			var itemIDs []uuid.UUID
 			if err := tx.Table("product_items").
 				Select("id").
 				Where("batch_id = ? AND is_deleted = false", batchID).
-				Scan(&items).Error; err != nil {
+				Pluck("id", &itemIDs).Error; err != nil {
 				return apperror.WrapDBError(err, "product_items")
 			}
 
-			// 3. Validate batch có ít nhất 1 ProductItem
-			if len(items) == 0 {
+			if len(itemIDs) == 0 {
 				return apperror.NewBadRequest(fmt.Sprintf("batch %s has no product items to export", batch.BatchCode))
 			}
 
-			// 4. Collect item IDs để bulk update
-			itemIDs := make([]uuid.UUID, 0, len(items))
-			for _, it := range items {
-				itemIDs = append(itemIDs, it.ID)
-			}
-
-			// 5. Bulk update: set current_location_id và status cho tất cả items
+			// 5. Bulk update product items
 			if err := tx.Table("product_items").
 				Where("id IN ?", itemIDs).
 				Updates(map[string]interface{}{
@@ -876,7 +931,7 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 				return apperror.WrapDBError(err, "product_items")
 			}
 
-			// 6. Tạo Event cho từng ProductItem
+			// 6. Create events for product items
 			events := make([]map[string]interface{}, 0, len(itemIDs))
 			for _, itemID := range itemIDs {
 				events = append(events, map[string]interface{}{
@@ -886,8 +941,8 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 					"actor_id":        currentUserID,
 					"location_id":     destLocationID,
 					"event_type":      "WAREHOUSE_OUT",
-					"title":           "Xuất kho",
-					"description":     fmt.Sprintf("Batch %s exported to location %s", batch.BatchCode, req.DestinationLocationID),
+					"title":           "Xuất lô hàng",
+					"description":     fmt.Sprintf("Batch %s exported to location %s. Note: %s", batch.BatchCode, req.DestinationLocationID, req.Note),
 					"created_at":      now,
 				})
 			}
@@ -898,7 +953,7 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 			totalExportedItems += len(itemIDs)
 		}
 
-		// 7. Ghi 1 audit_log tổng hợp cho toàn bộ operation
+		// 7. Write consolidated audit log
 		batchIDsJSON := "[" + func() string {
 			quoted := make([]string, len(req.BatchIDs))
 			for i, id := range req.BatchIDs {
@@ -908,14 +963,13 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 		}() + "]"
 
 		auditLog := map[string]interface{}{
-			"id":     uuid.New(),
-			"action": "EXPORT_BATCHES",
-			"entity": "BATCH",
-			// entity_id: dùng batch_id đầu tiên (log tổng hợp)
-			"entity_id":  req.BatchIDs[0],
-			"user_id":    currentUserID.String(),
-			"new_data":   fmt.Sprintf(`{"batch_ids":%s,"destination_location_id":"%s","exported_item_count":%d,"note":"%s"}`, batchIDsJSON, req.DestinationLocationID, totalExportedItems, req.Note),
-			"created_at": now,
+			"id":          uuid.New(),
+			"action":      "EXPORT_BATCHES",
+			"entity":      "BATCH",
+			"entity_id":   req.BatchIDs[0],
+			"user_id":     currentUserID.String(),
+			"new_data":    fmt.Sprintf(`{"batch_ids":%s,"destination_location_id":"%s","exported_item_count":%d,"note":"%s"}`, batchIDsJSON, req.DestinationLocationID, totalExportedItems, req.Note),
+			"created_at":  now,
 		}
 		if err := tx.Table("audit_logs").Create(&auditLog).Error; err != nil {
 			return apperror.WrapDBError(err, "audit_log")
@@ -934,6 +988,147 @@ func (r *batchRepository) ExportBatches(ctx context.Context, req *request.Export
 		BatchIDs:              req.BatchIDs,
 		DestinationLocationID: req.DestinationLocationID,
 	}, nil
+}
+
+func (r *batchRepository) GetIncomingBatches(ctx context.Context, currentUserID uuid.UUID) ([]response.BatchListItemDTO, error) {
+	var items []response.BatchListItemDTO
+	err := r.db.WithContext(ctx).
+		Table("batches b").
+		Select(`
+			DISTINCT b.id, b.batch_code, b.variant_id, pv.name as variant_name, 
+			b.quantity, b.manufacture_date, b.expiry_date, 
+			b.origin_country, b.status
+		`).
+		Joins("JOIN product_variants pv ON pv.id = b.variant_id").
+		Joins("JOIN product_items pi ON pi.batch_id = b.id").
+		Joins("JOIN locations l ON pi.current_location_id = l.id").
+		Where("b.status = ? AND b.is_deleted = false AND pi.is_deleted = false AND l.owner_user_id = ?", "IN_TRANSIT", currentUserID).
+		Order("b.batch_code ASC").
+		Scan(&items).Error
+
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "batch")
+	}
+
+	if items == nil {
+		items = []response.BatchListItemDTO{}
+	}
+
+	return items, nil
+}
+
+func (r *batchRepository) ImportBatches(ctx context.Context, req *request.ImportBatchesRequest, currentUserID uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now().UTC()
+
+		for _, batchIDStr := range req.BatchIDs {
+			batchID, parseErr := uuid.Parse(batchIDStr)
+			if parseErr != nil {
+				return apperror.NewValidation(fmt.Sprintf("invalid batch_id: %s", batchIDStr))
+			}
+
+			// 1. Verify batch exists and is in IN_TRANSIT status
+			var batch entities.Batch
+			if err := tx.Where("id = ? AND is_deleted = false", batchID).First(&batch).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return apperror.NewNotFound(fmt.Sprintf("batch %s not found", batchIDStr))
+				}
+				return apperror.WrapDBError(err, "batch")
+			}
+
+			if batch.Status != "IN_TRANSIT" {
+				return apperror.NewBadRequest(fmt.Sprintf("Batch %s is not in transit (current status: %s)", batch.BatchCode, batch.Status))
+			}
+
+			// 2. Verify ownership: count items in batch whose destination location does NOT belong to current user
+			var unauthorizedCount int64
+			err := tx.Table("product_items pi").
+				Joins("JOIN locations l ON pi.current_location_id = l.id").
+				Where("pi.batch_id = ? AND pi.is_deleted = false AND l.owner_user_id != ?", batchID, currentUserID).
+				Count(&unauthorizedCount).Error
+
+			if err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			if unauthorizedCount > 0 {
+				return apperror.NewForbidden(fmt.Sprintf("You are not authorized to import batch %s. It belongs to another location.", batch.BatchCode))
+			}
+
+			// 3. Select all items in this batch to import
+			var items []struct {
+				ID                uuid.UUID
+				CurrentLocationID uuid.UUID
+			}
+			if err := tx.Table("product_items").
+				Select("id, current_location_id").
+				Where("batch_id = ? AND is_deleted = false", batchID).
+				Scan(&items).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			if len(items) == 0 {
+				return apperror.NewBadRequest(fmt.Sprintf("batch %s has no product items to import", batch.BatchCode))
+			}
+
+			// 4. Update batch status to IN_STOCK
+			batch.Status = "IN_STOCK"
+			if err := tx.Model(&batch).Update("status", "IN_STOCK").Error; err != nil {
+				return apperror.WrapDBError(err, "batch")
+			}
+
+			// Collect product item IDs
+			itemIDs := make([]uuid.UUID, len(items))
+			for i, item := range items {
+				itemIDs[i] = item.ID
+			}
+
+			// 5. Update product items status to IN_STOCK (keep location_id as is)
+			if err := tx.Table("product_items").
+				Where("id IN ?", itemIDs).
+				Updates(map[string]interface{}{
+					"status":     "IN_STOCK",
+					"updated_at": now,
+				}).Error; err != nil {
+				return apperror.WrapDBError(err, "product_items")
+			}
+
+			// 6. Create events for product items
+			events := make([]map[string]interface{}, 0, len(items))
+			for _, item := range items {
+				events = append(events, map[string]interface{}{
+					"id":              uuid.New(),
+					"product_item_id": item.ID,
+					"batch_id":        batchID,
+					"actor_id":        currentUserID,
+					"location_id":     item.CurrentLocationID,
+					"event_type":      "WAREHOUSE_IN",
+					"title":           "Nhập lô hàng",
+					"description":     fmt.Sprintf("Batch %s imported at location %s. Note: %s", batch.BatchCode, item.CurrentLocationID.String(), req.Note),
+					"created_at":      now,
+				})
+			}
+			if err := tx.Table("events").Create(&events).Error; err != nil {
+				return apperror.WrapDBError(err, "events")
+			}
+
+			// 7. Write audit log for this batch
+			auditLog := map[string]interface{}{
+				"id":          uuid.New(),
+				"action":      "IMPORT_BATCH",
+				"entity":      "BATCH",
+				"entity_id":   batchID,
+				"user_id":     currentUserID.String(),
+				"new_data":    fmt.Sprintf(`{"batch_id":"%s","imported_item_count":%d,"note":"%s"}`, batchIDStr, len(itemIDs), req.Note),
+				"created_at":  now,
+			}
+			if err := tx.Table("audit_logs").Create(&auditLog).Error; err != nil {
+				return apperror.WrapDBError(err, "audit_log")
+			}
+		}
+
+		return nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -959,7 +1154,7 @@ func (r *batchRepository) ExistsEvents(ctx context.Context, batchID uuid.UUID) (
 	err := r.db.WithContext(ctx).
 		Table("events").
 		Joins("JOIN product_items ON product_items.id = events.product_item_id").
-		Where("product_items.batch_id = ? AND events.is_deleted = false", batchID).
+		Where("product_items.batch_id = ?", batchID).
 		Count(&count).Error
 	if err != nil {
 		return false, apperror.WrapDBError(err, "events")
