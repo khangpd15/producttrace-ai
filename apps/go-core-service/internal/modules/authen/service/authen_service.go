@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/consumer"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/events/publisher"
@@ -325,7 +325,6 @@ func (s *AuthenService) Logout(ctx context.Context, refreshToken string) error {
 
 	return nil
 }
-
 
 func (s *AuthenService) ConsumerOTPEvent(ctx context.Context) error {
 

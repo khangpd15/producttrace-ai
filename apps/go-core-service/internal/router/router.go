@@ -22,6 +22,7 @@ import (
 	userHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/handler"
 	userRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/repository"
 	warrantyHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/handler"
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
 )
 
 type RouterDependency struct {
@@ -43,6 +44,7 @@ type RouterDependency struct {
 	ProductAttributeValueHandler *attributeValueHandler.AttributeValueHandler // new
 	ProductItemHandler           *productItemHandler.ProductItemHandler
 	WarrantyHandler              *warrantyHandler.WarrantyHandler
+	WarrantyClaimHandler         *warrantyClaimHandler.WarrantyClaimHandler
 }
 
 func SetupRouter(deps RouterDependency) *gin.Engine {
@@ -73,6 +75,7 @@ func SetupRouter(deps RouterDependency) *gin.Engine {
 	SetupDashboardRouter(api, deps.DashboardHandler, deps.UserRepo)
 	SetupOwnershipRouter(api, deps.OwnershipHandler, deps.UserRepo)
 	SetupWarrantyRouter(api, deps.WarrantyHandler, deps.UserRepo)
+	SetupWarrantyClaimRouter(api, deps.WarrantyClaimHandler, deps.UserRepo)
 	SetupProductItemRouter(api, deps.ProductItemHandler, deps.UserRepo)
 	SetupPublicRouter(api, deps.PublicHandler)
 	return r
@@ -256,6 +259,26 @@ func SetupWarrantyRouter(api *gin.RouterGroup, wh *warrantyHandler.WarrantyHandl
 		warrantyGroup.GET("/product-item/:product_item_id", wh.GetWarrantyByProductItemID)
 		// Void warranty
 		warrantyGroup.PUT("/:id/void", middleware.RoleMiddleware("ADMIN", "STAFF"), wh.VoidWarranty)
+	}
+}
+
+// WARRANTY CLAIMS
+func SetupWarrantyClaimRouter(api *gin.RouterGroup, wch *warrantyClaimHandler.WarrantyClaimHandler, uRepo userRepo.UserRepositoryInterface) {
+	claimsGroup := api.Group("/warranty-claims")
+	claimsGroup.Use(middleware.AuthMiddleware(uRepo))
+	{
+		// Customer creates claims
+		claimsGroup.POST("", middleware.RoleMiddleware("CUSTOMER"), wch.CreateClaim)
+		// Customer lists claims
+		claimsGroup.GET("/my", middleware.RoleMiddleware("CUSTOMER"), wch.ListMyClaims)
+
+		// Admin lists all claims
+		claimsGroup.GET("", middleware.RoleMiddleware("ADMIN", "STAFF"), wch.ListAllClaims)
+		// Admin updates claim status
+		claimsGroup.PUT("/:id/status", middleware.RoleMiddleware("ADMIN", "STAFF"), wch.UpdateClaimStatus)
+		
+		// Detail route
+		claimsGroup.GET("/:id", wch.GetClaimByID)
 	}
 }
 

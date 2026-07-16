@@ -65,6 +65,11 @@ import (
 	warrantyService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/service"
 	warrantyEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
 
+	warrantyClaimHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/handler"
+	warrantyClaimRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/repository"
+	warrantyClaimService "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/service"
+	warrantyClaimEntity "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty_claim/entity"
+
 	// Dashboard Module
 	dashboardHandler "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/handler"
 	dashboardRepo "github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/dashboard/repositories"
@@ -181,8 +186,13 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	wService := warrantyService.NewWarrantyService(wRepo, pub)
 	wHandler := warrantyHandler.NewWarrantyHandler(wService)
 
+	// Warranty Claim Module
+	wcRepo := warrantyClaimRepo.NewWarrantyClaimRepository(database)
+	wcService := warrantyClaimService.NewWarrantyClaimService(wcRepo, wRepo)
+	wcHandler := warrantyClaimHandler.NewWarrantyClaimHandler(wcService)
+
 	// AutoMigrate
-	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{})
+	_ = database.AutoMigrate(&ownershipEntity.Ownership{}, &warrantyEntity.Warranty{}, &warrantyClaimEntity.WarrantyClaim{})
 
 	// Initialize Public Module
 	pubService := publicService.NewPublicService(productItemsRepo, tRepo, oRepo, wRepo, lRepo, uRepo)
@@ -207,6 +217,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 		ProductItemHandler:           piHandler,
 		OwnershipHandler:             oHandler,
 		WarrantyHandler:              wHandler,
+		WarrantyClaimHandler:         wcHandler,
 	})
 
 	return &App{

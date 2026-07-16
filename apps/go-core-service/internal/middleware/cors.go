@@ -47,6 +47,7 @@ func buildAllowedOrigins() []string {
 	origins := []string{
 		"http://localhost:5173",
 		"http://localhost:3000",
+		"http://localhost:3001",
 	}
 
 	if frontendURL := os.Getenv("FRONTEND_URL"); frontendURL != "" {
