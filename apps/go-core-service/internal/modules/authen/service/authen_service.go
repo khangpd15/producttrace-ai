@@ -89,6 +89,28 @@ func NewAuthenService(
 }
 
 func (s *AuthenService) RegisterUser(ctx context.Context, email, phone, fullName, password string) (*UserEntity.User, error) {
+	email = strings.TrimSpace(email)
+	phone = strings.TrimSpace(phone)
+
+	// Check if email already exists
+	emailExists, err := s.userRepository.CheckEmailExists(ctx, email)
+	if err != nil {
+		return nil, apperror.WrapDBError(err, "User")
+	}
+	if emailExists {
+		return nil, apperror.NewValidation("Email đã được đăng ký sử dụng bởi tài khoản khác")
+	}
+
+	// Check if phone already exists
+	if phone != "" {
+		phoneExists, err := s.userRepository.CheckPhoneExists(ctx, phone, "")
+		if err != nil {
+			return nil, apperror.WrapDBError(err, "User")
+		}
+		if phoneExists {
+			return nil, apperror.NewValidation("Số điện thoại đã được đăng ký sử dụng bởi tài khoản khác")
+		}
+	}
 
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
@@ -98,7 +120,7 @@ func (s *AuthenService) RegisterUser(ctx context.Context, email, phone, fullName
 	user := UserEntity.NewUser(email, phone, fullName, hashedPassword, string(UserEntity.RoleCustomer))
 	savedUser, err := s.userRepository.CreateUser(ctx, user)
 	if err != nil {
-		return nil, err
+		return nil, apperror.WrapDBError(err, "User")
 	}
 
 	correlationID := uuid.New().String()
