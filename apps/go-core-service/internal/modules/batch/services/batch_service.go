@@ -190,11 +190,10 @@ func (sb *batchService) CreateBatch(ctx context.Context, req *request.CreateBatc
 		return nil, apperror.NewValidation("Manufacture date cannot be in the future")
 	}
 
-	if req.ExpiryDate == nil {
-		return nil, apperror.NewValidation("Expiry date is required")
-	}
-	if req.ExpiryDate.Before(*req.ManufactureDate) || req.ExpiryDate.Equal(*req.ManufactureDate) {
-		return nil, apperror.NewValidation("Expiry date must be greater than manufacture date")
+	if req.ExpiryDate != nil {
+		if req.ExpiryDate.Before(*req.ManufactureDate) || req.ExpiryDate.Equal(*req.ManufactureDate) {
+			return nil, apperror.NewValidation("Expiry date must be greater than manufacture date")
+		}
 	}
 
 	if req.OriginCountry == nil || strings.TrimSpace(*req.OriginCountry) == "" {
@@ -385,16 +384,16 @@ func (sb *batchService) ImportBatches(ctx context.Context, req *request.ImportBa
 	}
 
 	// Publish event batch.imported (fire-and-forget)
-	event := types.Event{
-		EventID:       uuid.NewString(),
-		EventType:     "batch.imported",
-		EventVersion:  "1.0",
-		Timestamp:     time.Now().UTC(),
-		Producer:      "go-core-service",
-		CorrelationID: uuid.NewString(),
-		Payload:       req,
-	}
-	_ = sb.publisher.Publish(event)
+	// event := types.Event{
+	// 	EventID:       uuid.NewString(),
+	// 	EventType:     "batch.imported",
+	// 	EventVersion:  "1.0",
+	// 	Timestamp:     time.Now().UTC(),
+	// 	Producer:      "go-core-service",
+	// 	CorrelationID: uuid.NewString(),
+	// 	Payload:       req,
+	// }
+	// _ = sb.publisher.Publish(event)
 
 	return nil
 }
