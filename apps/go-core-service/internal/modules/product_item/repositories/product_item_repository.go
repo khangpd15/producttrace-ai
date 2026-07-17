@@ -155,6 +155,8 @@ func (rp *productItemRepository) FindByCodeAndToken(ctx context.Context, itemCod
 		Select(`
 			pi.id,
 			pi.batch_id,
+			pv.product_id AS product_id,
+			b.variant_id AS variant_id,
 			pi.current_location_id,
 			pi.item_code,
 			pi.serial_number,

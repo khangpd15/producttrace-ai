@@ -43,6 +43,8 @@ type ProductItemDetailDTO struct {
 type VerifyQRRow struct {
 	ID                  uuid.UUID  `json:"id"`
 	BatchID             *uuid.UUID `json:"batch_id"`
+	ProductID           *uuid.UUID `json:"product_id" gorm:"column:product_id"`
+	VariantID           *uuid.UUID `json:"variant_id" gorm:"column:variant_id"`
 	CurrentLocationID   *uuid.UUID `json:"current_location_id"`
 	ItemCode            string     `json:"item_code"`
 	SerialNumber        string     `json:"serial_number"`

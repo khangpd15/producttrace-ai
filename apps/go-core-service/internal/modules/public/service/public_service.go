@@ -123,15 +123,31 @@ func (s *publicService) VerifyQR(ctx context.Context, itemCode string, token str
 		barcode = *row.VariantBarcode
 	}
 
+	ownershipStatus := ""
+	if verifyOwnership != nil {
+		ownershipStatus = verifyOwnership.Status
+	}
+
+	warrantyStatus := ""
+	if verifyWarranty != nil {
+		warrantyStatus = verifyWarranty.Status
+	}
+
 	if traceHistory == nil {
 		traceHistory = []dto.VerifyQREvent{}
 	}
 
 	return &dto.VerifyQRResponse{
-		ItemCode:     row.ItemCode,
-		SerialNumber: row.SerialNumber,
-		Status:       row.ItemStatus,
-		ScannedAt:    time.Now().UTC(),
+		ProductItemID:   row.ID,
+		ProductID:       row.ProductID,
+		VariantID:       row.VariantID,
+		BatchID:         row.BatchID,
+		ItemCode:        row.ItemCode,
+		SerialNumber:    row.SerialNumber,
+		Status:          row.ItemStatus,
+		ScannedAt:       time.Now().UTC(),
+		OwnershipStatus: ownershipStatus,
+		WarrantyStatus:  warrantyStatus,
 		Batch: dto.VerifyQRBatchInfo{
 			BatchCode:        row.BatchCode,
 			ManufactureDate:  row.ManufactureDate,
