@@ -23,11 +23,11 @@ type Warranty struct {
 	ID                uuid.UUID      `json:"id"`
 	ProductItemID     uuid.UUID      `json:"product_item_id"`
 	OwnerID           *uuid.UUID     `json:"owner_id"`
-	ItemCode          string         `json:"itemCode"`
-	ItemName          string         `json:"itemName"`
-	SerialNumber      string         `json:"serialNumber"`
-	OwnerName         string         `json:"ownerName"`
-	OwnerEmail        string         `json:"ownerEmail"`
+	ItemCode          string         `json:"itemCode" gorm:"-"`
+	ItemName          string         `json:"itemName" gorm:"-"`
+	SerialNumber      string         `json:"serialNumber" gorm:"-"`
+	OwnerName         string         `json:"ownerName" gorm:"-"`
+	OwnerEmail        string         `json:"ownerEmail" gorm:"-"`
 	WarrantyCode      string         `json:"warrantyCode"`
 	PolicyName        string         `json:"policyName"`
 	PolicyDescription string         `json:"policyDescription"`

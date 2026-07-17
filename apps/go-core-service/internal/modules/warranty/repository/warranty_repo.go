@@ -65,7 +65,13 @@ func (r *gormWarrantyRepository) FindByWarrantyCode(ctx context.Context, code st
 
 func (r *gormWarrantyRepository) FindBySerialNumber(ctx context.Context, serialNumber string) ([]entity.Warranty, error) {
 	var warranties []entity.Warranty
-	if err := r.db.WithContext(ctx).Where("serial_number = ?", serialNumber).Find(&warranties).Error; err != nil {
+	err := r.db.WithContext(ctx).
+		Table("warranties").
+		Select("warranties.*").
+		Joins("JOIN product_items ON product_items.id = warranties.product_item_id").
+		Where("product_items.serial_number = ?", serialNumber).
+		Find(&warranties).Error
+	if err != nil {
 		return nil, err
 	}
 	return warranties, nil
