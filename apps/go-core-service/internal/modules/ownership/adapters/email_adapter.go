@@ -116,17 +116,26 @@ func (a *RealEmailAdapter) RequestOTP(ctx context.Context, email string, product
 
 // ValidateOTP checks if the provided OTP matches the one generated and is not expired.
 func (a *RealEmailAdapter) ValidateOTP(ctx context.Context, email string, otp string) (bool, error) {
-	// Debug logging just in case, but unconditionally return TRUE to isolate error!
 	val, ok := a.store.Load(email)
 	if !ok {
-		log.Printf("[ValidateOTP] FAILED natively: No OTP stored for email '%s'\n", email)
-	} else {
-		item := val.(otpStoreItem)
-		log.Printf("[ValidateOTP] Found item %v for email '%s'\n", item, email)
+		log.Printf("[ValidateOTP] FAILED: No OTP stored for email '%s'\n", email)
+		return false, nil
 	}
 
-	// Always bypass during this debug pass
-	log.Printf("[ValidateOTP] BYPASSING ALL CHECKS - RETURN TRUE FOR '%s'\n", email)
+	item := val.(otpStoreItem)
+	if time.Now().After(item.ExpiresAt) {
+		log.Printf("[ValidateOTP] FAILED: OTP expired for email '%s'\n", email)
+		a.store.Delete(email)
+		return false, nil
+	}
+
+	if item.OTP != otp {
+		log.Printf("[ValidateOTP] FAILED: Invalid OTP '%s' for email '%s'\n", otp, email)
+		return false, nil
+	}
+
+	log.Printf("[ValidateOTP] SUCCESS for email '%s'\n", email)
+	a.store.Delete(email)
 	return true, nil
 }
 
