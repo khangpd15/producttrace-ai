@@ -129,7 +129,7 @@ func (s *OwnershipService) CustomerVerifyAndRegister(ctx context.Context, req dt
 		return nil, err
 	}
 	if !valid {
-		return nil, errors.New("invalid or expired OTP")
+		return nil, apperror.NewValidation("Mã OTP không chính xác hoặc đã hết hạn")
 	}
 
 	if err := s.ensureItemAvailableForRegistration(ctx, req.ProductID); err != nil {
@@ -200,7 +200,7 @@ func (s *OwnershipService) AdminVerifyAndRegister(ctx context.Context, req dto.A
 		return nil, err
 	}
 	if !valid {
-		return nil, errors.New("invalid or expired OTP")
+		return nil, apperror.NewValidation("Mã OTP không chính xác hoặc đã hết hạn")
 	}
 
 	if err := s.ensureItemAvailableForRegistration(ctx, req.ProductID); err != nil {
@@ -286,7 +286,7 @@ func (s *OwnershipService) ApproveOwnership(ctx context.Context, ownershipID uui
 	}
 
 	if own.Status != entity.OwnershipStatusPending {
-		return errors.New("chỉ có thể duyệt quyền sở hữu đang ở trạng thái PENDING")
+		return apperror.NewBadRequest("Chỉ có thể duyệt quyền sở hữu đang ở trạng thái PENDING")
 	}
 
 	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
@@ -355,7 +355,7 @@ func (s *OwnershipService) RejectOwnership(ctx context.Context, ownershipID uuid
 	}
 
 	if own.Status != entity.OwnershipStatusPending {
-		return errors.New("chỉ có thể từ chối quyền sở hữu đang ở trạng thái PENDING")
+		return apperror.NewBadRequest("Chỉ có thể từ chối quyền sở hữu đang ở trạng thái PENDING")
 	}
 
 	err = s.repo.Transaction(ctx, func(tx *gorm.DB) error {
@@ -367,8 +367,29 @@ func (s *OwnershipService) RejectOwnership(ctx context.Context, ownershipID uuid
 			return err
 		}
 
-		if err := s.productPort.UpdateOwnershipStatus(txCtx, own.ProductItemID, "IN_STOCK"); err != nil {
-			return err
+		if own.OwnershipType == "TRANSFERRED" {
+			// Find the previous ownership that was marked as TRANSFERRED
+			var prevOwner entity.Ownership
+			if err := tx.Where("product_item_id = ? AND status = ?", own.ProductItemID, string(entity.OwnershipStatusTransferred)).
+				Order("ended_at DESC").
+				First(&prevOwner).Error; err != nil {
+				return err
+			}
+			
+			// Revert previous owner back to ACTIVE
+			if err := s.repo.UpdateOwnershipStatusAndEndedAt(txCtx, tx, prevOwner.ID, string(entity.OwnershipStatusActive)); err != nil {
+				return err
+			}
+
+			// Do not change product "ownership_status" to IN_STOCK, it should remain ACTIVE
+			if err := s.productPort.UpdateOwnershipStatus(txCtx, own.ProductItemID, "ACTIVE"); err != nil {
+				return err
+			}
+		} else {
+			// Normal registration rejection
+			if err := s.productPort.UpdateOwnershipStatus(txCtx, own.ProductItemID, "IN_STOCK"); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -525,6 +546,10 @@ func (s *OwnershipService) TransferOwnership(ctx context.Context, id uuid.UUID, 
 
 	newOwnership := entity.NewOwnership(oldOwnership.ProductItemID, newOwnerID)
 	newOwnership.OwnershipType = "TRANSFERRED"
+	
+	if role == "CUSTOMER" {
+		newOwnership.Status = entity.OwnershipStatusPending
+	}
 
 	return s.repo.TransferOwnershipTx(ctx, oldOwnership.ID, newOwnership)
 }
