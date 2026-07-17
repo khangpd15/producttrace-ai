@@ -192,7 +192,7 @@ func TestCustomer_RequestOTP_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), emailPort, defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), emailPort, defaultUserProvider(), nil, nil)
 	_, err := svc.CustomerRequestOTP(context.Background(), dto.CustomerRequestOTPReq{QRCode: "valid-qr"}, dummyUserID)
 
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestCustomer_RequestOTP_ProductNotFound(t *testing.T) {
 		return uuid.Nil, errors.New("product not found")
 	}
 
-	svc := NewOwnershipService(defaultRepo(), productPort, defaultEmailPort("x"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), productPort, defaultEmailPort("x"), defaultUserProvider(), nil, nil)
 	_, err := svc.CustomerRequestOTP(context.Background(), dto.CustomerRequestOTPReq{QRCode: "bad-qr"}, dummyUserID)
 
 	require.Error(t, err)
@@ -217,7 +217,7 @@ func TestCustomer_RequestOTP_ProductNotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCustomer_VerifyAndRegister_Success(t *testing.T) {
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("999999"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("999999"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.CustomerVerifyAndRegister(context.Background(), dto.CustomerVerifyAndRegisterReq{
 		OTP:       "999999",
@@ -230,7 +230,7 @@ func TestCustomer_VerifyAndRegister_Success(t *testing.T) {
 }
 
 func TestCustomer_VerifyAndRegister_InvalidOTP(t *testing.T) {
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("correct"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("correct"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.CustomerVerifyAndRegister(context.Background(), dto.CustomerVerifyAndRegisterReq{
 		OTP:       "wrong",
@@ -254,7 +254,7 @@ func TestAdmin_RequestOTP_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), emailPort, defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), emailPort, defaultUserProvider(), nil, nil)
 	_, err := svc.AdminRequestOTP(context.Background(), dto.AdminRequestOTPReq{
 		QRCode:     "valid-qr",
 		OwnerName:  "Tran Thi B",
@@ -271,7 +271,7 @@ func TestAdmin_RequestOTP_Success(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAdmin_VerifyAndRegister_Success(t *testing.T) {
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("888888"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("888888"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.AdminVerifyAndRegister(context.Background(), dto.AdminVerifyAndRegisterReq{
 		OTP:        "888888",
@@ -287,7 +287,7 @@ func TestAdmin_VerifyAndRegister_Success(t *testing.T) {
 }
 
 func TestAdmin_VerifyAndRegister_InvalidOTP(t *testing.T) {
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("correct"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("correct"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.AdminVerifyAndRegister(context.Background(), dto.AdminVerifyAndRegisterReq{
 		OTP:        "wrong",
@@ -306,7 +306,7 @@ func TestAdmin_VerifyAndRegister_InvalidOTP(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetOwnershipDetail_Success(t *testing.T) {
-	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("x"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(defaultRepo(), defaultProductPort(), defaultEmailPort("x"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.GetOwnershipDetail(context.Background(), dummyProductID)
 
@@ -338,7 +338,7 @@ func TestGetOwnershipDetail_OwnershipNotFound(t *testing.T) {
 			return []entity.Ownership{*own}, nil
 		},
 	}
-	svc := NewOwnershipService(repo, defaultProductPort(), defaultEmailPort("x"), defaultUserProvider(), nil)
+	svc := NewOwnershipService(repo, defaultProductPort(), defaultEmailPort("x"), defaultUserProvider(), nil, nil)
 
 	res, err := svc.GetOwnershipDetail(context.Background(), dummyProductID)
 
@@ -382,7 +382,7 @@ func TestTransferOwnership(t *testing.T) {
 			return uuid.New(), nil // successfully found or created new user
 		}
 
-		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), mockUser, nil)
+		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), mockUser, nil, nil)
 		err := s.TransferOwnership(ctx, oldOwnershipId, req, ownerId, "CUSTOMER")
 		assert.NoError(t, err)
 	})
@@ -402,7 +402,7 @@ func TestDeleteOwnership(t *testing.T) {
 			}, nil
 		}
 		
-		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), defaultUserProvider(), nil)
+		s := NewOwnershipService(mockRepo, defaultProductPort(), defaultEmailPort(""), defaultUserProvider(), nil, nil)
 		err := s.DeleteOwnership(ctx, oldOwnershipId, dummyUserID, "CUSTOMER")
 		assert.NoError(t, err)
 	})
@@ -416,7 +416,7 @@ func TestSearchOwnerships(t *testing.T) {
 		mockUser := defaultUserProvider()
 		mockProduct := defaultProductPort()
 
-		s := NewOwnershipService(mockRepo, mockProduct, defaultEmailPort(""), mockUser, nil)
+		s := NewOwnershipService(mockRepo, mockProduct, defaultEmailPort(""), mockUser, nil, nil)
 		res, err := s.SearchOwnerships(ctx, dto.SearchOwnershipsReq{
 			Page: 1, 
 			Limit: 10,

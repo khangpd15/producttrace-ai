@@ -22,7 +22,6 @@ type ProductVariant struct {
 	UpdatedAt  time.Time
 	IsDeleted  bool `gorm:"default:false"`
 
-	
 	AttributeValues []attrValEntities.AttributeValue `gorm:"-"`
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/mapper"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/product/services"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -49,7 +50,9 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	product, err := h.productService.CreateProduct(c.Request.Context(), req, createdBy)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	product, err := h.productService.CreateProduct(ctx, req, createdBy)
 	if err != nil {
 		handleError(c, err)
 		return

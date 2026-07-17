@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/ownership/service"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -124,7 +125,9 @@ func (h *OwnershipHandler) CustomerVerifyAndRegister(c *gin.Context) {
 		return
 	}
 
-	res, err := h.ownershipService.CustomerVerifyAndRegister(c.Request.Context(), req, userID)
+	actorID := userID.String()
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.ownershipService.CustomerVerifyAndRegister(ctx, req, userID)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -156,7 +159,9 @@ func (h *OwnershipHandler) AdminVerifyAndRegister(c *gin.Context) {
 		return
 	}
 
-	res, err := h.ownershipService.AdminVerifyAndRegister(c.Request.Context(), req, adminID)
+	actorID := adminID.String()
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.ownershipService.AdminVerifyAndRegister(ctx, req, adminID)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -279,7 +284,9 @@ func (h *OwnershipHandler) ApproveOwnership(c *gin.Context) {
 		return
 	}
 
-	if err := h.ownershipService.ApproveOwnership(c.Request.Context(), req.OwnershipID, adminID); err != nil {
+	actorID := adminID.String()
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	if err := h.ownershipService.ApproveOwnership(ctx, req.OwnershipID, adminID); err != nil {
 		apperror.HandleError(c, err)
 		return
 	}
@@ -311,7 +318,9 @@ func (h *OwnershipHandler) RejectOwnership(c *gin.Context) {
 		return
 	}
 
-	if err := h.ownershipService.RejectOwnership(c.Request.Context(), req.OwnershipID, adminID); err != nil {
+	actorID := adminID.String()
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	if err := h.ownershipService.RejectOwnership(ctx, req.OwnershipID, adminID); err != nil {
 		apperror.HandleError(c, err)
 		return
 	}

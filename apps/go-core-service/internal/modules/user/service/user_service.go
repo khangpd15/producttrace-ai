@@ -68,6 +68,18 @@ func mapToUserResponse(user *entity.User) *response.UserResponse {
 	}
 }
 
+func getActorUUID(ctx context.Context) *uuid.UUID {
+	actorID := utils.GetActorID(ctx)
+	if actorID == "" {
+		return nil
+	}
+	u, err := uuid.Parse(actorID)
+	if err != nil {
+		return nil
+	}
+	return &u
+}
+
 func (s *UserService) CreateUser(ctx context.Context, req *request.CreateUserRequest) (*response.UserResponse, error) {
 	exists, err := s.userRepo.CheckEmailExists(ctx, req.Email)
 	if err != nil {
@@ -88,7 +100,8 @@ func (s *UserService) CreateUser(ctx context.Context, req *request.CreateUserReq
 		return nil, err
 	}
 
-	if err := s.auditLog.LogCreate(ctx, nil, "User", savedUser.ID, savedUser); err != nil {
+	actorUUID := getActorUUID(ctx)
+	if err := s.auditLog.LogCreate(ctx, actorUUID, "User", savedUser.ID, savedUser); err != nil {
 		fmt.Printf("Audit log failed (CreateUser): %v\n", err)
 	}
 
@@ -148,7 +161,8 @@ func (s *UserService) UpdateUser(ctx context.Context, id string, req *request.Up
 		return nil, err
 	}
 
-	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+	actorUUID := getActorUUID(ctx)
+	_ = s.auditLog.LogUpdate(ctx, actorUUID, "User", updatedUser.ID, oldUser, updatedUser)
 
 	return mapToUserResponse(updatedUser), nil
 }
@@ -164,7 +178,8 @@ func (s *UserService) DeleteUser(ctx context.Context, id string) error {
 
 	err = s.userRepo.DeleteUser(ctx, id)
 	if err == nil {
-		if auditErr := s.auditLog.LogDelete(ctx, nil, "User", user.ID, user); auditErr != nil {
+		actorUUID := getActorUUID(ctx)
+		if auditErr := s.auditLog.LogDelete(ctx, actorUUID, "User", user.ID, user); auditErr != nil {
 			fmt.Printf("Audit log failed (DeleteUser): %v\n", auditErr)
 		}
 	}
@@ -382,7 +397,8 @@ func (s *UserService) LockAccount(ctx context.Context, id string) (*response.Use
 		return nil, err
 	}
 
-	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+	actorUUID := getActorUUID(ctx)
+	_ = s.auditLog.LogUpdate(ctx, actorUUID, "User", updatedUser.ID, oldUser, updatedUser)
 
 	return mapToUserResponse(updatedUser), nil
 }
@@ -404,7 +420,8 @@ func (s *UserService) UnlockAccount(ctx context.Context, id string) (*response.U
 		return nil, err
 	}
 
-	_ = s.auditLog.LogUpdate(ctx, nil, "User", updatedUser.ID, oldUser, updatedUser)
+	actorUUID := getActorUUID(ctx)
+	_ = s.auditLog.LogUpdate(ctx, actorUUID, "User", updatedUser.ID, oldUser, updatedUser)
 
 	return mapToUserResponse(updatedUser), nil
 }
@@ -431,6 +448,8 @@ func (s *UserService) ChangePassword(ctx context.Context, userID string, req *re
 		return nil, err
 	}
 
+	oldUser := *user
+
 	user.PasswordHash = hashedPassword
 	user.UpdatedAt = time.Now()
 
@@ -438,6 +457,14 @@ func (s *UserService) ChangePassword(ctx context.Context, userID string, req *re
 	if err != nil {
 		return nil, apperror.WrapDBError(err, "User")
 	}
+
+	actorUUID := getActorUUID(ctx)
+	if actorUUID == nil {
+		if u, err := uuid.Parse(userID); err == nil {
+			actorUUID = &u
+		}
+	}
+	_ = s.auditLog.LogUpdate(ctx, actorUUID, "User", updatedUser.ID, oldUser, updatedUser)
 
 	return mapToUserResponse(updatedUser), nil
 }

@@ -69,7 +69,7 @@ func (a *RealProductAdapter) ValidateProductOwnershipStatus(ctx context.Context,
 
 func (a *RealProductAdapter) UpdateOwnershipStatus(ctx context.Context, productID uuid.UUID, status string) error {
 	db := entity.GetTx(ctx, a.db)
-	
+
 	var dbStatus string
 	switch status {
 	case "ACTIVE":

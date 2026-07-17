@@ -28,9 +28,15 @@ func ToProductResponse(product *entities.Product) *response.ProductResponse {
 		variants[i] = ToVariantResponse(&v)
 	}
 
+	var categoryName *string
+	if product.Category != nil {
+		categoryName = &product.Category.Name
+	}
+
 	return &response.ProductResponse{
 		ID:           product.ID,
 		CategoryID:   product.CategoryID,
+		Category:     categoryName,
 		Name:         product.Name,
 		Slug:         product.Slug,
 		Description:  product.Description,

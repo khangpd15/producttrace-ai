@@ -12,6 +12,8 @@ import (
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/dto"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/entity"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/warranty/repository"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
+	auditlog "github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/audit_log"
 	"gorm.io/gorm"
 )
 
@@ -36,12 +38,25 @@ type WarrantyService interface {
 }
 
 type warrantyService struct {
-	repo repository.WarrantyRepository
-	pub  *publisher.Publisher
+	repo     repository.WarrantyRepository
+	pub      *publisher.Publisher
+	auditLog auditlog.AuditLogService
 }
 
-func NewWarrantyService(repo repository.WarrantyRepository, pub *publisher.Publisher) WarrantyService {
-	return &warrantyService{repo: repo, pub: pub}
+func NewWarrantyService(repo repository.WarrantyRepository, pub *publisher.Publisher, auditLog auditlog.AuditLogService) WarrantyService {
+	return &warrantyService{repo: repo, pub: pub, auditLog: auditLog}
+}
+
+func getActorUUID(ctx context.Context) *uuid.UUID {
+	actorID := utils.GetActorID(ctx)
+	if actorID == "" {
+		return nil
+	}
+	u, err := uuid.Parse(actorID)
+	if err != nil {
+		return nil
+	}
+	return &u
 }
 
 func (s *warrantyService) ActivateWarranty(ctx context.Context, req dto.CreateWarrantyRequest) (*dto.WarrantyResponse, error) {
@@ -76,7 +91,7 @@ func (s *warrantyService) ActivateWarranty(ctx context.Context, req dto.CreateWa
 	} else {
 		startDate = time.Now()
 	}
-	
+
 	if req.EndDate != "" {
 		endDate, _ = time.Parse("2006-01-02", req.EndDate)
 	} else {
@@ -162,18 +177,23 @@ func (s *warrantyService) ActivateWarranty(ctx context.Context, req dto.CreateWa
 			Producer:      "go-core-service",
 			CorrelationID: uuid.NewString(),
 			Payload: map[string]interface{}{
-				"warranty_id":    warranty.ID.String(),
-				"item_code":      warranty.ItemCode,
-				"serial_number":  warranty.SerialNumber,
-				"owner_name":     warranty.OwnerName,
-				"owner_email":    warranty.OwnerEmail,
-				"policy_name":    warranty.PolicyName,
-				"status":         "ACTIVE",
-				"start_date":     warranty.StartDate,
-				"end_date":       warranty.EndDate,
+				"warranty_id":   warranty.ID.String(),
+				"item_code":     warranty.ItemCode,
+				"serial_number": warranty.SerialNumber,
+				"owner_name":    warranty.OwnerName,
+				"owner_email":   warranty.OwnerEmail,
+				"policy_name":   warranty.PolicyName,
+				"status":        "ACTIVE",
+				"start_date":    warranty.StartDate,
+				"end_date":      warranty.EndDate,
 			},
 		}
 		_ = s.pub.Publish(event)
+	}
+
+	actorUUID := getActorUUID(ctx)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
 	}
 
 	resp := dto.FromWarrantyEntity(warranty)
@@ -198,20 +218,25 @@ func (s *warrantyService) RequestWarranty(ctx context.Context, req dto.CustomerR
 
 	// 3. Create Pending Warranty
 	warranty := &entity.Warranty{
-		ID:                uuid.New(),
-		ProductItemID:     ownershipInfo.ProductItemID,
-		OwnerID:           &ownershipInfo.OwnerID,
-		ItemCode:          req.ItemCode,
-		SerialNumber:      req.SerialNumber,
-		OwnerName:         req.OwnerName,
-		OwnerEmail:        req.OwnerEmail,
-		WarrantyCode:      "WAR-" + uuid.New().String()[:8], // Generate a random code or wait for admin
-		Status:            entity.WarrantyStatusPending,
-		Note:              req.Note,
+		ID:            uuid.New(),
+		ProductItemID: ownershipInfo.ProductItemID,
+		OwnerID:       &ownershipInfo.OwnerID,
+		ItemCode:      req.ItemCode,
+		SerialNumber:  req.SerialNumber,
+		OwnerName:     req.OwnerName,
+		OwnerEmail:    req.OwnerEmail,
+		WarrantyCode:  "WAR-" + uuid.New().String()[:8], // Generate a random code or wait for admin
+		Status:        entity.WarrantyStatusPending,
+		Note:          req.Note,
 	}
 
 	if err := s.repo.Create(ctx, warranty); err != nil {
 		return nil, err
+	}
+
+	actorUUID := getActorUUID(ctx)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogCreate(ctx, actorUUID, "Warranty", warranty.ID, warranty)
 	}
 
 	resp := dto.FromWarrantyEntity(warranty)
@@ -230,6 +255,8 @@ func (s *warrantyService) ApproveWarranty(ctx context.Context, id uuid.UUID, req
 	if warranty.Status != entity.WarrantyStatusPending {
 		return nil, errors.New("only pending warranties can be approved")
 	}
+
+	oldWarranty := *warranty
 
 	ownedAt, err := s.repo.GetOwnershipDate(ctx, warranty.ItemCode, warranty.SerialNumber)
 	if err != nil {
@@ -291,18 +318,23 @@ func (s *warrantyService) ApproveWarranty(ctx context.Context, id uuid.UUID, req
 			Producer:      "go-core-service",
 			CorrelationID: uuid.NewString(),
 			Payload: map[string]interface{}{
-				"warranty_id":    warranty.ID.String(),
-				"item_code":      warranty.ItemCode,
-				"serial_number":  warranty.SerialNumber,
-				"owner_name":     warranty.OwnerName,
-				"owner_email":    warranty.OwnerEmail,
-				"policy_name":    warranty.PolicyName,
-				"status":         "ACTIVE",
-				"start_date":     warranty.StartDate,
-				"end_date":       warranty.EndDate,
+				"warranty_id":   warranty.ID.String(),
+				"item_code":     warranty.ItemCode,
+				"serial_number": warranty.SerialNumber,
+				"owner_name":    warranty.OwnerName,
+				"owner_email":   warranty.OwnerEmail,
+				"policy_name":   warranty.PolicyName,
+				"status":        "ACTIVE",
+				"start_date":    warranty.StartDate,
+				"end_date":      warranty.EndDate,
 			},
 		}
 		_ = s.pub.Publish(event)
+	}
+
+	actorUUID := getActorUUID(ctx)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
 	}
 
 	resp := dto.FromWarrantyEntity(warranty)
@@ -322,11 +354,18 @@ func (s *warrantyService) RejectWarranty(ctx context.Context, id uuid.UUID, req 
 		return nil, errors.New("only pending warranties can be rejected")
 	}
 
+	oldWarranty := *warranty
+
 	warranty.Status = entity.WarrantyStatusRejected
 	warranty.Note = req.Reason
 
 	if err := s.repo.Update(ctx, warranty); err != nil {
 		return nil, err
+	}
+
+	actorUUID := getActorUUID(ctx)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
 	}
 
 	resp := dto.FromWarrantyEntity(warranty)
@@ -386,6 +425,7 @@ func (s *warrantyService) VoidWarranty(ctx context.Context, id uuid.UUID, reason
 		return nil, err
 	}
 
+	oldWarranty := *warranty
 	warranty.Status = entity.WarrantyStatusCancelled
 	if reason != "" {
 		if warranty.Note != "" {
@@ -425,6 +465,11 @@ func (s *warrantyService) VoidWarranty(ctx context.Context, id uuid.UUID, reason
 
 	if err != nil {
 		return nil, err
+	}
+
+	actorUUID := getActorUUID(ctx)
+	if s.auditLog != nil {
+		_ = s.auditLog.LogUpdate(ctx, actorUUID, "Warranty", warranty.ID, oldWarranty, warranty)
 	}
 
 	// Publish to RabbitMQ after commit

@@ -23,6 +23,7 @@ type VariantResponse struct {
 type ProductResponse struct {
 	ID           uuid.UUID              `json:"id"`
 	CategoryID   *uuid.UUID             `json:"category_id"`
+	Category     *string                `json:"category,omitempty"`
 	Name         string                 `json:"name"`
 	Slug         *string                `json:"slug"`
 	Description  *string                `json:"description"`

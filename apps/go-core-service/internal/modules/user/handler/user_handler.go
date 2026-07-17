@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/dto/request"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/modules/user/service"
+	"github.com/khangpd15/producttrace-ai/apps/go-core-service/internal/utils"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/apperror"
 	"github.com/khangpd15/producttrace-ai/apps/go-core-service/pkg/response"
 )
@@ -27,7 +28,9 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	res, err := h.userService.CreateUser(c.Request.Context(), &req)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.CreateUser(ctx, &req)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -65,7 +68,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	res, err := h.userService.UpdateUser(c.Request.Context(), id, &req)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.UpdateUser(ctx, id, &req)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -81,7 +86,9 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	err := h.userService.DeleteUser(c.Request.Context(), id)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	err := h.userService.DeleteUser(ctx, id)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -181,7 +188,8 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	res, err := h.userService.UpdateProfile(c.Request.Context(), actorID, targetUserID, &req)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.UpdateProfile(ctx, actorID, targetUserID, &req)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -204,7 +212,8 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		apperror.HandleError(c, apperror.NewValidation(err.Error()))
 		return
 	}
-	res, err := h.userService.ChangePassword(c.Request.Context(), actorID, &req)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.ChangePassword(ctx, actorID, &req)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -218,7 +227,9 @@ func (h *UserHandler) LockAccount(c *gin.Context) {
 		apperror.HandleError(c, apperror.NewBadRequest("user ID is required"))
 		return
 	}
-	res, err := h.userService.LockAccount(c.Request.Context(), id)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.LockAccount(ctx, id)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return
@@ -231,7 +242,9 @@ func (h *UserHandler) UnlockAccount(c *gin.Context) {
 		apperror.HandleError(c, apperror.NewBadRequest("user ID is required"))
 		return
 	}
-	res, err := h.userService.UnlockAccount(c.Request.Context(), id)
+	actorID := utils.GetCurrentUserID(c)
+	ctx := utils.WithActorID(c.Request.Context(), actorID)
+	res, err := h.userService.UnlockAccount(ctx, id)
 	if err != nil {
 		apperror.HandleError(c, err)
 		return

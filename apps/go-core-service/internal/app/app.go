@@ -124,7 +124,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 
 	// Product category & attribute modules
 	pCategoryRepo := categoryRepo.NewProductCategoryRepository(database)
-	cService := categoryService.NewProductCategoryService(pCategoryRepo)
+	cService := categoryService.NewProductCategoryService(pCategoryRepo, auditService)
 	cHandler := categoryHandler.NewProductCategoryHandler(cService)
 	pAttrRepo := attributeRepo.NewAttributeRepository(database)
 	pAttrService := attributeService.NewAttributeService(pAttrRepo, pCategoryRepo)
@@ -152,7 +152,7 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	// pAttrRepo (validate attribute_id tồn tại + đúng category khi tạo product
 	// kèm variant+attributes), và pCategoryRepo (validate category_id tồn tại
 	// khi tạo/cập nhật product)
-	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub)
+	pService := productService.NewProductService(database, pRepo, pVariantRepo, pAttrValRepo, pAttrRepo, pCategoryRepo, pub, auditService)
 	pHandler := productHandler.NewProductHandler(pService)
 
 	// Initialize Dashboard Module
@@ -178,12 +178,12 @@ func NewApp(database *gorm.DB, redisClient *redis.Client, pub *publisher.Publish
 	oProductAdapter := ownershipAdapters.NewRealProductAdapter(database, productItemsRepo, pRepo)
 	oEmailAdapter := ownershipAdapters.NewRealEmailAdapter()
 	oUserAdapter := ownershipAdapters.NewRealUserAdapter(uRepo)
-	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub)
+	oService := ownershipService.NewOwnershipService(oRepo, oProductAdapter, oEmailAdapter, oUserAdapter, pub, auditService)
 	oHandler := ownershipHandler.NewOwnershipHandler(oService)
 
 	// Warranty Module
 	wRepo := warrantyRepo.NewWarrantyRepository(database)
-	wService := warrantyService.NewWarrantyService(wRepo, pub)
+	wService := warrantyService.NewWarrantyService(wRepo, pub, auditService)
 	wHandler := warrantyHandler.NewWarrantyHandler(wService)
 
 	// Warranty Claim Module
