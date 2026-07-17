@@ -323,3 +323,51 @@ func (hb *BatchHandler) DeleteBatch(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response.ResponseSuccess("batch deleted successfully", nil))
 }
+
+func (hb *BatchHandler) GetIncomingBatches(c *gin.Context) {
+	currentUserIDStr := utils.GetCurrentUserID(c)
+	if currentUserIDStr == "" {
+		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
+		return
+	}
+	currentUserID, err := uuid.Parse(currentUserIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
+		return
+	}
+
+	batches, err := hb.service.GetIncomingBatches(c.Request.Context(), currentUserID)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("get incoming batches successfully", batches))
+}
+
+func (hb *BatchHandler) ImportBatches(c *gin.Context) {
+	var req request.ImportBatchesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperror.HandleError(c, apperror.NewValidation(err.Error()))
+		return
+	}
+
+	currentUserIDStr := utils.GetCurrentUserID(c)
+	if currentUserIDStr == "" {
+		apperror.HandleError(c, apperror.NewInternal("fail to get current user id"))
+		return
+	}
+	currentUserID, err := uuid.Parse(currentUserIDStr)
+	if err != nil {
+		apperror.HandleError(c, apperror.NewInternal("fail to parse current user id"))
+		return
+	}
+
+	err = hb.service.ImportBatches(c.Request.Context(), &req, currentUserID)
+	if err != nil {
+		apperror.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.ResponseSuccess("import batches successfully", nil))
+}

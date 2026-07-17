@@ -1,6 +1,10 @@
 package dto
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // ─── Sub-DTOs ────────────────────────────────────────────────────────────────
 
@@ -64,14 +68,20 @@ type VerifyQREvent struct {
 
 // VerifyQRResponse là DTO trả về sau khi xác thực QR code thành công.
 type VerifyQRResponse struct {
-	ItemCode     string              `json:"itemCode"`
-	SerialNumber string              `json:"serialNumber"`
-	Status       string              `json:"itemStatus"`
-	ScannedAt    time.Time           `json:"scannedAt"`
-	Product      VerifyQRProductInfo `json:"product"`
-	Batch        VerifyQRBatchInfo   `json:"batch"`
-	Ownership    *VerifyQROwnership  `json:"ownership"`     // null nếu chưa đăng ký
-	Warranty     *VerifyQRWarranty   `json:"warranty"`      // null nếu không có
-	Location     *VerifyQRLocation   `json:"location"`      // null nếu chưa có
-	TraceHistory []VerifyQREvent     `json:"traceHistory"`  // empty array nếu chưa có
+	ProductItemID   uuid.UUID           `json:"productItemId"`
+	ProductID       *uuid.UUID          `json:"productId"`
+	VariantID       *uuid.UUID          `json:"variantId"`
+	BatchID         *uuid.UUID          `json:"batchId"`
+	ItemCode        string              `json:"itemCode"`
+	SerialNumber    string              `json:"serialNumber"`
+	Status          string              `json:"itemStatus"`
+	ScannedAt       time.Time           `json:"scannedAt"`
+	OwnershipStatus string              `json:"ownershipStatus,omitempty"`
+	WarrantyStatus  string              `json:"warrantyStatus,omitempty"`
+	Product         VerifyQRProductInfo `json:"product"`
+	Batch           VerifyQRBatchInfo   `json:"batch"`
+	Ownership       *VerifyQROwnership  `json:"ownership"`     // null nếu chưa đăng ký
+	Warranty        *VerifyQRWarranty   `json:"warranty"`      // null nếu không có
+	Location        *VerifyQRLocation   `json:"location"`      // null nếu chưa có
+	TraceHistory    []VerifyQREvent     `json:"traceHistory"`  // empty array nếu chưa có
 }

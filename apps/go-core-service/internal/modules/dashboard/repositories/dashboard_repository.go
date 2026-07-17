@@ -190,7 +190,7 @@ func (r *dashboardRepository) GetAlerts(ctx context.Context) ([]*dto.DashboardAl
 		FROM batches b
 		LEFT JOIN product_variants pv ON b.variant_id = pv.id
 		LEFT JOIN products p ON pv.product_id = p.id
-		WHERE b.expiry_date < NOW() AND b.status = 'ACTIVE' AND b.is_deleted = false;
+		WHERE b.expiry_date < NOW() AND b.status IN ('ACTIVE', 'CREATED', 'IN_STOCK', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED') AND b.is_deleted = false;
 	`
 	if err := db.Raw(expiredQuery).Scan(&expired).Error; err != nil {
 		return nil, err
