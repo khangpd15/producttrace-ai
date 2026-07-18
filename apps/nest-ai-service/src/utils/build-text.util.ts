@@ -16,22 +16,76 @@ export class BuildTextUtil {
 
   private static buildProductText(payload: Record<string, unknown>): string {
     const name = String(payload.name ?? payload.productName ?? '');
-    const brand = String(payload.brand ?? '');
-    const category = String(payload.category ?? '');
+    // Support both flat fields and nested metadata.brand / metadata.category
+    const metadata = payload.metadata as Record<string, unknown> | undefined;
+    const brand = String(payload.brand ?? metadata?.brand ?? '');
+    const category = String(payload.category ?? metadata?.category ?? '');
     const description = String(payload.description ?? payload.productDescription ?? '');
     const location = String(payload.location ?? '');
+    const status = String(payload.status ?? '');
+    const slug = String(payload.slug ?? '');
     const tags = this.arrayToString(payload.tags);
-    const attributes = this.attributesToString(payload.attributes);
 
-    return [
+    // Variants: extract SKU and variant names as additional search keywords
+    const variants = payload.variants as Array<Record<string, unknown>> | undefined;
+    let variantSkus = '';
+    let variantNames = '';
+    let variantAttributes = '';
+    if (Array.isArray(variants)) {
+      const skus: string[] = [];
+      const names: string[] = [];
+      const attrParts: string[] = [];
+      for (const v of variants) {
+        if (v.sku) skus.push(String(v.sku));
+        if (v.name) names.push(String(v.name));
+        // Variant-level attributes (array of { label, value_text, value_number, value_boolean })
+        const attrs = v.attributes as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(attrs)) {
+          for (const a of attrs) {
+            const label = String(a.label ?? '');
+            const val = String(a.value_text ?? a.value_number ?? a.value_boolean ?? '');
+            if (label && val) attrParts.push(`${label}: ${val}`);
+          }
+        }
+      }
+      variantSkus = skus.join(', ');
+      variantNames = names.join(', ');
+      variantAttributes = attrParts.join(', ');
+    }
+
+    // Attributes from payload root (object format, e.g. { color: "Black", storage: "256GB" })
+    const rootAttributes = this.attributesToString(payload.attributes);
+
+    // Combine variant attributes with root-level attributes
+    const allAttributes = [rootAttributes, variantAttributes]
+      .filter(part => part.length > 0)
+      .join(', ');
+
+    const lines: string[] = [
       `Product: ${name}`,
-      `Brand: ${brand}`,
-      `Category: ${category}`,
-      `Location: ${location}`,
-      `Description: ${description}`,
-      `Tags: ${tags}`,
-      `Attributes: ${attributes}`,
-    ].join('\n');
+    ];
+
+    if (brand) lines.push(`Brand: ${brand}`);
+    if (category) lines.push(`Category: ${category}`);
+    if (slug) lines.push(`Slug: ${slug}`);
+    if (status) lines.push(`Status: ${status}`);
+    if (description) lines.push(`Description: ${description}`);
+    if (location) lines.push(`Location: ${location}`);
+    if (tags) lines.push(`Tags: ${tags}`);
+    if (variantSkus) lines.push(`SKUs: ${variantSkus}`);
+    if (variantNames) lines.push(`Variants: ${variantNames}`);
+    if (allAttributes) lines.push(`Attributes: ${allAttributes}`);
+
+    // Include any extra metadata fields (except brand/category which are already handled)
+    if (metadata) {
+      const extraMeta = Object.entries(metadata)
+        .filter(([key]) => key !== 'brand' && key !== 'category')
+        .map(([key, value]) => `${key}: ${String(value ?? '')}`)
+        .join(', ');
+      if (extraMeta) lines.push(`Metadata: ${extraMeta}`);
+    }
+
+    return lines.join('\n');
   }
 
   private static buildTraceText(payload: Record<string, unknown>): string {
