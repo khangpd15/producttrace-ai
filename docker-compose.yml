@@ -241,7 +241,7 @@ services:
       OWNERSHIP_TRANSFERRED_TEMPLATE_ID: ${OWNERSHIP_TRANSFERRED_TEMPLATE_ID}
 
     ports:
-      - "${NEST_PORT}:3000"
+      - "${NEST_PORT}:${NEST_PORT}"
 
     depends_on:
       go-core-service:
